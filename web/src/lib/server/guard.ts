@@ -11,17 +11,11 @@ const PUBLIC_PREFIXES = [
 ];
 
 /**
- * Save-feature + owner routes that always require a session, even in
- * optional-auth (guest) mode. Browsing/reading routes are intentionally absent.
+ * Server-backed owner routes that require a session even in guest mode.
+ * History/library/categories are local-first (client-side) so they are absent —
+ * they sync to the account only when logged in.
  */
-const LOGIN_REQUIRED_PREFIXES = [
-	'/library',
-	'/history',
-	'/downloads',
-	'/categories',
-	'/extensions',
-	'/admin'
-];
+const LOGIN_REQUIRED_PREFIXES = ['/downloads', '/extensions', '/admin'];
 
 export function isPublicPath(pathname: string): boolean {
 	if (pathname === '/health' || pathname.startsWith('/health/')) return true;
@@ -35,12 +29,13 @@ export function requiresLogin(pathname: string): boolean {
 }
 
 export function isSuwayomiApiPath(pathname: string): boolean {
+	// Local SvelteKit API routes that must NOT be proxied to Suwayomi.
+	if (pathname.startsWith('/api/auth/') || pathname === '/api/auth') return false;
+	if (pathname.startsWith('/api/sync')) return false;
 	return (
 		pathname.startsWith('/api/graphql') ||
 		pathname.startsWith('/api/v1/') ||
-		(pathname.startsWith('/api/') &&
-			!pathname.startsWith('/api/auth/') &&
-			pathname !== '/api/auth')
+		pathname.startsWith('/api/')
 	);
 }
 

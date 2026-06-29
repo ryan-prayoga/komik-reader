@@ -4,6 +4,8 @@
 	import { page } from '$app/stores';
 	import { fade } from 'svelte/transition';
 	import { preferences } from '$lib/preferences.svelte';
+	import { localData } from '$lib/local/data.svelte';
+	import { syncEngine } from '$lib/local/sync.svelte';
 	import InstallPrompt from '$lib/components/InstallPrompt.svelte';
 	import OfflineBanner from '$lib/components/OfflineBanner.svelte';
 	import Sidebar from '$lib/components/nav/Sidebar.svelte';
@@ -26,7 +28,11 @@
 
 	const themeColor = $derived(preferences.resolved === 'dark' ? '#0a0a0a' : '#ffffff');
 
-	onMount(() => preferences.init());
+	onMount(async () => {
+		preferences.init();
+		await localData.init();
+		syncEngine.start(!!data.user);
+	});
 </script>
 
 <svelte:head>

@@ -1,139 +1,109 @@
 <script lang="ts">
 	import { page } from '$app/stores';
+	import { localData } from '$lib/local/data.svelte';
+	import { syncEngine } from '$lib/local/sync.svelte';
 	import MangaCard from '$lib/components/MangaCard.svelte';
 	import MangaGrid from '$lib/components/MangaGrid.svelte';
-	import GridSkeleton from '$lib/components/GridSkeleton.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import ContinueReading from '$lib/components/ContinueReading.svelte';
-	import LoginGate from '$lib/components/LoginGate.svelte';
-	import { Tabs, EmptyState } from '$lib/components/ui';
-	import { getCategories, getLibraryManga, getRecentlyReadChapters } from '$lib/graphql/api';
-	import { continueReadingLabel, continueReadingUrl } from '$lib/library';
-	import type { Category, LibraryManga, RecentChapter } from '$lib/graphql/types';
-
-	type Tab = 'all' | 'unread';
-
-	let tab = $state<Tab>('all');
-	let mangas = $state<LibraryManga[]>([]);
-	let recent = $state<RecentChapter[]>([]);
-	let categories = $state<Category[]>([]);
-	let loading = $state(true);
-	let error = $state('');
+	import { Button, Badge, EmptyState } from '$lib/components/ui';
+	import Cloud from '@lucide/svelte/icons/cloud';
+	import type { RecentChapter } from '$lib/graphql/types';
 
 	const categoryId = $derived(
-		$page.url.searchParams.get('category')
-			? Number($page.url.searchParams.get('category'))
-			: undefined
+		$page.url.searchParams.get('category') ? Number($page.url.searchParams.get('category')) : null
 	);
 
-	const guest = $derived(!$page.data.user && $page.data.authEnabled);
-	const unreadCount = $derived(mangas.filter((m) => m.unreadCount > 0).length);
-	const filtered = $derived(tab === 'unread' ? mangas.filter((m) => m.unreadCount > 0) : mangas);
+	const items = $derived(
+		categoryId
+			? localData.library.filter((l) => l.categoryIds.includes(categoryId))
+			: localData.library
+	);
 
-	$effect(() => {
-		if (guest) {
-			loading = false;
-			return;
-		}
-		const id = categoryId;
-		let cancelled = false;
-		loading = true;
-		error = '';
-
-		Promise.all([getLibraryManga(id), getRecentlyReadChapters(8), getCategories()])
-			.then(([library, chapters, cats]) => {
-				if (cancelled) return;
-				mangas = library;
-				recent = chapters;
-				categories = cats;
+	// Recent reads as a Continue-Reading rail (mapped from local history).
+	const recent = $derived(
+		localData.history.slice(0, 8).map(
+			(h): RecentChapter => ({
+				id: h.chapterId,
+				name: h.chapterName,
+				mangaId: h.mangaId,
+				lastPageRead: h.lastPage,
+				lastReadAt: '',
+				manga: { id: h.mangaId, title: h.mangaTitle, thumbnailUrl: h.thumbnailUrl }
 			})
-			.catch((e) => {
-				if (cancelled) return;
-				error = e instanceof Error ? e.message : 'Gagal memuat library';
-			})
-			.finally(() => {
-				if (!cancelled) loading = false;
-			});
+		)
+	);
 
-		return () => {
-			cancelled = true;
-		};
-	});
+	function lastRead(mangaId: number) {
+		return localData.history.find((h) => h.mangaId === mangaId) ?? null;
+	}
 </script>
 
 <section>
-	<PageHeader title="Library" subtitle="Koleksi manga favoritmu." />
+	<PageHeader title="Library" subtitle="Bookmark di perangkat ini. Login untuk sync antar device.">
+		{#if syncEngine.loggedIn}
+			<Badge tone="success"><Cloud size={13} /> Tersync</Badge>
+		{:else}
+			<Button href="/login" variant="secondary" size="sm">Login untuk sync</Button>
+		{/if}
+	</PageHeader>
 
-	{#if guest}
-		<LoginGate description="Masuk untuk menyimpan manga ke library. Browse dan baca tetap bebas." />
-	{:else}
-	{#if error}
-		<div class="mb-4 rounded-[var(--radius)] border border-danger/30 bg-danger/10 p-4 text-sm text-danger">
-			{error}
-		</div>
-	{/if}
+	<ContinueReading chapters={recent} />
 
-	{#if loading}
-		<GridSkeleton />
-	{:else}
-		<ContinueReading chapters={recent} />
-
-		{#if categories.length > 0}
-			<div class="mb-4 flex flex-wrap gap-2">
+	{#if localData.categories.length > 0}
+		<div class="mb-4 flex flex-wrap gap-2">
+			<a
+				href="/library"
+				class="rounded-full border px-3 py-1 text-xs font-medium transition {!categoryId
+					? 'border-accent bg-accent/15 text-accent'
+					: 'border-border text-muted hover:border-accent'}"
+			>
+				Semua
+			</a>
+			{#each localData.categories as category (category.id)}
 				<a
-					href="/library"
-					class="rounded-full border px-3 py-1 text-xs font-medium transition {!categoryId
+					href="/library?category={category.id}"
+					class="rounded-full border px-3 py-1 text-xs font-medium transition {categoryId ===
+					category.id
 						? 'border-accent bg-accent/15 text-accent'
 						: 'border-border text-muted hover:border-accent'}"
 				>
-					Semua kategori
+					{category.name}
 				</a>
-				{#each categories as category (category.id)}
-					<a
-						href="/library?category={category.id}"
-						class="rounded-full border px-3 py-1 text-xs font-medium transition {categoryId ===
-						category.id
-							? 'border-accent bg-accent/15 text-accent'
-							: 'border-border text-muted hover:border-accent'}"
-					>
-						{category.name}
-					</a>
-				{/each}
-			</div>
-		{/if}
-
-		<Tabs
-			class="mb-5"
-			active={tab}
-			onchange={(v) => (tab = v as Tab)}
-			items={[
-				{ value: 'all', label: 'Semua', badge: mangas.length },
-				{ value: 'unread', label: 'Belum dibaca', badge: unreadCount }
-			]}
-		/>
-
-		{#if filtered.length === 0}
-			<EmptyState
-				title={tab === 'unread' ? 'Semua chapter sudah dibaca' : 'Library masih kosong'}
-				description={tab === 'all'
-					? 'Browse komik lalu tap + Library di halaman detail.'
-					: undefined}
-			/>
-		{:else}
-			<MangaGrid>
-				{#each filtered as manga (manga.id)}
-					<div>
-						<MangaCard {manga} href="/manga/{manga.id}" badge={manga.unreadCount} />
-						<a
-							href={continueReadingUrl(manga)}
-							class="mt-2 block truncate rounded-lg border border-border bg-surface px-3 py-1.5 text-center text-xs text-muted transition hover:border-accent hover:text-text"
-						>
-							Lanjut: {continueReadingLabel(manga)}
-						</a>
-					</div>
-				{/each}
-			</MangaGrid>
-		{/if}
+			{/each}
+		</div>
 	{/if}
+
+	{#if items.length === 0}
+		<EmptyState
+			title="Library masih kosong"
+			description="Browse komik lalu tap + Library di halaman detail."
+		>
+			{#snippet action()}<Button href="/search">Cari komik</Button>{/snippet}
+		</EmptyState>
+	{:else}
+		<MangaGrid>
+			{#each items as manga (manga.mangaId)}
+				{@const last = lastRead(manga.mangaId)}
+				<div>
+					<MangaCard
+						manga={{
+							id: manga.mangaId,
+							title: manga.title,
+							thumbnailUrl: manga.thumbnailUrl,
+							inLibrary: true,
+							sourceId: manga.sourceId ?? ''
+						}}
+						href="/manga/{manga.mangaId}"
+					/>
+					<a
+						href={last ? `/read/${last.chapterId}` : `/manga/${manga.mangaId}`}
+						class="mt-2 block truncate rounded-lg border border-border bg-surface px-3 py-1.5 text-center text-xs text-muted transition hover:border-accent hover:text-text"
+					>
+						{last ? `Lanjut: ${last.chapterName}` : 'Mulai baca'}
+					</a>
+				</div>
+			{/each}
+		</MangaGrid>
 	{/if}
 </section>

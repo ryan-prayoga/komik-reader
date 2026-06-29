@@ -11,6 +11,7 @@
 	import DownloadButton from '$lib/components/DownloadButton.svelte';
 	import CategoryPicker from '$lib/components/CategoryPicker.svelte';
 	import LibraryButton from '$lib/components/LibraryButton.svelte';
+	import { localData } from '$lib/local/data.svelte';
 	import { Button, Badge, Card, EmptyState, Spinner } from '$lib/components/ui';
 	import BookOpen from '@lucide/svelte/icons/book-open';
 	import DownloadIcon from '@lucide/svelte/icons/download';
@@ -126,10 +127,9 @@
 						{/if}
 						<LibraryButton
 							mangaId={manga.id}
-							inLibrary={manga.inLibrary}
-							onchange={(value) => {
-								if (manga) manga.inLibrary = value;
-							}}
+							title={manga.title}
+							thumbnailUrl={manga.thumbnailUrl ? apiUrl(manga.thumbnailUrl) : null}
+							sourceId={manga.sourceId}
 						/>
 						{#if chapters.length > 0}
 							<Button variant="secondary" loading={downloadingAll} onclick={downloadAll}>
@@ -145,7 +145,7 @@
 			<p class="mt-6 whitespace-pre-line text-sm leading-relaxed text-muted">{manga.description}</p>
 		{/if}
 
-		{#if manga.inLibrary}
+		{#if localData.isInLibrary(manga.id)}
 			<div class="mt-6"><CategoryPicker mangaId={manga.id} /></div>
 		{/if}
 
