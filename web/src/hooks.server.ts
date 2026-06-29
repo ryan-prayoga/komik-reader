@@ -2,7 +2,7 @@ import type { Handle } from '@sveltejs/kit';
 import { redirect } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import { authEnabled, allowGuest } from '$lib/server/env';
-import { isPublicPath, isSuwayomiApiPath, isGraphqlMutation } from '$lib/server/guard';
+import { isPublicPath, isSuwayomiApiPath, isGuestAllowedGraphql } from '$lib/server/guard';
 import { getUserFromSession, readSessionToken } from '$lib/server/session';
 
 const SUWAYOMI_URL = env.SUWAYOMI_URL || 'http://localhost:4567';
@@ -36,11 +36,11 @@ export const handle: Handle = async ({ event, resolve }) => {
 		if (guest) {
 			if (!allowGuest()) return unauthorized('Unauthorized');
 
-			// Guests may read but not write. GraphQL writes and any non-GET
-			// upstream call require a session.
+			// Guests may read (queries + Suwayomi read-fetch mutations) but not
+			// perform owner/server writes. Non-GET image/v1 calls need a session.
 			if (pathname.startsWith('/api/graphql')) {
 				bodyText = await event.request.text();
-				if (isGraphqlMutation(bodyText)) return unauthorized('Login required');
+				if (!isGuestAllowedGraphql(bodyText)) return unauthorized('Login required');
 			} else if (event.request.method !== 'GET' && event.request.method !== 'HEAD') {
 				return unauthorized('Login required');
 			}

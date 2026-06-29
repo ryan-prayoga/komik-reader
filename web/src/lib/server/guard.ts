@@ -39,19 +39,37 @@ export function isSuwayomiApiPath(pathname: string): boolean {
 	);
 }
 
+// Suwayomi models source/chapter fetches as GraphQL *mutations* (they trigger a
+// network fetch), so guests must be allowed to run these read-oriented ones to
+// browse and read. Everything else mutating (library, downloads, categories,
+// progress, extensions, settings) stays login-only.
+const GUEST_FETCH_MUTATIONS = [
+	'fetchSourceManga',
+	'fetchManga',
+	'fetchChapters',
+	'fetchChapterPages'
+];
+
+function isMutation(query: string): boolean {
+	return /(^|[\s})])mutation[\s({]/.test(query);
+}
+
 /**
- * Detect a GraphQL write so guests can read but not mutate. Operates on the raw
- * request body text: a top-level `mutation` operation marks a write. Queries
- * (browse/search/manga/pages) pass through for guests.
+ * Whether a guest may run this GraphQL request. Queries always pass; mutations
+ * pass only when every operation is a read-oriented fetch (browse/manga/chapter
+ * pages). Unparseable bodies are denied.
  */
-export function isGraphqlMutation(bodyText: string): boolean {
-	if (!bodyText) return false;
+export function isGuestAllowedGraphql(bodyText: string): boolean {
+	if (!bodyText) return true;
 	try {
 		const parsed = JSON.parse(bodyText);
 		const ops = Array.isArray(parsed) ? parsed : [parsed];
-		return ops.some((op) => /(^|[\s})])mutation[\s({]/.test(String(op?.query ?? '')));
+		return ops.every((op) => {
+			const q = String(op?.query ?? '');
+			if (!isMutation(q)) return true;
+			return GUEST_FETCH_MUTATIONS.some((f) => q.includes(f));
+		});
 	} catch {
-		// Unparseable body — be safe and treat as a write.
-		return true;
+		return false;
 	}
 }
