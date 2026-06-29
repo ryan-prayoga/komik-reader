@@ -22,6 +22,21 @@ services:
       - PORT=3000
       - ORIGIN=${ORIGIN:-https://komik.ryanprayoga.dev}
       - SUWAYOMI_URL=http://suwayomi:4567
+      - AUTH_ENABLED=${AUTH_ENABLED:-true}
+      - AUTH_SECRET=${AUTH_SECRET:?AUTH_SECRET is required}
+      - AUTH_DB_PATH=/app/data/auth.db
+      - ALLOW_REGISTRATION=${ALLOW_REGISTRATION:-false}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_SECURE=${SMTP_SECURE:-false}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASS=${SMTP_PASS:-}
+      - SMTP_FROM=${SMTP_FROM:-}
+    volumes:
+      - auth_data:/app/data
     ports:
       - "127.0.0.1:4311:3000"
     depends_on:
@@ -35,3 +50,4 @@ networks:
 
 volumes:
   suwayomi_data:
+  auth_data:
