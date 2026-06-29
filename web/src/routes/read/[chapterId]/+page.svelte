@@ -6,6 +6,7 @@
 	import { isOnline } from '$lib/offline/connection.svelte';
 	import { getCachedPageUrls } from '$lib/offline/cache';
 	import { readerSettings, BG_CLASS } from '$lib/reader-settings.svelte';
+	import { localData } from '$lib/local/data.svelte';
 	import WebtoonView from '$lib/components/reader/WebtoonView.svelte';
 	import PagedView from '$lib/components/reader/PagedView.svelte';
 	import ReaderControls from '$lib/components/reader/ReaderControls.svelte';
@@ -19,6 +20,8 @@
 	let chapters = $state<Chapter[]>([]);
 	let current = $state<Chapter | null>(null);
 	let mangaId = $state<number | null>(null);
+	let mangaTitle = $state('');
+	let mangaThumb = $state<string | null>(null);
 	let loading = $state(true);
 	let error = $state('');
 	let offlineMode = $state(false);
@@ -42,7 +45,20 @@
 
 	function reportPage(index: number) {
 		currentPage = index;
+		// Server progress (logged-in/owner) — best effort; guests get 401, ignored.
 		updateChapterProgress(chapterId, index, index >= pages.length - 1).catch(() => {});
+		// Local-first reading history — works for everyone, syncs if logged in.
+		if (mangaId) {
+			localData.recordHistory({
+				chapterId,
+				mangaId,
+				mangaTitle,
+				thumbnailUrl: mangaThumb,
+				chapterName: current?.name ?? 'Chapter',
+				lastPage: index,
+				isRead: index >= pages.length - 1
+			});
+		}
 	}
 
 	function toggleChrome() {
@@ -87,12 +103,17 @@
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({
-				query: `query($id: Int!) { chapter(id: $id) { mangaId name } }`,
+				query: `query($id: Int!) { chapter(id: $id) { mangaId name manga { title thumbnailUrl } } }`,
 				variables: { id }
 			})
 		});
 		const json = await res.json();
-		return json?.data?.chapter?.mangaId ?? null;
+		const ch = json?.data?.chapter;
+		if (ch?.manga) {
+			mangaTitle = ch.manga.title ?? '';
+			mangaThumb = ch.manga.thumbnailUrl ? apiUrl(ch.manga.thumbnailUrl) : null;
+		}
+		return ch?.mangaId ?? null;
 	}
 </script>
 

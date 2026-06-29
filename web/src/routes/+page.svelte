@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { page } from '$app/stores';
-	import { getInstalledSources, getRecentlyReadChapters } from '$lib/graphql/api';
+	import { getInstalledSources } from '$lib/graphql/api';
 	import { preferences } from '$lib/preferences.svelte';
+	import { localData } from '$lib/local/data.svelte';
 	import type { RecentChapter, Source } from '$lib/graphql/types';
 	import { apiUrl } from '$lib/graphql/client';
 	import PageHeader from '$lib/components/PageHeader.svelte';
@@ -11,21 +11,27 @@
 	import Puzzle from '@lucide/svelte/icons/puzzle';
 	import ServerCrash from '@lucide/svelte/icons/server-crash';
 
-	const guest = $derived(!$page.data.user && $page.data.authEnabled);
 	let sources = $state<Source[]>([]);
-	let recent = $state<RecentChapter[]>([]);
 	let loading = $state(true);
 	let error = $state('');
 
+	// Continue-reading from local history (works for everyone, no login).
+	const recent = $derived(
+		localData.history.slice(0, 6).map(
+			(h): RecentChapter => ({
+				id: h.chapterId,
+				name: h.chapterName,
+				mangaId: h.mangaId,
+				lastPageRead: h.lastPage,
+				lastReadAt: '',
+				manga: { id: h.mangaId, title: h.mangaTitle, thumbnailUrl: h.thumbnailUrl }
+			})
+		)
+	);
+
 	onMount(async () => {
 		try {
-			// Recently-read is the owner's data — only fetch it for a logged-in user.
-			const [installed, chapters] = await Promise.all([
-				getInstalledSources(preferences.nsfwFilter),
-				guest ? Promise.resolve([]) : getRecentlyReadChapters(6)
-			]);
-			sources = installed;
-			recent = chapters;
+			sources = await getInstalledSources(preferences.nsfwFilter);
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Gagal memuat source';
 		} finally {

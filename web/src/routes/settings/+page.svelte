@@ -1,8 +1,10 @@
 <script lang="ts">
 	import { preferences, type Theme } from '$lib/preferences.svelte';
 	import { readerSettings, type ReaderMode } from '$lib/reader-settings.svelte';
+	import { syncEngine } from '$lib/local/sync.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
-	import { Card, Switch } from '$lib/components/ui';
+	import { Card, Switch, Button } from '$lib/components/ui';
+	import Cloud from '@lucide/svelte/icons/cloud';
 	import Sun from '@lucide/svelte/icons/sun';
 	import Moon from '@lucide/svelte/icons/moon';
 	import Monitor from '@lucide/svelte/icons/monitor';
@@ -26,6 +28,40 @@
 	<PageHeader title="Pengaturan" subtitle="Preferensi aplikasi tersimpan di perangkat." />
 
 	<div class="space-y-6">
+		<!-- Sync -->
+		<Card padding="lg">
+			<div class="flex items-center justify-between gap-4">
+				<div class="min-w-0">
+					<h2 class="text-lg font-semibold text-text">Sync Akun</h2>
+					<p class="mt-1 text-sm text-muted">
+						History, library & kategori tersimpan di perangkat ini.
+						{#if syncEngine.loggedIn}
+							Tersync otomatis ke akunmu.
+						{:else}
+							Login untuk sync antar device.
+						{/if}
+					</p>
+				</div>
+				{#if syncEngine.loggedIn}
+					<Button
+						variant="secondary"
+						size="sm"
+						loading={syncEngine.syncing}
+						onclick={() => syncEngine.run()}
+					>
+						<Cloud size={15} /> Sync sekarang
+					</Button>
+				{:else}
+					<Button href="/login" size="sm">Login</Button>
+				{/if}
+			</div>
+			{#if syncEngine.loggedIn && syncEngine.lastSyncedAt}
+				<p class="mt-3 text-xs text-muted">
+					Terakhir sync: {new Date(syncEngine.lastSyncedAt).toLocaleTimeString('id-ID')}
+				</p>
+			{/if}
+		</Card>
+
 		<!-- Appearance -->
 		<Card padding="lg">
 			<h2 class="mb-4 text-lg font-semibold text-text">Tampilan</h2>

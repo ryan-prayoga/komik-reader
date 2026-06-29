@@ -1,87 +1,49 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { page } from '$app/stores';
-	import { apiUrl } from '$lib/graphql/client';
-	import { getReadingHistory, markChapterRead } from '$lib/graphql/api';
+	import { localData } from '$lib/local/data.svelte';
+	import { syncEngine } from '$lib/local/sync.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
-	import LoginGate from '$lib/components/LoginGate.svelte';
-	import { Button, Card, Badge, EmptyState, Spinner } from '$lib/components/ui';
-	import type { HistoryChapter } from '$lib/graphql/types';
+	import { Button, Card, Badge, EmptyState } from '$lib/components/ui';
+	import Trash2 from '@lucide/svelte/icons/trash-2';
+	import Cloud from '@lucide/svelte/icons/cloud';
 
-	const guest = $derived(!$page.data.user && $page.data.authEnabled);
-	let chapters = $state<HistoryChapter[]>([]);
-	let loading = $state(true);
-	let error = $state('');
-	let updatingId = $state<number | null>(null);
+	const chapters = $derived(localData.history);
 
-	onMount(async () => {
-		if (guest) {
-			loading = false;
-			return;
-		}
-		try {
-			chapters = await getReadingHistory(100);
-		} catch (e) {
-			error = e instanceof Error ? e.message : 'Gagal memuat history';
-		} finally {
-			loading = false;
-		}
-	});
-
-	function formatDate(ts: string) {
-		const n = Number(ts);
-		if (!n) return '';
-		return new Date(n * 1000).toLocaleString('id-ID');
-	}
-
-	async function toggleRead(chapter: HistoryChapter) {
-		updatingId = chapter.id;
-		try {
-			await markChapterRead(chapter.id, !chapter.isRead);
-			chapters = chapters.map((c) => (c.id === chapter.id ? { ...c, isRead: !c.isRead } : c));
-		} catch (e) {
-			error = e instanceof Error ? e.message : 'Gagal update status';
-		} finally {
-			updatingId = null;
-		}
+	function formatDate(ts: number) {
+		if (!ts) return '';
+		return new Date(ts).toLocaleString('id-ID');
 	}
 </script>
 
 <section>
-	<PageHeader title="Riwayat" subtitle="Chapter terakhir yang kamu buka." />
+	<PageHeader title="Riwayat" subtitle="Tersimpan di perangkat ini. Login untuk sync antar device.">
+		{#if syncEngine.loggedIn}
+			<Badge tone="success"><Cloud size={13} /> Tersync</Badge>
+		{:else}
+			<Button href="/login" variant="secondary" size="sm">Login untuk sync</Button>
+		{/if}
+	</PageHeader>
 
-	{#if guest}
-		<LoginGate description="Masuk untuk menyimpan riwayat baca. Browse dan baca tetap bebas." />
-	{:else}
-	{#if error}
-		<div class="mb-4 rounded-[var(--radius)] border border-danger/30 bg-danger/10 p-4 text-sm text-danger">
-			{error}
-		</div>
-	{/if}
-
-	{#if loading}
-		<div class="flex justify-center py-16 text-muted"><Spinner size={26} /></div>
-	{:else if chapters.length === 0}
+	{#if chapters.length === 0}
 		<EmptyState
 			title="Belum ada riwayat"
-			description="Buka chapter di reader untuk mencatat history."
+			description="Buka chapter di reader untuk mencatat riwayat baca otomatis."
 		/>
 	{:else}
 		<Card padding="none">
 			<div class="divide-y divide-border">
-				{#each chapters as chapter (chapter.id)}
+				{#each chapters as chapter (chapter.chapterId)}
 					<div class="flex flex-wrap items-center gap-4 px-4 py-3">
-						<a href="/manga/{chapter.manga.id}" class="h-16 w-11 shrink-0 overflow-hidden rounded-lg bg-bg">
-							{#if chapter.manga.thumbnailUrl}
-								<img src={apiUrl(chapter.manga.thumbnailUrl)} alt="" class="h-full w-full object-cover" loading="lazy" />
+						<a href="/manga/{chapter.mangaId}" class="h-16 w-11 shrink-0 overflow-hidden rounded-lg bg-bg">
+							{#if chapter.thumbnailUrl}
+								<img src={chapter.thumbnailUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
 							{/if}
 						</a>
 						<div class="min-w-0 flex-1">
-							<p class="truncate text-sm font-medium text-text">{chapter.manga.title}</p>
+							<p class="truncate text-sm font-medium text-text">{chapter.mangaTitle}</p>
 							<p class="truncate text-xs text-muted">
-								{chapter.name}
-								{#if chapter.lastPageRead > 0} · hal. {chapter.lastPageRead + 1}{/if}
-								{#if formatDate(chapter.lastReadAt)} · {formatDate(chapter.lastReadAt)}{/if}
+								{chapter.chapterName}
+								{#if chapter.lastPage > 0} · hal. {chapter.lastPage + 1}{/if}
+								{#if formatDate(chapter.updatedAt)} · {formatDate(chapter.updatedAt)}{/if}
 							</p>
 						</div>
 						<div class="flex shrink-0 items-center gap-2">
@@ -90,20 +52,21 @@
 							{:else}
 								<Badge tone="accent">Progress</Badge>
 							{/if}
-							<Button href="/read/{chapter.id}" size="sm">Baca</Button>
+							<Button href="/read/{chapter.chapterId}" size="sm">Baca</Button>
 							<Button
 								variant="secondary"
 								size="sm"
-								loading={updatingId === chapter.id}
-								onclick={() => toggleRead(chapter)}
+								onclick={() => localData.setHistoryRead(chapter.chapterId, !chapter.isRead)}
 							>
 								{chapter.isRead ? 'Unread' : 'Done'}
+							</Button>
+							<Button variant="ghost" size="sm" onclick={() => localData.removeHistory(chapter.chapterId)}>
+								<Trash2 size={14} />
 							</Button>
 						</div>
 					</div>
 				{/each}
 			</div>
 		</Card>
-	{/if}
 	{/if}
 </section>

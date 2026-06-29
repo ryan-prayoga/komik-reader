@@ -53,8 +53,23 @@ function migrate(database: Database.Database) {
 			value TEXT NOT NULL
 		);
 
+		-- Per-user changefeed for local-first sync (history/library/categories).
+		-- seq is a per-user monotonic version so clients can pull incrementally
+		-- without depending on wall-clock agreement across devices.
+		CREATE TABLE IF NOT EXISTS user_sync (
+			user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			entity TEXT NOT NULL,
+			item_key TEXT NOT NULL,
+			data TEXT NOT NULL,
+			updated_at INTEGER NOT NULL,
+			deleted INTEGER NOT NULL DEFAULT 0,
+			seq INTEGER NOT NULL,
+			PRIMARY KEY (user_id, entity, item_key)
+		);
+
 		CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token_hash);
 		CREATE INDEX IF NOT EXISTS idx_password_resets_token ON password_resets(token_hash);
+		CREATE INDEX IF NOT EXISTS idx_user_sync_seq ON user_sync(user_id, seq);
 	`);
 
 	if (!columnExists(database, 'users', 'is_admin')) {
