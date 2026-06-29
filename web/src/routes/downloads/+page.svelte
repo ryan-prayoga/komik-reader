@@ -13,17 +13,14 @@
 		isChapterAvailableOffline,
 		removeChapterFromDevice
 	} from '$lib/offline/cache';
+	import PageHeader from '$lib/components/PageHeader.svelte';
+	import { Button, Card, Badge, EmptyState, Spinner } from '$lib/components/ui';
+	import Trash2 from '@lucide/svelte/icons/trash-2';
 
 	let queue = $state<DownloadItem[]>([]);
 	let downloaderState = $state<'STARTED' | 'STOPPED'>('STOPPED');
 	let downloaded = $state<
-		Array<{
-			id: number;
-			name: string;
-			mangaId: number;
-			mangaTitle: string;
-			isDownloaded: boolean;
-		}>
+		Array<{ id: number; name: string; mangaId: number; mangaTitle: string; isDownloaded: boolean }>
 	>([]);
 	let offlineIds = $state<Set<number>>(new Set());
 	let cachingId = $state<number | null>(null);
@@ -35,10 +32,7 @@
 
 	async function refresh() {
 		try {
-			const [status, chapters] = await Promise.all([
-				getDownloadStatus(),
-				getDownloadedChapters()
-			]);
+			const [status, chapters] = await Promise.all([getDownloadStatus(), getDownloadedChapters()]);
 			queue = status.queue;
 			downloaderState = status.state;
 			downloaded = chapters.map((c) => ({
@@ -49,9 +43,7 @@
 				isDownloaded: c.isDownloaded
 			}));
 
-			const offlineChecks = await Promise.all(
-				downloaded.map((c) => isChapterAvailableOffline(c.id))
-			);
+			const offlineChecks = await Promise.all(downloaded.map((c) => isChapterAvailableOffline(c.id)));
 			offlineIds = new Set(downloaded.filter((_, i) => offlineChecks[i]).map((c) => c.id));
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Gagal memuat downloads';
@@ -61,9 +53,7 @@
 	}
 
 	async function ensureDownloaderRunning() {
-		if (downloaderState === 'STOPPED') {
-			await startDownloader();
-		}
+		if (downloaderState === 'STOPPED') await startDownloader();
 	}
 
 	async function cancelDownload(chapterId: number) {
@@ -128,60 +118,48 @@
 </script>
 
 <section>
-	<div class="mb-6 flex flex-wrap items-end justify-between gap-4">
-		<div>
-			<h1 class="text-2xl font-semibold">Downloads</h1>
-			<p class="mt-1 text-sm text-muted">
-				Antrian download Suwayomi + simpan ke perangkat untuk baca offline.
-			</p>
-		</div>
+	<PageHeader title="Downloads" subtitle="Antrian server + simpan ke perangkat untuk offline.">
 		{#if queue.length > 0}
-			<button
-				class="rounded-lg border border-border px-4 py-2 text-sm hover:border-danger hover:text-danger"
-				onclick={clearQueue}
-			>
-				Kosongkan antrian
-			</button>
+			<Button variant="ghost" size="sm" onclick={clearQueue}>
+				<Trash2 size={14} /> Kosongkan antrian
+			</Button>
 		{/if}
-	</div>
+	</PageHeader>
 
 	{#if error}
-		<div class="mb-4 rounded-xl border border-danger/30 bg-danger/10 p-4 text-sm text-danger">
+		<div class="mb-4 rounded-[var(--radius)] border border-danger/30 bg-danger/10 p-4 text-sm text-danger">
 			{error}
 		</div>
 	{/if}
 
 	{#if loading}
-		<p class="text-muted">Memuat...</p>
+		<div class="flex justify-center py-16 text-muted"><Spinner size={26} /></div>
 	{:else}
 		<div class="mb-8">
-			<h2 class="mb-3 text-lg font-medium">
-				Antrian ({queue.length})
-				<span class="ml-2 text-sm font-normal text-muted">
-					Downloader: {downloaderState === 'STARTED' ? 'Aktif' : 'Berhenti'}
-				</span>
-			</h2>
+			<div class="mb-3 flex items-center gap-2">
+				<h2 class="text-lg font-semibold text-text">Antrian ({queue.length})</h2>
+				<Badge tone={downloaderState === 'STARTED' ? 'success' : 'neutral'}>
+					{downloaderState === 'STARTED' ? 'Aktif' : 'Berhenti'}
+				</Badge>
+			</div>
 			{#if queue.length === 0}
 				<p class="text-sm text-muted">Tidak ada download dalam antrian.</p>
 			{:else}
 				<div class="space-y-3">
 					{#each queue as item (item.chapter.id)}
-						<div class="rounded-xl border border-border bg-surface p-4">
+						<Card>
 							<div class="flex flex-wrap items-center justify-between gap-3">
-								<div>
-									<p class="font-medium">{item.manga.title}</p>
-									<p class="text-sm text-muted">{item.chapter.name}</p>
+								<div class="min-w-0">
+									<p class="truncate font-medium text-text">{item.manga.title}</p>
+									<p class="truncate text-sm text-muted">{item.chapter.name}</p>
 									<p class="mt-1 text-xs text-muted">
 										{stateLabel(item.state)} · {Math.round(item.progress * 100)}%
 									</p>
 								</div>
 								{#if item.state === 'QUEUED'}
-									<button
-										class="text-sm text-muted hover:text-danger"
-										onclick={() => cancelDownload(item.chapter.id)}
-									>
+									<Button variant="ghost" size="sm" onclick={() => cancelDownload(item.chapter.id)}>
 										Batal
-									</button>
+									</Button>
 								{/if}
 							</div>
 							<div class="mt-3 h-1.5 overflow-hidden rounded-full bg-bg">
@@ -190,57 +168,45 @@
 									style="width: {Math.max(item.progress * 100, item.state === 'QUEUED' ? 5 : 0)}%"
 								></div>
 							</div>
-						</div>
+						</Card>
 					{/each}
 				</div>
 			{/if}
 		</div>
 
 		<div>
-			<h2 class="mb-3 text-lg font-medium">Tersimpan di server ({downloaded.length})</h2>
+			<h2 class="mb-3 text-lg font-semibold text-text">Tersimpan di server ({downloaded.length})</h2>
 			{#if downloaded.length === 0}
-				<p class="text-sm text-muted">
-					Belum ada chapter terdownload. Download dari halaman detail manga.
-				</p>
+				<EmptyState
+					title="Belum ada chapter terdownload"
+					description="Download dari halaman detail manga."
+				/>
 			{:else}
-				<div class="divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface">
-					{#each downloaded as chapter (chapter.id)}
-						<div class="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-							<div class="min-w-0">
-								<p class="truncate text-sm font-medium">{chapter.mangaTitle}</p>
-								<p class="text-xs text-muted">{chapter.name}</p>
+				<Card padding="none">
+					<div class="divide-y divide-border">
+						{#each downloaded as chapter (chapter.id)}
+							<div class="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+								<div class="min-w-0">
+									<p class="truncate text-sm font-medium text-text">{chapter.mangaTitle}</p>
+									<p class="truncate text-xs text-muted">{chapter.name}</p>
+								</div>
+								<div class="flex flex-wrap items-center gap-2">
+									<Button href="/read/{chapter.id}" variant="secondary" size="sm">Baca</Button>
+									{#if offlineIds.has(chapter.id)}
+										<Badge tone="success">Offline</Badge>
+										<Button variant="ghost" size="sm" onclick={() => removeFromDevice(chapter.id)}>
+											Hapus offline
+										</Button>
+									{:else if cachingId === chapter.id}
+										<span class="text-xs text-accent">Menyimpan {cacheProgress}</span>
+									{:else}
+										<Button size="sm" onclick={() => saveToDevice(chapter)}>Simpan offline</Button>
+									{/if}
+								</div>
 							</div>
-							<div class="flex flex-wrap items-center gap-2">
-								<a
-									href="/read/{chapter.id}"
-									class="rounded-lg border border-border px-3 py-1.5 text-xs hover:border-accent"
-								>
-									Baca
-								</a>
-								{#if offlineIds.has(chapter.id)}
-									<span class="rounded-md bg-success/15 px-2 py-1 text-xs text-success">
-										Offline
-									</span>
-									<button
-										class="text-xs text-muted hover:text-danger"
-										onclick={() => removeFromDevice(chapter.id)}
-									>
-										Hapus offline
-									</button>
-								{:else if cachingId === chapter.id}
-									<span class="text-xs text-accent">Menyimpan {cacheProgress}</span>
-								{:else}
-									<button
-										class="rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover"
-										onclick={() => saveToDevice(chapter)}
-									>
-										Simpan offline
-									</button>
-								{/if}
-							</div>
-						</div>
-					{/each}
-				</div>
+						{/each}
+					</div>
+				</Card>
 			{/if}
 		</div>
 	{/if}

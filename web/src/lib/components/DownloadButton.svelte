@@ -1,5 +1,8 @@
 <script lang="ts">
 	import { enqueueChapterDownload } from '$lib/graphql/api';
+	import Download from '@lucide/svelte/icons/download';
+	import Check from '@lucide/svelte/icons/check';
+	import Spinner from '$lib/components/ui/Spinner.svelte';
 
 	interface Props {
 		chapterId: number;
@@ -29,16 +32,19 @@
 
 	const cls = $derived(
 		size === 'md'
-			? 'rounded-lg px-4 py-2 text-sm font-medium'
-			: 'rounded-md px-2 py-1 text-xs'
+			? 'gap-2 rounded-[var(--radius)] px-4 py-2 text-sm font-medium'
+			: 'gap-1 rounded-md px-2 py-1 text-xs'
 	);
+	const iconSize = $derived(size === 'md' ? 16 : 13);
 </script>
 
 {#if isDownloaded}
-	<span class="{cls} bg-success/15 text-success">Downloaded</span>
+	<span class="inline-flex items-center {cls} bg-success/15 text-success">
+		<Check size={iconSize} /> Downloaded
+	</span>
 {:else}
 	<button
-		class="{cls} border border-border bg-surface-hover transition hover:border-accent disabled:opacity-50"
+		class="inline-flex items-center {cls} border border-border bg-surface-hover transition hover:border-accent disabled:opacity-50"
 		disabled={loading}
 		onclick={(e) => {
 			e.preventDefault();
@@ -46,7 +52,8 @@
 			download();
 		}}
 	>
-		{loading ? '...' : 'Download'}
+		{#if loading}<Spinner size={iconSize} />{:else}<Download size={iconSize} />{/if}
+		Download
 	</button>
 {/if}
 {#if error}

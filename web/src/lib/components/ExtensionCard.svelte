@@ -2,6 +2,9 @@
 	import type { Extension } from '$lib/graphql/types';
 	import { apiUrl } from '$lib/graphql/client';
 	import { updateExtension } from '$lib/graphql/api';
+	import Puzzle from '@lucide/svelte/icons/puzzle';
+	import Button from '$lib/components/ui/Button.svelte';
+	import Badge from '$lib/components/ui/Badge.svelte';
 
 	interface Props {
 		extension: Extension;
@@ -27,68 +30,44 @@
 	}
 </script>
 
-<div class="flex items-center gap-4 rounded-xl border border-border bg-surface p-4">
-	<div class="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-bg">
+<div class="flex items-center gap-4 rounded-[var(--radius)] border border-border bg-surface p-4 shadow-(--shadow-card)">
+	<div class="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-bg text-muted">
 		{#if extension.iconUrl}
 			<img src={apiUrl(extension.iconUrl)} alt="" class="h-full w-full object-cover" />
+		{:else}
+			<Puzzle size={22} />
 		{/if}
 	</div>
 
 	<div class="min-w-0 flex-1">
 		<div class="flex flex-wrap items-center gap-2">
-			<h3 class="font-medium">{extension.name}</h3>
-			{#if extension.isInstalled}
-				<span class="rounded-full bg-success/15 px-2 py-0.5 text-xs text-success">Installed</span>
-			{/if}
-			{#if extension.isNsfw}
-				<span class="rounded-full bg-danger/15 px-2 py-0.5 text-xs text-danger">18+</span>
-			{/if}
-			{#if extension.hasUpdate}
-				<span class="rounded-full bg-accent/15 px-2 py-0.5 text-xs text-accent">Update</span>
-			{/if}
+			<h3 class="font-medium text-text">{extension.name}</h3>
+			{#if extension.isInstalled}<Badge tone="success">Installed</Badge>{/if}
+			{#if extension.isNsfw}<Badge tone="danger">18+</Badge>{/if}
+			{#if extension.hasUpdate}<Badge tone="accent">Update</Badge>{/if}
 		</div>
-		<p class="mt-1 text-sm text-muted">
-			v{extension.versionName} · {extension.lang}
-		</p>
-		{#if error}
-			<p class="mt-1 text-xs text-danger">{error}</p>
-		{/if}
+		<p class="mt-1 text-sm text-muted">v{extension.versionName} · {extension.lang}</p>
+		{#if error}<p class="mt-1 text-xs text-danger">{error}</p>{/if}
 	</div>
 
 	<div class="flex shrink-0 flex-wrap justify-end gap-2">
 		{#if extension.isObsolete}
-			<button
-				class="rounded-lg bg-danger/20 px-4 py-2 text-sm text-danger transition hover:bg-danger/30 disabled:opacity-50"
-				disabled={loading}
-				onclick={() => runAction({ uninstall: true })}
-			>
-				{loading ? '...' : 'Remove'}
-			</button>
+			<Button variant="danger" size="sm" {loading} onclick={() => runAction({ uninstall: true })}>
+				Remove
+			</Button>
 		{:else if extension.isInstalled}
 			{#if extension.hasUpdate}
-				<button
-					class="rounded-lg border border-border bg-surface-hover px-4 py-2 text-sm transition hover:border-muted disabled:opacity-50"
-					disabled={loading}
-					onclick={() => runAction({ update: true })}
-				>
-					{loading ? '...' : 'Update'}
-				</button>
+				<Button variant="secondary" size="sm" {loading} onclick={() => runAction({ update: true })}>
+					Update
+				</Button>
 			{/if}
-			<button
-				class="rounded-lg border border-border bg-surface-hover px-4 py-2 text-sm transition hover:border-muted disabled:opacity-50"
-				disabled={loading}
-				onclick={() => runAction({ uninstall: true })}
-			>
-				{loading ? '...' : 'Uninstall'}
-			</button>
+			<Button variant="secondary" size="sm" {loading} onclick={() => runAction({ uninstall: true })}>
+				Uninstall
+			</Button>
 		{:else}
-			<button
-				class="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition hover:bg-accent-hover disabled:opacity-50"
-				disabled={loading}
-				onclick={() => runAction({ install: true })}
-			>
-				{loading ? 'Installing...' : 'Install'}
-			</button>
+			<Button variant="primary" size="sm" {loading} onclick={() => runAction({ install: true })}>
+				Install
+			</Button>
 		{/if}
 	</div>
 </div>

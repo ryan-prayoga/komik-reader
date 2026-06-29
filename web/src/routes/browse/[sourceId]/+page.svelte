@@ -2,6 +2,10 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import MangaCard from '$lib/components/MangaCard.svelte';
+	import MangaGrid from '$lib/components/MangaGrid.svelte';
+	import GridSkeleton from '$lib/components/GridSkeleton.svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
+	import { Tabs, Button, EmptyState } from '$lib/components/ui';
 	import { fetchSourceManga } from '$lib/graphql/api';
 	import type { FetchMangaType, Manga } from '$lib/graphql/types';
 
@@ -51,56 +55,41 @@
 </script>
 
 <section>
-	<div class="mb-6 flex flex-wrap items-center gap-3">
-		<a href="/" class="text-sm text-muted hover:text-accent">← Home</a>
-		<h1 class="text-xl font-semibold">Browse</h1>
-	</div>
+	<a href="/" class="mb-2 inline-block text-sm text-muted transition hover:text-accent">← Beranda</a>
+	<PageHeader title="Jelajahi" subtitle="Komik populer dan terbaru dari source." />
 
-	<div class="mb-6 flex gap-2">
-		<button
-			class="rounded-lg px-4 py-2 text-sm transition {tab === 'POPULAR'
-				? 'bg-accent text-white'
-				: 'bg-surface text-muted hover:text-text'}"
-			onclick={() => setTab('POPULAR')}
-		>
-			Popular
-		</button>
-		<button
-			class="rounded-lg px-4 py-2 text-sm transition {tab === 'LATEST'
-				? 'bg-accent text-white'
-				: 'bg-surface text-muted hover:text-text'}"
-			onclick={() => setTab('LATEST')}
-		>
-			Latest
-		</button>
-	</div>
+	<Tabs
+		class="mb-5"
+		active={tab}
+		onchange={(v) => setTab(v as FetchMangaType)}
+		items={[
+			{ value: 'POPULAR', label: 'Populer' },
+			{ value: 'LATEST', label: 'Terbaru' }
+		]}
+	/>
 
 	{#if error}
-		<div class="mb-4 rounded-xl border border-danger/30 bg-danger/10 p-4 text-sm text-danger">
+		<div class="mb-4 rounded-[var(--radius)] border border-danger/30 bg-danger/10 p-4 text-sm text-danger">
 			{error}
 		</div>
 	{/if}
 
 	{#if loading}
-		<p class="text-muted">Memuat manga...</p>
+		<GridSkeleton />
 	{:else if mangas.length === 0}
-		<p class="text-muted">Tidak ada hasil.</p>
+		<EmptyState title="Tidak ada hasil" description="Source ini belum mengembalikan komik." />
 	{:else}
-		<div class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+		<MangaGrid>
 			{#each mangas as manga (manga.id)}
 				<MangaCard {manga} href="/manga/{manga.id}" />
 			{/each}
-		</div>
+		</MangaGrid>
 
 		{#if hasNext}
 			<div class="mt-8 flex justify-center">
-				<button
-					class="rounded-lg border border-border bg-surface px-6 py-2 text-sm hover:border-accent disabled:opacity-50"
-					disabled={loadingMore}
-					onclick={() => load(false)}
-				>
-					{loadingMore ? 'Memuat...' : 'Muat lebih banyak'}
-				</button>
+				<Button variant="secondary" loading={loadingMore} onclick={() => load(false)}>
+					Muat lebih banyak
+				</Button>
 			</div>
 		{/if}
 	{/if}

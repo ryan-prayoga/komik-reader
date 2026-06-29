@@ -2,13 +2,15 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { apiUrl } from '$lib/graphql/client';
-	import {
-		fetchChapterPages,
-		getMangaChapters,
-		updateChapterProgress
-	} from '$lib/graphql/api';
+	import { fetchChapterPages, getMangaChapters, updateChapterProgress } from '$lib/graphql/api';
 	import { isOnline } from '$lib/offline/connection.svelte';
 	import { getCachedPageUrls } from '$lib/offline/cache';
+	import { readerSettings, BG_CLASS } from '$lib/reader-settings.svelte';
+	import WebtoonView from '$lib/components/reader/WebtoonView.svelte';
+	import PagedView from '$lib/components/reader/PagedView.svelte';
+	import ReaderControls from '$lib/components/reader/ReaderControls.svelte';
+	import ReaderSettings from '$lib/components/reader/ReaderSettings.svelte';
+	import Spinner from '$lib/components/ui/Spinner.svelte';
 	import type { Chapter } from '$lib/graphql/types';
 
 	const chapterId = $derived(Number($page.params.chapterId));
@@ -21,40 +23,30 @@
 	let error = $state('');
 	let offlineMode = $state(false);
 
+	let currentPage = $state(0);
+	let chromeVisible = $state(true);
+	let settingsOpen = $state(false);
+
 	const currentIndex = $derived(chapters.findIndex((c) => c.id === chapterId));
 	const prevChapter = $derived(currentIndex > 0 ? chapters[currentIndex - 1] : null);
 	const nextChapter = $derived(
-		currentIndex >= 0 && currentIndex < chapters.length - 1
-			? chapters[currentIndex + 1]
-			: null
+		currentIndex >= 0 && currentIndex < chapters.length - 1 ? chapters[currentIndex + 1] : null
 	);
 
-	async function resolveMangaId(id: number): Promise<number | null> {
-		const res = await fetch('/api/graphql', {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({
-				query: `query($id: Int!) { chapter(id: $id) { mangaId name } }`,
-				variables: { id }
-			})
-		});
-		const json = await res.json();
-		return json?.data?.chapter?.mangaId ?? null;
-	}
+	const bgClass = $derived(BG_CLASS[readerSettings.bg]);
+	const isPaged = $derived(readerSettings.mode !== 'webtoon');
+	const backHref = $derived(mangaId ? `/manga/${mangaId}` : '/history');
+	const pageLabel = $derived(
+		isPaged ? `${currentPage + 1} / ${pages.length}` : `${pages.length} halaman`
+	);
 
-	function onPageVisible(index: number) {
+	function reportPage(index: number) {
+		currentPage = index;
 		updateChapterProgress(chapterId, index, index >= pages.length - 1).catch(() => {});
 	}
 
-	function observePage(node: HTMLElement, index: number) {
-		const observer = new IntersectionObserver(
-			(entries) => {
-				if (entries[0]?.isIntersecting) onPageVisible(index);
-			},
-			{ threshold: 0.5 }
-		);
-		observer.observe(node);
-		return { destroy: () => observer.disconnect() };
+	function toggleChrome() {
+		chromeVisible = !chromeVisible;
 	}
 
 	onMount(async () => {
@@ -76,9 +68,7 @@
 				chapters = await getMangaChapters(resolvedMangaId);
 				current = chapters.find((c) => c.id === chapterId) ?? null;
 			}
-			if (pages.length > 0) {
-				await updateChapterProgress(chapterId, 0, false);
-			}
+			if (pages.length > 0) await updateChapterProgress(chapterId, 0, false);
 		} catch (e) {
 			const cached = await getCachedPageUrls(chapterId);
 			if (cached?.length) {
@@ -91,49 +81,77 @@
 			loading = false;
 		}
 	});
+
+	async function resolveMangaId(id: number): Promise<number | null> {
+		const res = await fetch('/api/graphql', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({
+				query: `query($id: Int!) { chapter(id: $id) { mangaId name } }`,
+				variables: { id }
+			})
+		});
+		const json = await res.json();
+		return json?.data?.chapter?.mangaId ?? null;
+	}
 </script>
 
-<section class="mx-auto max-w-3xl">
+<section class="relative min-h-screen w-full {bgClass}">
 	{#if loading}
-		<p class="text-center text-muted">Memuat chapter...</p>
+		<div class="flex min-h-screen items-center justify-center text-white/70">
+			<Spinner size={28} />
+		</div>
 	{:else if error}
-		<div class="rounded-xl border border-danger/30 bg-danger/10 p-4 text-sm text-danger">{error}</div>
-		<p class="mt-3 text-center text-sm text-muted">
-			<a href="/offline" class="text-accent hover:underline">Lihat chapter offline</a>
-		</p>
+		<div class="mx-auto max-w-md px-4 py-20 text-center">
+			<div class="rounded-[var(--radius)] border border-danger/30 bg-danger/10 p-4 text-sm text-danger">
+				{error}
+			</div>
+			<p class="mt-4 text-sm text-white/70">
+				<a href="/offline" class="text-accent hover:underline">Lihat chapter offline</a>
+				<span class="mx-2 text-white/30">·</span>
+				<a href={backHref} class="text-accent hover:underline">Kembali</a>
+			</p>
+		</div>
 	{:else}
-		<div class="sticky top-14 z-40 mb-4 flex items-center justify-between gap-3 rounded-xl border border-border bg-surface/95 px-4 py-3 backdrop-blur">
-			<div class="min-w-0">
-				<p class="truncate text-sm font-medium">{current?.name ?? 'Chapter'}</p>
-				<p class="text-xs text-muted">
-					{pages.length} halaman
-					{#if offlineMode} · <span class="text-accent">Offline cache</span>{/if}
-				</p>
-			</div>
-			<div class="flex shrink-0 gap-2">
-				{#if mangaId}
-					<a href="/manga/{mangaId}" class="rounded-lg border border-border px-3 py-1.5 text-xs hover:border-accent">Detail</a>
-				{/if}
-				{#if prevChapter}
-					<a href="/read/{prevChapter.id}" class="rounded-lg border border-border px-3 py-1.5 text-xs hover:border-accent">Prev</a>
-				{/if}
-				{#if nextChapter}
-					<a href="/read/{nextChapter.id}" class="rounded-lg border border-border px-3 py-1.5 text-xs hover:border-accent">Next</a>
-				{/if}
-			</div>
-		</div>
+		<!-- Brightness overlay (non-interactive) -->
+		{#if readerSettings.brightness < 1}
+			<div
+				class="pointer-events-none fixed inset-0 z-20 bg-black"
+				style="opacity: {1 - readerSettings.brightness}"
+			></div>
+		{/if}
 
-		<div class="space-y-1">
-			{#each pages as pageUrl, i}
-				<div class="overflow-hidden bg-black" use:observePage={i}>
-					<img
-						src={pageUrl}
-						alt="Page {i + 1}"
-						class="mx-auto block w-full"
-						loading="lazy"
-					/>
-				</div>
-			{/each}
-		</div>
+		{#if isPaged}
+			<PagedView
+				{pages}
+				bind:current={currentPage}
+				double={readerSettings.mode === 'double'}
+				fit={readerSettings.fit}
+				zoom={readerSettings.zoom}
+				onpage={reportPage}
+				ontoggle={toggleChrome}
+			/>
+		{:else}
+			<button type="button" class="block w-full cursor-default text-left" onclick={toggleChrome}>
+				<WebtoonView {pages} zoom={readerSettings.zoom} gap={readerSettings.gap} onpage={reportPage} />
+			</button>
+		{/if}
+
+		<ReaderControls
+			show={chromeVisible}
+			title={current?.name ?? 'Chapter'}
+			{pageLabel}
+			{backHref}
+			prevHref={prevChapter ? `/read/${prevChapter.id}` : null}
+			nextHref={nextChapter ? `/read/${nextChapter.id}` : null}
+			showSlider={isPaged}
+			bind:current={currentPage}
+			max={pages.length - 1}
+			{offlineMode}
+			onsettings={() => (settingsOpen = true)}
+			onseek={reportPage}
+		/>
+
+		<ReaderSettings bind:open={settingsOpen} />
 	{/if}
 </section>

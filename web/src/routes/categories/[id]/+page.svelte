@@ -2,12 +2,16 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import MangaCard from '$lib/components/MangaCard.svelte';
+	import MangaGrid from '$lib/components/MangaGrid.svelte';
+	import GridSkeleton from '$lib/components/GridSkeleton.svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
+	import { EmptyState } from '$lib/components/ui';
 	import { getCategories, getCategoryManga } from '$lib/graphql/api';
 	import type { Manga } from '$lib/graphql/types';
 
 	const categoryId = $derived(Number($page.params.id));
 
-	let categoryName = $state('');
+	let categoryName = $state('Kategori');
 	let mangas = $state<Manga[]>([]);
 	let loading = $state(true);
 	let error = $state('');
@@ -29,27 +33,26 @@
 </script>
 
 <section>
-	<div class="mb-6">
-		<a href="/categories" class="text-sm text-muted hover:text-accent">← Categories</a>
-		<h1 class="mt-2 text-2xl font-semibold">{categoryName}</h1>
-		<p class="mt-1 text-sm text-muted">{mangas.length} manga</p>
-	</div>
+	<a href="/categories" class="mb-2 inline-block text-sm text-muted transition hover:text-accent">
+		← Kategori
+	</a>
+	<PageHeader title={categoryName} subtitle={`${mangas.length} manga`} />
 
 	{#if error}
-		<div class="mb-4 rounded-xl border border-danger/30 bg-danger/10 p-4 text-sm text-danger">
+		<div class="mb-4 rounded-[var(--radius)] border border-danger/30 bg-danger/10 p-4 text-sm text-danger">
 			{error}
 		</div>
 	{/if}
 
 	{#if loading}
-		<p class="text-muted">Memuat...</p>
+		<GridSkeleton />
 	{:else if mangas.length === 0}
-		<p class="text-muted">Tidak ada manga di kategori ini.</p>
+		<EmptyState title="Kategori kosong" description="Belum ada manga di kategori ini." />
 	{:else}
-		<div class="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+		<MangaGrid>
 			{#each mangas as manga (manga.id)}
 				<MangaCard {manga} href="/manga/{manga.id}" />
 			{/each}
-		</div>
+		</MangaGrid>
 	{/if}
 </section>

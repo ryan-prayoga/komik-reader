@@ -3,6 +3,10 @@
 	import ExtensionCard from '$lib/components/ExtensionCard.svelte';
 	import { fetchExtensionsCatalog, getExtensions } from '$lib/graphql/api';
 	import { preferences } from '$lib/preferences.svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
+	import { Button, Select, Switch, EmptyState, Spinner } from '$lib/components/ui';
+	import Search from '@lucide/svelte/icons/search';
+	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import type { Extension } from '$lib/graphql/types';
 
 	let extensions = $state<Extension[]>([]);
@@ -13,6 +17,7 @@
 	let search = $state('');
 	let lang = $state('all');
 	let status = $state<'all' | 'installed' | 'available' | 'update'>('all');
+
 	async function load() {
 		loading = true;
 		error = '';
@@ -64,70 +69,56 @@
 </script>
 
 <section>
-	<div class="mb-6 flex flex-wrap items-end justify-between gap-4">
-		<div>
-			<h1 class="text-2xl font-semibold">Extensions</h1>
-			<p class="mt-1 text-sm text-muted">
-				Repo default: Keiyoushi — pilih manual extension yang mau di-install.
-			</p>
-		</div>
-		<button
-			class="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
-			disabled={syncing}
-			onclick={syncCatalog}
-		>
-			{syncing ? 'Syncing...' : 'Refresh Catalog'}
-		</button>
-	</div>
+	<PageHeader title="Extensions" subtitle="Repo default: Keiyoushi — pilih extension untuk di-install.">
+		<Button variant="secondary" size="sm" loading={syncing} onclick={syncCatalog}>
+			<RefreshCw size={15} /> Refresh
+		</Button>
+	</PageHeader>
 
-	<div class="mb-4 flex flex-wrap gap-3">
-		<input
-			type="search"
-			placeholder="Cari extension..."
-			bind:value={search}
-			class="min-w-[200px] flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-accent"
-		/>
-		<select
-			bind:value={lang}
-			class="rounded-lg border border-border bg-surface px-3 py-2 text-sm"
-		>
+	<div class="mb-5 flex flex-wrap items-end gap-3">
+		<div class="relative min-w-[200px] flex-1">
+			<Search size={16} class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+			<input
+				type="search"
+				placeholder="Cari extension..."
+				bind:value={search}
+				class="w-full rounded-[var(--radius)] border border-border bg-surface py-2 pl-9 pr-3 text-sm text-text outline-none transition placeholder:text-muted focus:border-accent"
+			/>
+		</div>
+		<Select bind:value={lang} class="w-36">
 			{#each langs as l}
 				<option value={l}>{l === 'all' ? 'Semua bahasa' : l}</option>
 			{/each}
-		</select>
-		<select
-			bind:value={status}
-			class="rounded-lg border border-border bg-surface px-3 py-2 text-sm"
-		>
+		</Select>
+		<Select bind:value={status} class="w-40">
 			<option value="all">Semua status</option>
 			<option value="installed">Installed</option>
 			<option value="available">Belum install</option>
 			<option value="update">Ada update</option>
-		</select>
-		<label class="flex items-center gap-2 text-sm text-muted">
-			<input
-				type="checkbox"
-				class="accent-accent"
-				checked={preferences.showNsfw}
-				onchange={(e) => {
-					preferences.setShowNsfw(e.currentTarget.checked);
-					load();
-				}}
-			/>
-			Tampilkan NSFW
-		</label>
+		</Select>
+	</div>
+
+	<div class="mb-5">
+		<Switch
+			label="Tampilkan NSFW"
+			checked={preferences.showNsfw}
+			onchange={(v) => {
+				preferences.setShowNsfw(v);
+				load();
+			}}
+		/>
 	</div>
 
 	{#if error}
-		<div class="mb-4 rounded-xl border border-danger/30 bg-danger/10 p-4 text-sm text-danger">
+		<div class="mb-4 rounded-[var(--radius)] border border-danger/30 bg-danger/10 p-4 text-sm text-danger">
 			{error}
 		</div>
 	{/if}
 
 	{#if loading}
-		<p class="text-muted">Memuat extensions...</p>
+		<div class="flex justify-center py-16 text-muted"><Spinner size={26} /></div>
 	{:else if filtered.length === 0}
-		<p class="text-muted">Tidak ada extension. Coba Refresh Catalog.</p>
+		<EmptyState title="Tidak ada extension" description="Coba ubah filter atau Refresh katalog." />
 	{:else}
 		<p class="mb-3 text-sm text-muted">{filtered.length} extension</p>
 		<div class="space-y-3">

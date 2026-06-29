@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import Download from '@lucide/svelte/icons/download';
+	import Button from '$lib/components/ui/Button.svelte';
 
 	interface BeforeInstallPromptEvent extends Event {
 		prompt(): Promise<void>;
@@ -39,25 +41,20 @@
 
 {#if visible && !dismissed}
 	<div
-		class="fixed bottom-4 left-4 right-4 z-50 mx-auto flex max-w-lg items-center justify-between gap-4 rounded-xl border border-border bg-surface px-4 py-3 shadow-lg sm:left-auto"
+		class="fixed bottom-20 left-4 right-4 z-[60] mx-auto flex max-w-lg items-center justify-between gap-4 rounded-[var(--radius)] border border-border bg-surface px-4 py-3 shadow-(--shadow-float) sm:bottom-4 sm:left-auto"
 	>
-		<div>
-			<p class="text-sm font-medium">Install Komik Reader</p>
-			<p class="text-xs text-muted">Akses cepat dari home screen, seperti app native.</p>
+		<div class="flex items-center gap-3">
+			<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent/15 text-accent">
+				<Download size={18} />
+			</div>
+			<div>
+				<p class="text-sm font-medium text-text">Install Komik Reader</p>
+				<p class="text-xs text-muted">Akses cepat dari home screen, seperti app native.</p>
+			</div>
 		</div>
 		<div class="flex shrink-0 gap-2">
-			<button
-				class="rounded-lg border border-border px-3 py-1.5 text-xs text-muted hover:text-text"
-				onclick={dismiss}
-			>
-				Nanti
-			</button>
-			<button
-				class="rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover"
-				onclick={install}
-			>
-				Install
-			</button>
+			<Button variant="ghost" size="sm" onclick={dismiss}>Nanti</Button>
+			<Button variant="primary" size="sm" onclick={install}>Install</Button>
 		</div>
 	</div>
 {/if}
