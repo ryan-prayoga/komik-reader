@@ -6,7 +6,7 @@ services:
       - TZ=Asia/Jakarta
       - EXTENSION_REPOS=["https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.min.json"]
     volumes:
-      - ./suwayomi/data:/home/suwayomi/.local/share/Tachidesk
+      - suwayomi_data:/home/suwayomi/.local/share/Tachidesk
     restart: unless-stopped
     networks:
       - komik
@@ -32,3 +32,6 @@ services:
 
 networks:
   komik:
+
+volumes:
+  suwayomi_data:

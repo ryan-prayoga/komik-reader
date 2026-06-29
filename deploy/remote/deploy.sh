@@ -37,5 +37,12 @@ sudo caddy validate --config /etc/caddy/Caddyfile
 sudo systemctl reload caddy
 
 echo "==> Public smoke test"
-curl -sf "${ORIGIN}/health" >/dev/null
-echo "Deploy OK: ${ORIGIN}"
+for i in $(seq 1 10); do
+	if curl -sf "${ORIGIN}/health" >/dev/null; then
+		echo "Deploy OK: ${ORIGIN}"
+		exit 0
+	fi
+	sleep 3
+done
+echo "Public health check failed for ${ORIGIN}" >&2
+exit 1
