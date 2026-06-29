@@ -68,5 +68,11 @@ export const handle: Handle = async ({ event, resolve }) => {
 		redirect(303, `/login?redirectTo=${encodeURIComponent(pathname)}`);
 	}
 
+	// Admin gate — covers POST form actions too (load functions run AFTER actions,
+	// so the +layout.server guard alone does NOT protect mutating actions).
+	if (authEnabled() && pathname.startsWith('/admin') && !event.locals.user?.is_admin) {
+		redirect(303, '/');
+	}
+
 	return resolve(event);
 };

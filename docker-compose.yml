@@ -20,6 +20,10 @@ services:
       - NODE_ENV=production
       - HOST=0.0.0.0
       - PORT=3000
+      # Trust Caddy's X-Forwarded-For so getClientAddress() sees the real client
+      # IP (per-IP rate limiting). Caddy sets XFF = {remote_host}, depth 1.
+      - ADDRESS_HEADER=X-Forwarded-For
+      - XFF_DEPTH=1
       - ORIGIN=${ORIGIN:-https://komik.ryanprayoga.dev}
       - SUWAYOMI_URL=http://suwayomi:4567
       - AUTH_ENABLED=${AUTH_ENABLED:-true}

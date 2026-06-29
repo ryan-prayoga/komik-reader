@@ -10,6 +10,11 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# gitleaks-action enumerates PR commits via the API on pull_request events.
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -46,6 +51,10 @@ jobs:
       - name: Typecheck
         working-directory: web
         run: pnpm check
+
+      - name: Test
+        working-directory: web
+        run: pnpm test
 
       - name: Build
         working-directory: web

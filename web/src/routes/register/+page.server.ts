@@ -1,6 +1,7 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { authEnabled } from '$lib/server/env';
+import { rateLimit } from '$lib/server/ratelimit';
 import { getAllowRegistration } from '$lib/server/settings';
 import { createSession, setSessionCookie } from '$lib/server/session';
 import {
@@ -23,9 +24,18 @@ export const load: PageServerLoad = async ({ locals }) => {
 };
 
 export const actions: Actions = {
-	default: async ({ request, cookies }) => {
+	default: async ({ request, cookies, getClientAddress }) => {
 		const canRegister = getUserCount() === 0 || getAllowRegistration();
 		if (!canRegister) return fail(403, { error: 'Registrasi ditutup', email: '', username: '' });
+
+		const limit = rateLimit(`register:${getClientAddress()}`, 5, 60 * 60_000);
+		if (!limit.ok) {
+			return fail(429, {
+				error: `Terlalu banyak percobaan. Coba lagi dalam ${limit.retryAfter} detik.`,
+				email: '',
+				username: ''
+			});
+		}
 
 		const form = await request.formData();
 		const email = String(form.get('email') ?? '');
