@@ -1,0 +1,22 @@
+title = "komik-reader gitleaks"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Allow placeholder env examples and app code"
+paths = [
+  '''\.env\.example$''',
+  '''web/src/lib/server/password\.ts$''',
+  '''web/src/routes/(forgot-password|reset-password|login|register)/''',
+]
+
+[[rules]]
+id = "komik-auth-secret-placeholder"
+description = "Ignore documented placeholder auth secret"
+regex = '''change-me-to-a-long-random-string'''
+
+[[rules]]
+id = "komik-dev-insecure-secret"
+description = "Ignore local dev fallback secret string"
+regex = '''dev-insecure-secret-change-me'''

@@ -1,0 +1,112 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Secret scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: web
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        working-directory: web
+        run: pnpm check
+
+      - name: Build
+        working-directory: web
+        run: pnpm build
+
+  deploy:
+    name: Deploy to VPS
+    needs: verify
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: [self-hosted, komik-reader]
+    timeout-minutes: 30
+    concurrency:
+      group: komik-reader-production
+      cancel-in-progress: false
+
+    steps:
+      - name: Deploy stack
+        working-directory: /home/ubuntu/projects/komik-reader
+        run: |
+          set -Eeuo pipefail
+
+          echo "[DEPLOY] Pull latest"
+          git fetch --prune origin
+          git checkout main
+          git pull --ff-only origin main
+          echo "[DEPLOY] Code at $(git rev-parse --short HEAD)"
+
+          if [ -f .env ]; then
+            set -a
+            # shellcheck disable=SC1091
+            . ./.env
+            set +a
+          else
+            echo "[DEPLOY][ERROR] Missing .env on VPS" >&2
+            exit 1
+          fi
+
+          export ORIGIN="${ORIGIN:-https://komik.ryanprayoga.dev}"
+
+          echo "[DEPLOY] Build & start containers"
+          docker compose build web
+          docker compose up -d
+
+          echo "[DEPLOY] Local health"
+          for i in $(seq 1 30); do
+            if curl -sf "http://127.0.0.1:4311/health" >/dev/null; then
+              echo "[DEPLOY] Web healthy"
+              break
+            fi
+            if [[ "$i" -eq 30 ]]; then
+              docker compose logs --tail=50 web
+              exit 1
+            fi
+            sleep 2
+          done
+
+          echo "[DEPLOY] Reload Caddy"
+          sudo install -m 644 deploy/caddy/komik-reader.caddy /etc/caddy/sites/komik-reader.caddy
+          sudo caddy validate --config /etc/caddy/Caddyfile
+          sudo systemctl reload caddy
+
+          echo "[DEPLOY] Public health"
+          curl -sf "${ORIGIN}/health" >/dev/null
+          echo "[DEPLOY] OK ${ORIGIN}"

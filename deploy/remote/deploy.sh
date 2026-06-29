@@ -10,7 +10,17 @@ cd "$PROJECT_DIR"
 echo "==> Pull latest"
 git fetch --prune origin
 git checkout main
-git reset --hard origin/main
+git pull --ff-only origin main
+
+if [ -f .env ]; then
+	set -a
+	# shellcheck disable=SC1091
+	. ./.env
+	set +a
+else
+	echo "Missing .env in ${PROJECT_DIR}. Copy .env.example and configure on the server." >&2
+	exit 1
+fi
 
 echo "==> Build & start containers"
 export ORIGIN

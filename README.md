@@ -51,5 +51,27 @@ bash deploy/remote/deploy.sh
 
 Stack: Docker Compose (Suwayomi + SvelteKit adapter-node) + Caddy reverse proxy.
 
-GitHub Actions deploy otomatis butuh secrets: `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY`.
-Untuk SSH via Cloudflare Tunnel, set `VPS_HOST` ke hostname tunnel (bukan IP publik).
+## CI/CD
+
+GitHub Actions (`.github/workflows/ci.yml`):
+
+- **PR / push:** `pnpm check`, `pnpm build`, secret scan (gitleaks)
+- **push `main`:** deploy otomatis via self-hosted runner di VPS
+
+Secrets **tidak** disimpan di repo. Buat `.env` hanya di server dari `.env.example`:
+
+```bash
+cp .env.example .env
+# isi AUTH_SECRET, ADMIN_PASSWORD, SMTP_PASS, dll. di VPS saja
+```
+
+Register runner (sekali) di VPS:
+
+```bash
+cd /home/ubuntu
+mkdir -p actions-runner-komik-reader && cd actions-runner-komik-reader
+# download runner arm64, lalu:
+./config.sh --url https://github.com/ryan-prayoga/komik-reader --token <REG_TOKEN> \
+  --name vps-komik-reader --labels self-hosted,komik-reader --unattended
+sudo ./svc.sh install ubuntu && sudo ./svc.sh start
+```

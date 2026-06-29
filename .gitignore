@@ -9,9 +9,22 @@ web/.svelte-kit/
 web/build/
 web/dist/
 
-# Env
+# Env & secrets (never commit)
 .env
-.env.local
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+secrets/
+
+# Auth / local data
+**/auth.db
+**/auth.db-*
+web/data/
 
 # OS
 .DS_Store
