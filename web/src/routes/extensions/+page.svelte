@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import ExtensionCard from '$lib/components/ExtensionCard.svelte';
 	import { fetchExtensionsCatalog, getExtensions } from '$lib/graphql/api';
+	import { preferences } from '$lib/preferences.svelte';
 	import type { Extension } from '$lib/graphql/types';
 
 	let extensions = $state<Extension[]>([]);
@@ -12,13 +13,11 @@
 	let search = $state('');
 	let lang = $state('all');
 	let status = $state<'all' | 'installed' | 'available' | 'update'>('all');
-	let showNsfw = $state(false);
-
 	async function load() {
 		loading = true;
 		error = '';
 		try {
-			extensions = await getExtensions(showNsfw ? null : false);
+			extensions = await getExtensions(preferences.nsfwFilter);
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Gagal memuat extensions';
 		} finally {
@@ -57,7 +56,7 @@
 			if (status === 'installed' && !ext.isInstalled) return false;
 			if (status === 'available' && ext.isInstalled) return false;
 			if (status === 'update' && !ext.hasUpdate) return false;
-			if (!showNsfw && ext.isNsfw) return false;
+			if (!preferences.showNsfw && ext.isNsfw) return false;
 			if (search && !ext.name.toLowerCase().includes(search.toLowerCase())) return false;
 			return true;
 		})
@@ -106,7 +105,15 @@
 			<option value="update">Ada update</option>
 		</select>
 		<label class="flex items-center gap-2 text-sm text-muted">
-			<input type="checkbox" bind:checked={showNsfw} class="accent-accent" />
+			<input
+				type="checkbox"
+				class="accent-accent"
+				checked={preferences.showNsfw}
+				onchange={(e) => {
+					preferences.setShowNsfw(e.currentTarget.checked);
+					load();
+				}}
+			/>
 			Tampilkan NSFW
 		</label>
 	</div>

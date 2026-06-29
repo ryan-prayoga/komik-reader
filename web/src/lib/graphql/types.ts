@@ -104,3 +104,41 @@ export type DownloadStatus = {
 	queue: DownloadItem[];
 	state: DownloaderState;
 };
+
+export type Category = {
+	id: number;
+	name: string;
+	order: number;
+	default: boolean;
+	mangaCount?: number;
+};
+
+export type AboutServer = {
+	name: string;
+	version: string;
+	revision: string;
+	buildType: string;
+};
+
+export type ServerSettings = {
+	autoDownloadNewChapters: boolean;
+	autoDownloadNewChaptersLimit: number;
+	updateMangas: boolean;
+	globalUpdateInterval: number;
+	downloadsPath: string;
+	extensionRepos: string[];
+};
+
+export type HistoryChapter = {
+	id: number;
+	name: string;
+	lastReadAt: string;
+	lastPageRead: number;
+	isRead: boolean;
+	mangaId: number;
+	manga: {
+		id: number;
+		title: string;
+		thumbnailUrl: string | null;
+	};
+};

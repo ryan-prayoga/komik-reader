@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import MangaCard from '$lib/components/MangaCard.svelte';
 	import { fetchSourceManga, getInstalledSources } from '$lib/graphql/api';
+	import { preferences } from '$lib/preferences.svelte';
 	import type { Manga, Source } from '$lib/graphql/types';
 
 	let sources = $state<Source[]>([]);
@@ -14,7 +15,7 @@
 
 	onMount(async () => {
 		try {
-			sources = await getInstalledSources(false);
+			sources = await getInstalledSources(preferences.nsfwFilter);
 			if (sources[0]) sourceId = sources[0].id;
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Gagal memuat source';

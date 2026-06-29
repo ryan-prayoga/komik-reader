@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { getInstalledSources, getRecentlyReadChapters } from '$lib/graphql/api';
+	import { preferences } from '$lib/preferences.svelte';
 	import type { RecentChapter, Source } from '$lib/graphql/types';
 	import { apiUrl } from '$lib/graphql/client';
 
@@ -12,7 +13,7 @@
 	onMount(async () => {
 		try {
 			const [installed, chapters] = await Promise.all([
-				getInstalledSources(false),
+				getInstalledSources(preferences.nsfwFilter),
 				getRecentlyReadChapters(6)
 			]);
 			sources = installed;

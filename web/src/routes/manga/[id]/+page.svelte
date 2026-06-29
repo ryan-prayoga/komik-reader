@@ -9,6 +9,7 @@
 		startDownloader
 	} from '$lib/graphql/api';
 	import DownloadButton from '$lib/components/DownloadButton.svelte';
+	import CategoryPicker from '$lib/components/CategoryPicker.svelte';
 	import LibraryButton from '$lib/components/LibraryButton.svelte';
 	import type { Chapter, MangaDetail } from '$lib/graphql/types';
 
@@ -103,6 +104,11 @@
 					<p class="mt-4 text-sm leading-relaxed text-muted whitespace-pre-line">
 						{manga.description}
 					</p>
+				{/if}
+				{#if manga.inLibrary}
+					<div class="mt-4">
+						<CategoryPicker mangaId={manga.id} />
+					</div>
 				{/if}
 				{#if chapters.length > 0}
 					<button

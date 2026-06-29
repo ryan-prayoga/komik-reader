@@ -9,10 +9,13 @@
 	const links = [
 		{ href: '/', label: 'Home' },
 		{ href: '/library', label: 'Library' },
-		{ href: '/extensions', label: 'Extensions' },
 		{ href: '/search', label: 'Search' },
+		{ href: '/history', label: 'History' },
+		{ href: '/categories', label: 'Categories' },
+		{ href: '/extensions', label: 'Extensions' },
 		{ href: '/downloads', label: 'Downloads' },
-		{ href: '/offline', label: 'Offline' }
+		{ href: '/offline', label: 'Offline' },
+		{ href: '/settings', label: 'Settings' }
 	];
 </script>
 
@@ -33,7 +36,8 @@
 				{#each links as link}
 					<a
 						href={link.href}
-						class="rounded-lg px-3 py-2 text-sm transition {$page.url.pathname === link.href
+						class="rounded-lg px-3 py-2 text-sm transition {$page.url.pathname === link.href ||
+						(link.href !== '/' && $page.url.pathname.startsWith(link.href + '/'))
 							? 'bg-surface text-accent'
 							: 'text-muted hover:bg-surface hover:text-text'}"
 					>

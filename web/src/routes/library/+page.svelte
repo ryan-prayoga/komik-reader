@@ -1,36 +1,58 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { page } from '$app/stores';
 	import MangaCard from '$lib/components/MangaCard.svelte';
 	import { apiUrl } from '$lib/graphql/client';
-	import { getLibraryManga, getRecentlyReadChapters } from '$lib/graphql/api';
+	import { getCategories, getLibraryManga, getRecentlyReadChapters } from '$lib/graphql/api';
 	import { continueReadingLabel, continueReadingUrl } from '$lib/library';
-	import type { LibraryManga, RecentChapter } from '$lib/graphql/types';
+	import type { Category, LibraryManga, RecentChapter } from '$lib/graphql/types';
 
 	type Tab = 'all' | 'unread';
 
 	let tab = $state<Tab>('all');
 	let mangas = $state<LibraryManga[]>([]);
 	let recent = $state<RecentChapter[]>([]);
+	let categories = $state<Category[]>([]);
 	let loading = $state(true);
 	let error = $state('');
+
+	const categoryId = $derived(
+		$page.url.searchParams.get('category')
+			? Number($page.url.searchParams.get('category'))
+			: undefined
+	);
 
 	const filtered = $derived(
 		tab === 'unread' ? mangas.filter((m) => m.unreadCount > 0) : mangas
 	);
 
-	onMount(async () => {
-		try {
-			const [library, chapters] = await Promise.all([
-				getLibraryManga(),
-				getRecentlyReadChapters(8)
-			]);
-			mangas = library;
-			recent = chapters;
-		} catch (e) {
-			error = e instanceof Error ? e.message : 'Gagal memuat library';
-		} finally {
-			loading = false;
-		}
+	$effect(() => {
+		const id = categoryId;
+		let cancelled = false;
+		loading = true;
+		error = '';
+
+		Promise.all([
+			getLibraryManga(id),
+			getRecentlyReadChapters(8),
+			getCategories()
+		])
+			.then(([library, chapters, cats]) => {
+				if (cancelled) return;
+				mangas = library;
+				recent = chapters;
+				categories = cats;
+			})
+			.catch((e) => {
+				if (cancelled) return;
+				error = e instanceof Error ? e.message : 'Gagal memuat library';
+			})
+			.finally(() => {
+				if (!cancelled) loading = false;
+			});
+
+		return () => {
+			cancelled = true;
+		};
 	});
 </script>
 
@@ -77,6 +99,30 @@
 						</a>
 					{/each}
 				</div>
+			</div>
+		{/if}
+
+		{#if categories.length > 0}
+			<div class="mb-4 flex flex-wrap gap-2">
+				<a
+					href="/library"
+					class="rounded-full border px-3 py-1 text-xs transition {!categoryId
+						? 'border-accent bg-accent/15 text-accent'
+						: 'border-border text-muted hover:border-accent'}"
+				>
+					Semua kategori
+				</a>
+				{#each categories as category (category.id)}
+					<a
+						href="/library?category={category.id}"
+						class="rounded-full border px-3 py-1 text-xs transition {categoryId ===
+						category.id
+							? 'border-accent bg-accent/15 text-accent'
+							: 'border-border text-muted hover:border-accent'}"
+					>
+						{category.name}
+					</a>
+				{/each}
 			</div>
 		{/if}
 

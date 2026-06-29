@@ -1,13 +1,17 @@
 import { gql } from './client';
 import type {
+	AboutServer,
+	Category,
 	Chapter,
 	DownloadStatus,
 	Extension,
 	FetchMangaType,
+	HistoryChapter,
 	LibraryManga,
 	Manga,
 	MangaDetail,
 	RecentChapter,
+	ServerSettings,
 	Source
 } from './types';
 
@@ -269,13 +273,17 @@ const LIBRARY_MANGA_FIELDS = `
 	latestUploadedChapter { id name }
 `;
 
-export async function getLibraryManga(): Promise<LibraryManga[]> {
+export async function getLibraryManga(categoryId?: number): Promise<LibraryManga[]> {
+	const filter = categoryId
+		? `inLibrary: { equalTo: true }, categoryId: { equalTo: ${categoryId} }`
+		: `inLibrary: { equalTo: true }`;
+
 	const data = await gql<{
 		mangas: { nodes: LibraryManga[] };
 	}>(
 		`query {
 			mangas(
-				filter: { inLibrary: { equalTo: true } }
+				filter: { ${filter} }
 				orderBy: IN_LIBRARY_AT
 				orderByType: DESC
 			) {
@@ -320,6 +328,200 @@ export async function getRecentlyReadChapters(limit = 12): Promise<RecentChapter
 		{ limit }
 	);
 	return data.chapters.nodes.filter((c) => Number(c.lastReadAt) > 0);
+}
+
+export async function getAboutServer(): Promise<AboutServer> {
+	const data = await gql<{ aboutServer: AboutServer }>(
+		`query {
+			aboutServer {
+				name version revision buildType
+			}
+		}`
+	);
+	return data.aboutServer;
+}
+
+export async function getSettings(): Promise<ServerSettings> {
+	const data = await gql<{ settings: ServerSettings }>(
+		`query {
+			settings {
+				autoDownloadNewChapters
+				autoDownloadNewChaptersLimit
+				updateMangas
+				globalUpdateInterval
+				downloadsPath
+				extensionRepos
+			}
+		}`
+	);
+	return data.settings;
+}
+
+export async function updateSettings(
+	patch: Partial<ServerSettings>
+): Promise<ServerSettings> {
+	const data = await gql<{
+		setSettings: { settings: ServerSettings };
+	}>(
+		`mutation($settings: PartialSettingsTypeInput!) {
+			setSettings(input: { settings: $settings }) {
+				settings {
+					autoDownloadNewChapters
+					autoDownloadNewChaptersLimit
+					updateMangas
+					globalUpdateInterval
+					downloadsPath
+					extensionRepos
+				}
+			}
+		}`,
+		{ settings: patch }
+	);
+	return data.setSettings.settings;
+}
+
+export async function clearServerImageCache(): Promise<void> {
+	await gql(
+		`mutation {
+			clearCachedImages(input: { cachedPages: true, cachedThumbnails: true }) {
+				cachedPages cachedThumbnails
+			}
+		}`
+	);
+}
+
+export async function getCategories(): Promise<Category[]> {
+	const data = await gql<{
+		categories: {
+			nodes: Array<Category & { mangas: { totalCount: number } }>;
+		};
+	}>(
+		`query {
+			categories(orderBy: ORDER, orderByType: ASC) {
+				nodes {
+					id name order default
+					mangas { totalCount }
+				}
+			}
+		}`
+	);
+	return data.categories.nodes.map((c) => ({
+		id: c.id,
+		name: c.name,
+		order: c.order,
+		default: c.default,
+		mangaCount: c.mangas.totalCount
+	}));
+}
+
+export async function createCategory(name: string): Promise<Category> {
+	const data = await gql<{
+		createCategory: { category: Category };
+	}>(
+		`mutation($name: String!) {
+			createCategory(input: { name: $name }) {
+				category { id name order default }
+			}
+		}`,
+		{ name }
+	);
+	return data.createCategory.category;
+}
+
+export async function deleteCategory(categoryId: number): Promise<void> {
+	await gql(
+		`mutation($id: Int!) {
+			deleteCategory(input: { categoryId: $id }) {
+				category { id }
+			}
+		}`,
+		{ id: categoryId }
+	);
+}
+
+export async function getCategoryManga(categoryId: number): Promise<Manga[]> {
+	const data = await gql<{
+		mangas: { nodes: Manga[] };
+	}>(
+		`query($id: Int!) {
+			mangas(filter: { categoryId: { equalTo: $id } }, orderBy: TITLE, orderByType: ASC) {
+				nodes { ${MANGA_FIELDS} }
+			}
+		}`,
+		{ id: categoryId }
+	);
+	return data.mangas.nodes;
+}
+
+export async function getMangaCategories(mangaId: number): Promise<Category[]> {
+	const data = await gql<{
+		manga: { categories: { nodes: Category[] } };
+	}>(
+		`query($id: Int!) {
+			manga(id: $id) {
+				categories { nodes { id name order default } }
+			}
+		}`,
+		{ id: mangaId }
+	);
+	return data.manga.categories.nodes;
+}
+
+export async function updateMangaCategories(
+	mangaId: number,
+	addToCategories: number[],
+	removeFromCategories: number[]
+): Promise<Category[]> {
+	const data = await gql<{
+		updateMangaCategories: { manga: { categories: { nodes: Category[] } } };
+	}>(
+		`mutation($id: Int!, $add: [Int!], $remove: [Int!]) {
+			updateMangaCategories(
+				input: { id: $id, patch: { addToCategories: $add, removeFromCategories: $remove } }
+			) {
+				manga { categories { nodes { id name order default } } }
+			}
+		}`,
+		{
+			id: mangaId,
+			add: addToCategories.length ? addToCategories : null,
+			remove: removeFromCategories.length ? removeFromCategories : null
+		}
+	);
+	return data.updateMangaCategories.manga.categories.nodes;
+}
+
+export async function getReadingHistory(limit = 50): Promise<HistoryChapter[]> {
+	const data = await gql<{
+		chapters: { nodes: HistoryChapter[] };
+	}>(
+		`query($limit: Int!) {
+			chapters(
+				filter: { lastReadAt: { greaterThan: "0" } }
+				orderBy: LAST_READ_AT
+				orderByType: DESC
+				first: $limit
+			) {
+				nodes {
+					id name lastReadAt lastPageRead isRead mangaId
+					manga { id title thumbnailUrl }
+				}
+			}
+		}`,
+		{ limit }
+	);
+	return data.chapters.nodes;
+}
+
+export async function markChapterRead(chapterId: number, isRead: boolean): Promise<void> {
+	await gql(
+		`mutation($id: Int!, $isRead: Boolean!) {
+			updateChapter(input: { id: $id, patch: { isRead: $isRead } }) {
+				chapter { id isRead }
+			}
+		}`,
+		{ id: chapterId, isRead }
+	);
 }
 
 export async function getDownloadedChapters(): Promise<
