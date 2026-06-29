@@ -1,0 +1,20 @@
+(komik_reader_headers) {
+	header {
+		X-Frame-Options "SAMEORIGIN"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+	}
+	encode gzip
+}
+
+komik.ryanprayoga.dev {
+	import komik_reader_headers
+
+	reverse_proxy 127.0.0.1:4311 {
+		header_up Host {host}
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+	}
+}

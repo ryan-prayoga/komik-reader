@@ -1,0 +1,34 @@
+services:
+  suwayomi:
+    image: ghcr.io/suwayomi/suwayomi-server:stable
+    container_name: komik-reader-suwayomi
+    environment:
+      - TZ=Asia/Jakarta
+      - EXTENSION_REPOS=["https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.min.json"]
+    volumes:
+      - ./suwayomi/data:/home/suwayomi/.local/share/Tachidesk
+    restart: unless-stopped
+    networks:
+      - komik
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: komik-reader-web
+    environment:
+      - NODE_ENV=production
+      - HOST=0.0.0.0
+      - PORT=3000
+      - ORIGIN=${ORIGIN:-https://komik.ryanprayoga.dev}
+      - SUWAYOMI_URL=http://suwayomi:4567
+    ports:
+      - "127.0.0.1:4311:3000"
+    depends_on:
+      - suwayomi
+    restart: unless-stopped
+    networks:
+      - komik
+
+networks:
+  komik:
