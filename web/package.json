@@ -28,6 +28,7 @@
 		"vitest": "^4.1.9"
 	},
 	"dependencies": {
+		"@lucide/svelte": "^1.22.0",
 		"bcryptjs": "^3.0.3",
 		"better-sqlite3": "^12.11.1",
 		"nodemailer": "^9.0.1"

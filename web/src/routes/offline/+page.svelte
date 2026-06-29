@@ -2,6 +2,10 @@
 	import { onMount } from 'svelte';
 	import { listOfflineChapters, type OfflineChapter } from '$lib/offline/db';
 	import { removeChapterFromDevice } from '$lib/offline/cache';
+	import PageHeader from '$lib/components/PageHeader.svelte';
+	import { Button, Card, EmptyState, Spinner } from '$lib/components/ui';
+	import Trash2 from '@lucide/svelte/icons/trash-2';
+	import WifiOff from '@lucide/svelte/icons/wifi-off';
 
 	let chapters = $state<OfflineChapter[]>([]);
 	let loading = $state(true);
@@ -22,49 +26,38 @@
 </script>
 
 <section>
-	<div class="mb-6">
-		<h1 class="text-2xl font-semibold">Offline di Perangkat</h1>
-		<p class="mt-1 text-sm text-muted">
-			Chapter yang sudah di-cache bisa dibaca tanpa internet.
-		</p>
-	</div>
+	<PageHeader title="Offline" subtitle="Chapter ter-cache, bisa dibaca tanpa internet." />
 
 	{#if loading}
-		<p class="text-muted">Memuat...</p>
+		<div class="flex justify-center py-16 text-muted"><Spinner size={26} /></div>
 	{:else if chapters.length === 0}
-		<div class="rounded-xl border border-border bg-surface p-8 text-center">
-			<p class="text-muted">Belum ada chapter offline.</p>
-			<p class="mt-2 text-sm text-muted">
-				Download chapter di server, lalu tap <strong>Simpan offline</strong> di
-				<a href="/downloads" class="text-accent hover:underline">Downloads</a>.
-			</p>
-		</div>
+		<EmptyState
+			title="Belum ada chapter offline"
+			description="Download chapter di server, lalu tap Simpan offline di Downloads."
+		>
+			{#snippet icon()}<WifiOff size={32} />{/snippet}
+			{#snippet action()}<Button href="/downloads" variant="secondary">Buka Downloads</Button>{/snippet}
+		</EmptyState>
 	{:else}
-		<div class="divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface">
-			{#each chapters as chapter (chapter.chapterId)}
-				<div class="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-					<div>
-						<p class="text-sm font-medium">{chapter.mangaTitle}</p>
-						<p class="text-xs text-muted">
-							{chapter.chapterName} · {chapter.pageCount} halaman · {formatDate(chapter.cachedAt)}
-						</p>
+		<Card padding="none">
+			<div class="divide-y divide-border">
+				{#each chapters as chapter (chapter.chapterId)}
+					<div class="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+						<div class="min-w-0">
+							<p class="truncate text-sm font-medium text-text">{chapter.mangaTitle}</p>
+							<p class="truncate text-xs text-muted">
+								{chapter.chapterName} · {chapter.pageCount} halaman · {formatDate(chapter.cachedAt)}
+							</p>
+						</div>
+						<div class="flex shrink-0 gap-2">
+							<Button href="/read/{chapter.chapterId}" size="sm">Baca</Button>
+							<Button variant="ghost" size="sm" onclick={() => remove(chapter.chapterId)}>
+								<Trash2 size={14} /> Hapus
+							</Button>
+						</div>
 					</div>
-					<div class="flex gap-2">
-						<a
-							href="/read/{chapter.chapterId}"
-							class="rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover"
-						>
-							Baca
-						</a>
-						<button
-							class="rounded-lg border border-border px-3 py-1.5 text-xs text-muted hover:border-danger hover:text-danger"
-							onclick={() => remove(chapter.chapterId)}
-						>
-							Hapus
-						</button>
-					</div>
-				</div>
-			{/each}
-		</div>
+				{/each}
+			</div>
+		</Card>
 	{/if}
 </section>

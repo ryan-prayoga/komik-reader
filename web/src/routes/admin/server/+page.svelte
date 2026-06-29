@@ -7,6 +7,7 @@
 		getSettings,
 		updateSettings
 	} from '$lib/graphql/api';
+	import { Button, Card, Switch, Spinner } from '$lib/components/ui';
 	import type { AboutServer, ServerSettings } from '$lib/graphql/types';
 
 	let { data, form } = $props();
@@ -18,6 +19,9 @@
 	let clearing = $state(false);
 	let notice = $state('');
 	let error = $state('');
+
+	const numField =
+		'w-24 rounded-[var(--radius)] border border-border bg-bg px-2 py-1.5 text-sm text-text outline-none focus:border-accent';
 
 	onMount(async () => {
 		try {
@@ -65,140 +69,98 @@
 	}
 </script>
 
-{#if form?.success}
-	<div class="mb-4 rounded-xl border border-success/30 bg-success/10 p-3 text-sm text-success">
-		{form.success}
-	</div>
-{/if}
-{#if notice}
-	<div class="mb-4 rounded-xl border border-success/30 bg-success/10 p-3 text-sm text-success">
-		{notice}
+{#if form?.success || notice}
+	<div class="mb-4 rounded-[var(--radius)] border border-success/30 bg-success/10 p-3 text-sm text-success">
+		{form?.success || notice}
 	</div>
 {/if}
 {#if error}
-	<div class="mb-4 rounded-xl border border-danger/30 bg-danger/10 p-3 text-sm text-danger">
+	<div class="mb-4 rounded-[var(--radius)] border border-danger/30 bg-danger/10 p-3 text-sm text-danger">
 		{error}
 	</div>
 {/if}
 
 <div class="space-y-6">
-	<section class="rounded-xl border border-border bg-surface p-5">
-		<h2 class="mb-4 text-lg font-medium">Auth & Registrasi</h2>
+	<Card padding="lg">
+		<h2 class="mb-4 text-lg font-semibold text-text">Auth & Registrasi</h2>
 		<form method="POST" action="?/auth" use:enhance class="space-y-4">
 			<label class="flex items-center justify-between gap-4">
 				<div>
-					<p class="text-sm font-medium">Izinkan registrasi publik</p>
+					<p class="text-sm font-medium text-text">Izinkan registrasi publik</p>
 					<p class="text-xs text-muted">User bisa daftar sendiri di /register.</p>
 				</div>
-				<input
-					name="allow_registration"
-					type="checkbox"
-					class="accent-accent"
-					checked={data.allowRegistration}
-				/>
+				<input name="allow_registration" type="checkbox" class="h-5 w-5 accent-accent" checked={data.allowRegistration} />
 			</label>
-			<button
-				type="submit"
-				class="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
-			>
-				Simpan
-			</button>
+			<Button type="submit">Simpan</Button>
 		</form>
-	</section>
+	</Card>
 
 	{#if loading}
-		<p class="text-muted">Memuat Suwayomi...</p>
+		<div class="flex justify-center py-12 text-muted"><Spinner size={24} /></div>
 	{:else}
 		{#if server}
-			<section class="rounded-xl border border-border bg-surface p-5">
-				<h2 class="mb-4 text-lg font-medium">Suwayomi Server</h2>
+			<Card padding="lg">
+				<h2 class="mb-4 text-lg font-semibold text-text">Suwayomi Server</h2>
 				<dl class="space-y-2 text-sm">
 					<div class="flex justify-between gap-4">
 						<dt class="text-muted">Nama</dt>
-						<dd>{server.name}</dd>
+						<dd class="text-text">{server.name}</dd>
 					</div>
 					<div class="flex justify-between gap-4">
 						<dt class="text-muted">Versi</dt>
-						<dd>{server.version} ({server.revision})</dd>
+						<dd class="text-text">{server.version} ({server.revision})</dd>
 					</div>
 					<div class="flex justify-between gap-4">
 						<dt class="text-muted">Build</dt>
-						<dd>{server.buildType}</dd>
+						<dd class="text-text">{server.buildType}</dd>
 					</div>
 				</dl>
-			</section>
+			</Card>
 		{/if}
 
 		{#if settings}
-			<section class="rounded-xl border border-border bg-surface p-5">
-				<h2 class="mb-4 text-lg font-medium">Download & Update</h2>
+			<Card padding="lg">
+				<h2 class="mb-4 text-lg font-semibold text-text">Download & Update</h2>
 				<div class="space-y-4">
+					<Switch
+						label="Auto-download chapter baru"
+						checked={settings.autoDownloadNewChapters}
+						onchange={(v) => settings && (settings.autoDownloadNewChapters = v)}
+					/>
 					<label class="flex items-center justify-between gap-4">
-						<span class="text-sm">Auto-download chapter baru</span>
-						<input
-							type="checkbox"
-							class="accent-accent"
-							bind:checked={settings.autoDownloadNewChapters}
-						/>
+						<span class="text-sm text-text">Limit auto-download</span>
+						<input type="number" min="0" max="50" bind:value={settings.autoDownloadNewChaptersLimit} class={numField} />
 					</label>
+					<Switch
+						label="Auto-update library"
+						checked={settings.updateMangas}
+						onchange={(v) => settings && (settings.updateMangas = v)}
+					/>
 					<label class="flex items-center justify-between gap-4">
-						<span class="text-sm">Limit auto-download</span>
-						<input
-							type="number"
-							min="0"
-							max="50"
-							bind:value={settings.autoDownloadNewChaptersLimit}
-							class="w-20 rounded-lg border border-border bg-bg px-2 py-1 text-sm"
-						/>
-					</label>
-					<label class="flex items-center justify-between gap-4">
-						<span class="text-sm">Auto-update library</span>
-						<input type="checkbox" class="accent-accent" bind:checked={settings.updateMangas} />
-					</label>
-					<label class="flex items-center justify-between gap-4">
-						<span class="text-sm">Interval update (jam)</span>
-						<input
-							type="number"
-							min="1"
-							max="168"
-							step="0.5"
-							bind:value={settings.globalUpdateInterval}
-							class="w-20 rounded-lg border border-border bg-bg px-2 py-1 text-sm"
-						/>
+						<span class="text-sm text-text">Interval update (jam)</span>
+						<input type="number" min="1" max="168" step="0.5" bind:value={settings.globalUpdateInterval} class={numField} />
 					</label>
 					{#if settings.downloadsPath}
 						<p class="text-xs text-muted">Folder download: {settings.downloadsPath}</p>
 					{/if}
-					<button
-						class="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
-						disabled={saving}
-						onclick={saveServerSettings}
-					>
-						{saving ? 'Menyimpan...' : 'Simpan pengaturan Suwayomi'}
-					</button>
+					<Button loading={saving} onclick={saveServerSettings}>Simpan pengaturan Suwayomi</Button>
 				</div>
-			</section>
+			</Card>
 
-			<section class="rounded-xl border border-border bg-surface p-5">
-				<h2 class="mb-2 text-lg font-medium">Extension Repos</h2>
+			<Card padding="lg">
+				<h2 class="mb-2 text-lg font-semibold text-text">Extension Repos</h2>
 				<ul class="space-y-1 text-xs text-muted">
 					{#each settings.extensionRepos as repo}
 						<li class="break-all">{repo}</li>
 					{/each}
 				</ul>
-			</section>
+			</Card>
 		{/if}
 
-		<section class="rounded-xl border border-border bg-surface p-5">
-			<h2 class="mb-2 text-lg font-medium">Maintenance</h2>
+		<Card padding="lg">
+			<h2 class="mb-2 text-lg font-semibold text-text">Maintenance</h2>
 			<p class="mb-4 text-sm text-muted">Bersihkan cache gambar di server Suwayomi.</p>
-			<button
-				class="rounded-lg border border-border px-4 py-2 text-sm hover:border-danger hover:text-danger disabled:opacity-50"
-				disabled={clearing}
-				onclick={clearCache}
-			>
-				{clearing ? 'Membersihkan...' : 'Bersihkan cache server'}
-			</button>
-		</section>
+			<Button variant="secondary" loading={clearing} onclick={clearCache}>Bersihkan cache server</Button>
+		</Card>
 	{/if}
 </div>

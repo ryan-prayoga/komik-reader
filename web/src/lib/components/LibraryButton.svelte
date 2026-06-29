@@ -1,5 +1,8 @@
 <script lang="ts">
 	import { setMangaInLibrary } from '$lib/graphql/api';
+	import Star from '@lucide/svelte/icons/star';
+	import Plus from '@lucide/svelte/icons/plus';
+	import Spinner from '$lib/components/ui/Spinner.svelte';
 
 	interface Props {
 		mangaId: number;
@@ -17,9 +20,10 @@
 
 	const cls = $derived(
 		size === 'md'
-			? 'rounded-lg px-4 py-2 text-sm font-medium'
-			: 'rounded-md px-2 py-1 text-xs'
+			? 'gap-2 rounded-[var(--radius)] px-4 py-2 text-sm font-medium'
+			: 'gap-1 rounded-md px-2 py-1 text-xs'
 	);
+	const iconSize = $derived(size === 'md' ? 16 : 13);
 
 	async function toggle() {
 		const next = !saved;
@@ -38,11 +42,18 @@
 </script>
 
 <button
-	class="{cls} border transition disabled:opacity-50 {saved
+	class="inline-flex items-center {cls} border transition disabled:opacity-50 {saved
 		? 'border-accent bg-accent/15 text-accent hover:bg-accent/25'
 		: 'border-border bg-surface-hover hover:border-accent'}"
 	disabled={loading}
 	onclick={toggle}
 >
-	{loading ? '...' : saved ? '★ Di Library' : '+ Library'}
+	{#if loading}
+		<Spinner size={iconSize} />
+	{:else if saved}
+		<Star size={iconSize} fill="currentColor" />
+	{:else}
+		<Plus size={iconSize} />
+	{/if}
+	{saved ? 'Di Library' : 'Library'}
 </button>

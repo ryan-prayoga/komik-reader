@@ -1,6 +1,10 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { createCategory, deleteCategory, getCategories } from '$lib/graphql/api';
+	import PageHeader from '$lib/components/PageHeader.svelte';
+	import { Button, Input, Card, Badge, EmptyState, Spinner } from '$lib/components/ui';
+	import FolderTree from '@lucide/svelte/icons/folder-tree';
+	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import type { Category } from '$lib/graphql/types';
 
 	let categories = $state<Category[]>([]);
@@ -57,75 +61,59 @@
 </script>
 
 <section>
-	<div class="mb-6">
-		<h1 class="text-2xl font-semibold">Categories</h1>
-		<p class="mt-1 text-sm text-muted">Kelompokkan manga di library seperti di Aniyomi.</p>
-	</div>
+	<PageHeader title="Kategori" subtitle="Kelompokkan manga di library." />
 
 	<form
-		class="mb-6 flex flex-wrap gap-3"
+		class="mb-6 flex flex-wrap items-end gap-3"
 		onsubmit={(e) => {
 			e.preventDefault();
 			create();
 		}}
 	>
-		<input
-			type="text"
-			placeholder="Nama kategori baru..."
-			bind:value={newName}
-			class="min-w-[200px] flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-accent"
-		/>
-		<button
-			type="submit"
-			class="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
-			disabled={creating || !newName.trim()}
-		>
-			{creating ? 'Membuat...' : 'Buat'}
-		</button>
+		<Input bind:value={newName} placeholder="Nama kategori baru..." class="min-w-[200px] flex-1" />
+		<Button type="submit" loading={creating} disabled={!newName.trim()}>Buat</Button>
 	</form>
 
 	{#if error}
-		<div class="mb-4 rounded-xl border border-danger/30 bg-danger/10 p-4 text-sm text-danger">
+		<div class="mb-4 rounded-[var(--radius)] border border-danger/30 bg-danger/10 p-4 text-sm text-danger">
 			{error}
 		</div>
 	{/if}
 
 	{#if loading}
-		<p class="text-muted">Memuat...</p>
+		<div class="flex justify-center py-16 text-muted"><Spinner size={26} /></div>
 	{:else if categories.length === 0}
-		<p class="text-muted">Belum ada kategori.</p>
+		<EmptyState title="Belum ada kategori" description="Buat kategori pertama di atas.">
+			{#snippet icon()}<FolderTree size={32} />{/snippet}
+		</EmptyState>
 	{:else}
-		<div class="divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface">
-			{#each categories as category (category.id)}
-				<div class="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-					<div>
-						<p class="text-sm font-medium">
-							{category.name}
-							{#if category.default}
-								<span class="ml-2 text-xs text-muted">(default)</span>
+		<Card padding="none">
+			<div class="divide-y divide-border">
+				{#each categories as category (category.id)}
+					<div class="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+						<div class="min-w-0">
+							<p class="flex items-center gap-2 text-sm font-medium text-text">
+								{category.name}
+								{#if category.default}<Badge tone="neutral">default</Badge>{/if}
+							</p>
+							<p class="text-xs text-muted">{category.mangaCount ?? 0} manga</p>
+						</div>
+						<div class="flex gap-2">
+							<Button href="/categories/{category.id}" variant="secondary" size="sm">Lihat</Button>
+							{#if !category.default}
+								<Button
+									variant="ghost"
+									size="sm"
+									loading={deletingId === category.id}
+									onclick={() => remove(category)}
+								>
+									<Trash2 size={14} /> Hapus
+								</Button>
 							{/if}
-						</p>
-						<p class="text-xs text-muted">{category.mangaCount ?? 0} manga</p>
+						</div>
 					</div>
-					<div class="flex gap-2">
-						<a
-							href="/categories/{category.id}"
-							class="rounded-lg border border-border px-3 py-1.5 text-xs hover:border-accent"
-						>
-							Lihat
-						</a>
-						{#if !category.default}
-							<button
-								class="rounded-lg border border-border px-3 py-1.5 text-xs text-muted hover:border-danger hover:text-danger disabled:opacity-50"
-								disabled={deletingId === category.id}
-								onclick={() => remove(category)}
-							>
-								{deletingId === category.id ? '...' : 'Hapus'}
-							</button>
-						{/if}
-					</div>
-				</div>
-			{/each}
-		</div>
+				{/each}
+			</div>
+		</Card>
 	{/if}
 </section>

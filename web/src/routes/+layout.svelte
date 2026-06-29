@@ -1,80 +1,55 @@
 <script lang="ts">
 	import '../app.css';
+	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
+	import { preferences } from '$lib/preferences.svelte';
 	import InstallPrompt from '$lib/components/InstallPrompt.svelte';
 	import OfflineBanner from '$lib/components/OfflineBanner.svelte';
+	import Sidebar from '$lib/components/nav/Sidebar.svelte';
+	import BottomNav from '$lib/components/nav/BottomNav.svelte';
+	import MobileTopBar from '$lib/components/nav/MobileTopBar.svelte';
+	import MoreSheet from '$lib/components/nav/MoreSheet.svelte';
 
 	let { data, children } = $props();
 
-	const baseLinks = [
-		{ href: '/', label: 'Home' },
-		{ href: '/library', label: 'Library' },
-		{ href: '/search', label: 'Search' },
-		{ href: '/history', label: 'History' },
-		{ href: '/categories', label: 'Categories' },
-		{ href: '/extensions', label: 'Extensions' },
-		{ href: '/downloads', label: 'Downloads' },
-		{ href: '/offline', label: 'Offline' },
-		{ href: '/settings', label: 'Settings' }
-	];
-
-	const links = $derived(
-		data.user?.is_admin
-			? [...baseLinks, { href: '/admin', label: 'Admin' }]
-			: baseLinks
-	);
+	let moreOpen = $state(false);
 
 	const authPages = ['/login', '/register', '/forgot-password', '/reset-password'];
 	const isAuthPage = $derived(authPages.some((p) => $page.url.pathname.startsWith(p)));
-	const showShell = $derived(!isAuthPage && (data.authEnabled ? !!data.user : true));
+	const isReader = $derived($page.url.pathname.startsWith('/read/'));
+	const showShell = $derived(
+		!isAuthPage && !isReader && (data.authEnabled ? !!data.user : true)
+	);
+
+	const themeColor = $derived(preferences.resolved === 'dark' ? '#0a0a0a' : '#ffffff');
+
+	onMount(() => preferences.init());
 </script>
 
 <svelte:head>
 	<title>Komik Reader</title>
-	<meta name="theme-color" content="#0a0a0a" />
+	<meta name="theme-color" content={themeColor} />
 </svelte:head>
 
 {#if showShell}
-	<div class="min-h-screen bg-bg text-text">
-		<OfflineBanner />
-		<InstallPrompt />
-		<header class="sticky top-0 z-50 border-b border-border bg-bg/90 backdrop-blur">
-			<div class="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-				<a href="/" class="text-lg font-semibold tracking-tight">
-					Komik<span class="text-accent">Reader</span>
-				</a>
-				<nav class="flex flex-wrap items-center justify-end gap-1">
-					{#each links as link}
-						<a
-							href={link.href}
-							class="rounded-lg px-3 py-2 text-sm transition {$page.url.pathname === link.href ||
-							(link.href !== '/' && $page.url.pathname.startsWith(link.href + '/'))
-								? 'bg-surface text-accent'
-								: 'text-muted hover:bg-surface hover:text-text'}"
-						>
-							{link.label}
-						</a>
-					{/each}
-					{#if data.user}
-						<span class="hidden px-2 text-xs text-muted sm:inline">
-							{data.user.username}{data.user.is_admin ? ' · admin' : ''}
-						</span>
-						<form method="POST" action="/logout">
-							<button
-								type="submit"
-								class="rounded-lg px-3 py-2 text-sm text-muted transition hover:bg-surface hover:text-danger"
-							>
-								Keluar
-							</button>
-						</form>
-					{/if}
-				</nav>
-			</div>
-		</header>
+	<div class="min-h-screen bg-bg text-text lg:grid lg:grid-cols-[auto_1fr]">
+		<Sidebar user={data.user} />
 
-		<main class="mx-auto max-w-6xl px-4 py-6">
-			{@render children()}
-		</main>
+		<div class="flex min-h-screen min-w-0 flex-col">
+			<MobileTopBar />
+			<OfflineBanner />
+			<main class="mx-auto w-full max-w-6xl flex-1 px-4 pb-24 pt-4 lg:px-8 lg:pb-10 lg:pt-8">
+				{@render children()}
+			</main>
+		</div>
+
+		<BottomNav user={data.user} onmore={() => (moreOpen = true)} />
+		<MoreSheet bind:open={moreOpen} user={data.user} />
+		<InstallPrompt />
+	</div>
+{:else if isReader}
+	<div class="min-h-screen bg-black text-text">
+		{@render children()}
 	</div>
 {:else}
 	<div class="min-h-screen bg-bg px-4 py-6 text-text">

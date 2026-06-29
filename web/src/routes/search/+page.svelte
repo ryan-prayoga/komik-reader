@@ -1,8 +1,13 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import MangaCard from '$lib/components/MangaCard.svelte';
+	import MangaGrid from '$lib/components/MangaGrid.svelte';
+	import GridSkeleton from '$lib/components/GridSkeleton.svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
+	import { Button, Select, EmptyState } from '$lib/components/ui';
 	import { fetchSourceManga, getInstalledSources } from '$lib/graphql/api';
 	import { preferences } from '$lib/preferences.svelte';
+	import Search from '@lucide/svelte/icons/search';
 	import type { Manga, Source } from '$lib/graphql/types';
 
 	let sources = $state<Source[]>([]);
@@ -39,57 +44,56 @@
 </script>
 
 <section>
-	<h1 class="mb-6 text-2xl font-semibold">Search</h1>
+	<PageHeader title="Cari" subtitle="Telusuri judul dari source terinstall." />
 
 	<form
-		class="mb-6 flex flex-wrap gap-3"
+		class="mb-6 flex flex-wrap items-end gap-3"
 		onsubmit={(e) => {
 			e.preventDefault();
 			search();
 		}}
 	>
-		<select
-			bind:value={sourceId}
-			class="rounded-lg border border-border bg-surface px-3 py-2 text-sm"
-		>
+		<Select bind:value={sourceId} class="w-full sm:w-48" label="Source">
 			{#each sources as source}
 				<option value={source.id}>{source.name}</option>
 			{/each}
-		</select>
-		<input
-			type="search"
-			placeholder="Cari judul manga..."
-			bind:value={query}
-			class="min-w-[220px] flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-accent"
-		/>
-		<button
-			type="submit"
-			class="rounded-lg bg-accent px-5 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
-			disabled={loading || !query.trim() || !sourceId}
-		>
-			{loading ? 'Mencari...' : 'Cari'}
-		</button>
+		</Select>
+		<div class="relative min-w-[220px] flex-1">
+			<Search size={16} class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+			<input
+				type="search"
+				placeholder="Cari judul manga..."
+				bind:value={query}
+				class="w-full rounded-[var(--radius)] border border-border bg-surface py-2 pl-9 pr-3 text-sm text-text outline-none transition placeholder:text-muted focus:border-accent"
+			/>
+		</div>
+		<Button type="submit" loading={loading} disabled={!query.trim() || !sourceId}>Cari</Button>
 	</form>
 
 	{#if sources.length === 0}
-		<p class="text-muted">
-			Belum ada source. <a href="/extensions" class="text-accent hover:underline">Install extension</a> dulu.
-		</p>
+		<EmptyState
+			title="Belum ada source"
+			description="Install extension dulu untuk mulai mencari."
+		>
+			{#snippet action()}<Button href="/extensions">Install extension</Button>{/snippet}
+		</EmptyState>
 	{/if}
 
 	{#if error}
-		<div class="mb-4 rounded-xl border border-danger/30 bg-danger/10 p-4 text-sm text-danger">
+		<div class="mb-4 rounded-[var(--radius)] border border-danger/30 bg-danger/10 p-4 text-sm text-danger">
 			{error}
 		</div>
 	{/if}
 
-	{#if searched && !loading && mangas.length === 0}
-		<p class="text-muted">Tidak ditemukan untuk "{query}".</p>
+	{#if loading}
+		<GridSkeleton />
+	{:else if searched && mangas.length === 0 && sources.length > 0}
+		<EmptyState title="Tidak ditemukan" description={`Tidak ada hasil untuk "${query}".`} />
 	{:else if mangas.length > 0}
-		<div class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+		<MangaGrid>
 			{#each mangas as manga (manga.id)}
 				<MangaCard {manga} href="/manga/{manga.id}" />
 			{/each}
-		</div>
+		</MangaGrid>
 	{/if}
 </section>
