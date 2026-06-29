@@ -38,7 +38,18 @@ export default defineConfig({
 				]
 			},
 			workbox: {
-				globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,woff2}']
+				globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,woff2}'],
+				runtimeCaching: [
+					{
+						urlPattern: /\/api\/v1\/manga\/.*\/chapter\/.*\/page\/.*/i,
+						handler: 'CacheFirst',
+						options: {
+							cacheName: 'komik-pages-v1',
+							expiration: { maxEntries: 5000, maxAgeSeconds: 60 * 60 * 24 * 30 },
+							cacheableResponse: { statuses: [0, 200] }
+						}
+					}
+				]
 			},
 			devOptions: {
 				enabled: true

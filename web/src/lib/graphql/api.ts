@@ -1,5 +1,13 @@
 import { gql } from './client';
-import type { Chapter, Extension, FetchMangaType, Manga, MangaDetail, Source } from './types';
+import type {
+	Chapter,
+	DownloadStatus,
+	Extension,
+	FetchMangaType,
+	Manga,
+	MangaDetail,
+	Source
+} from './types';
 
 const EXTENSION_FIELDS = `
 	pkgName name lang versionName versionCode
@@ -171,4 +179,107 @@ export async function getMangaChapters(mangaId: number): Promise<Chapter[]> {
 		{ id: mangaId }
 	);
 	return data.manga.chapters.nodes.sort((a, b) => b.sourceOrder - a.sourceOrder);
+}
+
+const DOWNLOAD_ITEM_FIELDS = `
+	position progress state tries
+	chapter { id name isDownloaded }
+	manga { id title thumbnailUrl }
+`;
+
+export async function getDownloadStatus(): Promise<DownloadStatus> {
+	const data = await gql<{ downloadStatus: DownloadStatus }>(
+		`query {
+			downloadStatus {
+				state
+				queue { ${DOWNLOAD_ITEM_FIELDS} }
+			}
+		}`
+	);
+	return data.downloadStatus;
+}
+
+export async function enqueueChapterDownload(chapterId: number): Promise<void> {
+	await gql(
+		`mutation($id: Int!) {
+			enqueueChapterDownload(input: { id: $id }) {
+				downloadStatus { state }
+			}
+		}`,
+		{ id: chapterId }
+	);
+}
+
+export async function enqueueChapterDownloads(chapterIds: number[]): Promise<void> {
+	await gql(
+		`mutation($ids: [Int!]!) {
+			enqueueChapterDownloads(input: { ids: $ids }) {
+				downloadStatus { state }
+			}
+		}`,
+		{ ids: chapterIds }
+	);
+}
+
+export async function dequeueChapterDownload(chapterId: number): Promise<void> {
+	await gql(
+		`mutation($id: Int!) {
+			dequeueChapterDownload(input: { id: $id }) {
+				downloadStatus { state }
+			}
+		}`,
+		{ id: chapterId }
+	);
+}
+
+export async function startDownloader(): Promise<void> {
+	await gql(`mutation { startDownloader(input: {}) { downloadStatus { state } } }`);
+}
+
+export async function stopDownloader(): Promise<void> {
+	await gql(`mutation { stopDownloader(input: {}) { downloadStatus { state } } }`);
+}
+
+export async function clearDownloader(): Promise<void> {
+	await gql(`mutation { clearDownloader(input: {}) { downloadStatus { state } } }`);
+}
+
+export async function deleteDownloadedChapter(chapterId: number): Promise<void> {
+	await gql(
+		`mutation($id: Int!) {
+			deleteDownloadedChapter(input: { id: $id }) {
+				chapters { id isDownloaded }
+			}
+		}`,
+		{ id: chapterId }
+	);
+}
+
+export async function getDownloadedChapters(): Promise<
+	Array<Chapter & { mangaId: number; mangaTitle: string }>
+> {
+	const data = await gql<{
+		chapters: {
+			nodes: Array<
+				Chapter & {
+					mangaId: number;
+					manga: { title: string };
+				}
+			>;
+		};
+	}>(
+		`query {
+			chapters(filter: { isDownloaded: { equalTo: true } }) {
+				nodes {
+					id name chapterNumber isRead isDownloaded lastPageRead uploadDate sourceOrder
+					mangaId
+					manga { title }
+				}
+			}
+		}`
+	);
+	return data.chapters.nodes.map((c) => ({
+		...c,
+		mangaTitle: c.manga.title
+	}));
 }

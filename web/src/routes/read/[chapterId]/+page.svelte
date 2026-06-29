@@ -7,6 +7,8 @@
 		getMangaChapters,
 		updateChapterProgress
 	} from '$lib/graphql/api';
+	import { isOnline } from '$lib/offline/connection.svelte';
+	import { getCachedPageUrls } from '$lib/offline/cache';
 	import type { Chapter } from '$lib/graphql/types';
 
 	const chapterId = $derived(Number($page.params.chapterId));
@@ -17,6 +19,7 @@
 	let mangaId = $state<number | null>(null);
 	let loading = $state(true);
 	let error = $state('');
+	let offlineMode = $state(false);
 
 	const currentIndex = $derived(chapters.findIndex((c) => c.id === chapterId));
 	const prevChapter = $derived(currentIndex > 0 ? chapters[currentIndex - 1] : null);
@@ -56,7 +59,17 @@
 
 	onMount(async () => {
 		try {
-			pages = await fetchChapterPages(chapterId);
+			if (!isOnline()) {
+				const cached = await getCachedPageUrls(chapterId);
+				if (cached?.length) {
+					pages = cached;
+					offlineMode = true;
+					return;
+				}
+				throw new Error('Offline — chapter belum disimpan di perangkat.');
+			}
+
+			pages = (await fetchChapterPages(chapterId)).map((p) => apiUrl(p));
 			const resolvedMangaId = await resolveMangaId(chapterId);
 			mangaId = resolvedMangaId;
 			if (resolvedMangaId) {
@@ -67,7 +80,13 @@
 				await updateChapterProgress(chapterId, 0, false);
 			}
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Gagal memuat reader';
+			const cached = await getCachedPageUrls(chapterId);
+			if (cached?.length) {
+				pages = cached;
+				offlineMode = true;
+			} else {
+				error = e instanceof Error ? e.message : 'Gagal memuat reader';
+			}
 		} finally {
 			loading = false;
 		}
@@ -79,11 +98,17 @@
 		<p class="text-center text-muted">Memuat chapter...</p>
 	{:else if error}
 		<div class="rounded-xl border border-danger/30 bg-danger/10 p-4 text-sm text-danger">{error}</div>
+		<p class="mt-3 text-center text-sm text-muted">
+			<a href="/offline" class="text-accent hover:underline">Lihat chapter offline</a>
+		</p>
 	{:else}
 		<div class="sticky top-14 z-40 mb-4 flex items-center justify-between gap-3 rounded-xl border border-border bg-surface/95 px-4 py-3 backdrop-blur">
 			<div class="min-w-0">
 				<p class="truncate text-sm font-medium">{current?.name ?? 'Chapter'}</p>
-				<p class="text-xs text-muted">{pages.length} halaman</p>
+				<p class="text-xs text-muted">
+					{pages.length} halaman
+					{#if offlineMode} · <span class="text-accent">Offline cache</span>{/if}
+				</p>
 			</div>
 			<div class="flex shrink-0 gap-2">
 				{#if mangaId}
@@ -102,7 +127,7 @@
 			{#each pages as pageUrl, i}
 				<div class="overflow-hidden bg-black" use:observePage={i}>
 					<img
-						src={apiUrl(pageUrl)}
+						src={pageUrl}
 						alt="Page {i + 1}"
 						class="mx-auto block w-full"
 						loading="lazy"
