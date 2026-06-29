@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { rateLimit, _reset } from './ratelimit';
 
 describe('rateLimit', () => {
 	beforeEach(() => _reset());
+	afterEach(() => vi.useRealTimers());
 
 	it('allows up to the limit then blocks', () => {
 		const key = 'login:1.2.3.4';
@@ -22,14 +23,12 @@ describe('rateLimit', () => {
 	});
 
 	it('resets after the window expires', () => {
+		// Fake timers keep this deterministic (no reliance on wall-clock drift).
+		vi.useFakeTimers();
 		const key = 'reset:9.9.9.9';
-		expect(rateLimit(key, 1, 1).ok).toBe(true);
-		expect(rateLimit(key, 1, 1).ok).toBe(false);
-		// Window of 1ms — busy-wait until it elapses, then it should allow again.
-		const start = Date.now();
-		while (Date.now() - start < 5) {
-			/* spin */
-		}
-		expect(rateLimit(key, 1, 1).ok).toBe(true);
+		expect(rateLimit(key, 1, 1000).ok).toBe(true);
+		expect(rateLimit(key, 1, 1000).ok).toBe(false); // still inside the window
+		vi.advanceTimersByTime(1001); // window elapsed
+		expect(rateLimit(key, 1, 1000).ok).toBe(true);
 	});
 });
