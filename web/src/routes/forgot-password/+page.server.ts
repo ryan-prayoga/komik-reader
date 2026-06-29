@@ -2,6 +2,7 @@ import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { authEnabled } from '$lib/server/env';
 import { canSendEmail, sendPasswordResetEmail } from '$lib/server/email';
+import { rateLimit } from '$lib/server/ratelimit';
 import { createPasswordReset } from '$lib/server/reset';
 import { findUserByEmail, normalizeEmail, validateEmail } from '$lib/server/users';
 
@@ -12,10 +13,19 @@ export const load: PageServerLoad = async ({ locals }) => {
 };
 
 export const actions: Actions = {
-	default: async ({ request }) => {
+	default: async ({ request, getClientAddress }) => {
 		if (!canSendEmail()) {
 			return fail(503, {
 				error: 'SMTP belum dikonfigurasi. Hubungi admin.',
+				email: ''
+			});
+		}
+
+		// Throttle to curb email bombing + account enumeration probing.
+		const limit = rateLimit(`forgot:${getClientAddress()}`, 5, 60 * 60_000);
+		if (!limit.ok) {
+			return fail(429, {
+				error: `Terlalu banyak permintaan. Coba lagi dalam ${limit.retryAfter} detik.`,
 				email: ''
 			});
 		}

@@ -1,5 +1,6 @@
 import { fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
+import { requireAdmin } from '$lib/server/admin';
 import {
 	createUser,
 	deleteUser,
@@ -21,6 +22,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 
 export const actions: Actions = {
 	create: async ({ locals, request }) => {
+		requireAdmin(locals.user);
 		const form = await request.formData();
 		const email = String(form.get('email') ?? '');
 		const username = String(form.get('username') ?? '').trim();
@@ -41,7 +43,8 @@ export const actions: Actions = {
 		return { success: 'Akun berhasil dibuat' };
 	},
 
-	resetPassword: async ({ request }) => {
+	resetPassword: async ({ locals, request }) => {
+		requireAdmin(locals.user);
 		const form = await request.formData();
 		const userId = Number(form.get('user_id'));
 		const password = String(form.get('password') ?? '');
@@ -57,6 +60,7 @@ export const actions: Actions = {
 	},
 
 	toggleAdmin: async ({ locals, request }) => {
+		requireAdmin(locals.user);
 		const form = await request.formData();
 		const userId = Number(form.get('user_id'));
 		const makeAdmin = form.get('make_admin') === 'true';
@@ -78,6 +82,7 @@ export const actions: Actions = {
 	},
 
 	delete: async ({ locals, request }) => {
+		requireAdmin(locals.user);
 		const form = await request.formData();
 		const userId = Number(form.get('user_id'));
 
