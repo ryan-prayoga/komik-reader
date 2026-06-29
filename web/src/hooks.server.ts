@@ -11,7 +11,6 @@ export const handle: Handle = async ({ event, resolve }) => {
 	const target = `${SUWAYOMI_URL}${event.url.pathname}${event.url.search}`;
 	const headers = new Headers(event.request.headers);
 	headers.delete('host');
-	// Avoid gzip passthrough — Suwayomi compresses, Caddy may re-encode → ERR_CONTENT_DECODING_FAILED
 	headers.delete('accept-encoding');
 
 	const init: RequestInit & { duplex?: 'half' } = {
@@ -24,14 +23,19 @@ export const handle: Handle = async ({ event, resolve }) => {
 		init.duplex = 'half';
 	}
 
-	const response = await fetch(target, init);
-	const outHeaders = new Headers(response.headers);
-	outHeaders.delete('content-encoding');
-	outHeaders.delete('content-length');
+	const upstream = await fetch(target, init);
+	const body = await upstream.arrayBuffer();
+	const contentType = upstream.headers.get('content-type');
 
-	return new Response(response.body, {
-		status: response.status,
-		statusText: response.statusText,
+	const outHeaders = new Headers();
+	if (contentType) outHeaders.set('content-type', contentType);
+	if (upstream.headers.get('cache-control')) {
+		outHeaders.set('cache-control', upstream.headers.get('cache-control')!);
+	}
+
+	return new Response(body, {
+		status: upstream.status,
+		statusText: upstream.statusText,
 		headers: outHeaders
 	});
 };
