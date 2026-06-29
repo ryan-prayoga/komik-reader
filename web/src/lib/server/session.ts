@@ -10,6 +10,7 @@ export type SessionUser = {
 	id: number;
 	email: string;
 	username: string;
+	is_admin: boolean;
 };
 
 function hashToken(token: string): string {
@@ -43,14 +44,20 @@ export function getUserFromSession(token: string | undefined): SessionUser | nul
 	const database = getDb();
 	const row = database
 		.prepare(
-			`SELECT u.id, u.email, u.username
+			`SELECT u.id, u.email, u.username, u.is_admin
 			 FROM sessions s
 			 JOIN users u ON u.id = s.user_id
 			 WHERE s.token_hash = ? AND s.expires_at > datetime('now')`
 		)
-		.get(hashToken(token)) as SessionUser | undefined;
+		.get(hashToken(token)) as { id: number; email: string; username: string; is_admin: number } | undefined;
 
-	return row ?? null;
+	if (!row) return null;
+	return {
+		id: row.id,
+		email: row.email,
+		username: row.username,
+		is_admin: row.is_admin === 1
+	};
 }
 
 export function setSessionCookie(cookies: Cookies, token: string) {
@@ -72,5 +79,10 @@ export function readSessionToken(cookies: Cookies): string | undefined {
 }
 
 export function toPublicUser(row: UserRow): SessionUser {
-	return { id: row.id, email: row.email, username: row.username };
+	return {
+		id: row.id,
+		email: row.email,
+		username: row.username,
+		is_admin: row.is_admin === 1
+	};
 }

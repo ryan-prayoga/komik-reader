@@ -11,8 +11,14 @@ export type UserRow = {
 	email: string;
 	username: string;
 	password_hash: string;
+	is_admin: number;
 	created_at: string;
 };
+
+function columnExists(database: Database.Database, table: string, column: string): boolean {
+	const cols = database.pragma(`table_info(${table})`) as { name: string }[];
+	return cols.some((c) => c.name === column);
+}
 
 function migrate(database: Database.Database) {
 	database.exec(`
@@ -21,6 +27,7 @@ function migrate(database: Database.Database) {
 			email TEXT NOT NULL UNIQUE COLLATE NOCASE,
 			username TEXT NOT NULL,
 			password_hash TEXT NOT NULL,
+			is_admin INTEGER NOT NULL DEFAULT 0,
 			created_at TEXT NOT NULL DEFAULT (datetime('now'))
 		);
 
@@ -41,9 +48,30 @@ function migrate(database: Database.Database) {
 			created_at TEXT NOT NULL DEFAULT (datetime('now'))
 		);
 
+		CREATE TABLE IF NOT EXISTS app_settings (
+			key TEXT PRIMARY KEY,
+			value TEXT NOT NULL
+		);
+
 		CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token_hash);
 		CREATE INDEX IF NOT EXISTS idx_password_resets_token ON password_resets(token_hash);
 	`);
+
+	if (!columnExists(database, 'users', 'is_admin')) {
+		database.exec('ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0');
+	}
+
+	const adminCount = database
+		.prepare('SELECT COUNT(*) AS c FROM users WHERE is_admin = 1')
+		.get() as { c: number };
+	if (adminCount.c === 0) {
+		const users = database.prepare('SELECT COUNT(*) AS c FROM users').get() as { c: number };
+		if (users.c > 0) {
+			database
+				.prepare('UPDATE users SET is_admin = 1 WHERE id = (SELECT MIN(id) FROM users)')
+				.run();
+		}
+	}
 }
 
 function seedAdmin(database: Database.Database) {
@@ -54,7 +82,7 @@ function seedAdmin(database: Database.Database) {
 	if (!admin.email || !admin.password) return;
 
 	database
-		.prepare('INSERT INTO users (email, username, password_hash) VALUES (?, ?, ?)')
+		.prepare('INSERT INTO users (email, username, password_hash, is_admin) VALUES (?, ?, ?, 1)')
 		.run(admin.email, admin.username, hashPassword(admin.password));
 }
 

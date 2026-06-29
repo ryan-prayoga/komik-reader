@@ -1,6 +1,7 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
-import { allowRegistration, authEnabled } from '$lib/server/env';
+import { authEnabled } from '$lib/server/env';
+import { getAllowRegistration } from '$lib/server/settings';
 import { createSession, setSessionCookie } from '$lib/server/session';
 import { getUserCount, verifyUserLogin } from '$lib/server/users';
 
@@ -14,7 +15,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 	if (!authEnabled()) redirect(303, '/');
 	if (locals.user) redirect(303, safeRedirect(url.searchParams.get('redirectTo')));
 
-	const canRegister = getUserCount() === 0 || allowRegistration();
+	const canRegister = getUserCount() === 0 || getAllowRegistration();
 	return {
 		redirectTo: safeRedirect(url.searchParams.get('redirectTo')),
 		canRegister

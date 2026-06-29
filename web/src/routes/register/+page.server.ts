@@ -1,6 +1,7 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
-import { allowRegistration, authEnabled } from '$lib/server/env';
+import { authEnabled } from '$lib/server/env';
+import { getAllowRegistration } from '$lib/server/settings';
 import { createSession, setSessionCookie } from '$lib/server/session';
 import {
 	createUser,
@@ -15,7 +16,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 	if (!authEnabled()) redirect(303, '/');
 	if (locals.user) redirect(303, '/');
 
-	const canRegister = getUserCount() === 0 || allowRegistration();
+	const canRegister = getUserCount() === 0 || getAllowRegistration();
 	if (!canRegister) redirect(303, '/login');
 
 	return { firstUser: getUserCount() === 0 };
@@ -23,7 +24,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 
 export const actions: Actions = {
 	default: async ({ request, cookies }) => {
-		const canRegister = getUserCount() === 0 || allowRegistration();
+		const canRegister = getUserCount() === 0 || getAllowRegistration();
 		if (!canRegister) return fail(403, { error: 'Registrasi ditutup', email: '', username: '' });
 
 		const form = await request.formData();
@@ -50,7 +51,7 @@ export const actions: Actions = {
 			return fail(409, { error: 'Email sudah terdaftar', email, username });
 		}
 
-		const user = createUser(email, username, password);
+		const user = createUser(email, username, password, getUserCount() === 0);
 		const token = createSession(user.id);
 		setSessionCookie(cookies, token);
 		redirect(303, '/');

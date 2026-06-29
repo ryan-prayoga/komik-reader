@@ -6,7 +6,7 @@
 
 	let { data, children } = $props();
 
-	const links = [
+	const baseLinks = [
 		{ href: '/', label: 'Home' },
 		{ href: '/library', label: 'Library' },
 		{ href: '/search', label: 'Search' },
@@ -17,6 +17,12 @@
 		{ href: '/offline', label: 'Offline' },
 		{ href: '/settings', label: 'Settings' }
 	];
+
+	const links = $derived(
+		data.user?.is_admin
+			? [...baseLinks, { href: '/admin', label: 'Admin' }]
+			: baseLinks
+	);
 
 	const authPages = ['/login', '/register', '/forgot-password', '/reset-password'];
 	const isAuthPage = $derived(authPages.some((p) => $page.url.pathname.startsWith(p)));
@@ -50,7 +56,9 @@
 						</a>
 					{/each}
 					{#if data.user}
-						<span class="hidden px-2 text-xs text-muted sm:inline">{data.user.username}</span>
+						<span class="hidden px-2 text-xs text-muted sm:inline">
+							{data.user.username}{data.user.is_admin ? ' · admin' : ''}
+						</span>
 						<form method="POST" action="/logout">
 							<button
 								type="submit"
