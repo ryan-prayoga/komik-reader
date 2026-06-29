@@ -17,7 +17,7 @@
 
 <a
 	{href}
-	class="group relative flex flex-col overflow-hidden rounded-[var(--radius)] border border-border bg-surface shadow-(--shadow-card) transition hover:border-accent/40 hover:bg-surface-hover hover:shadow-(--shadow-pop)"
+	class="group relative flex flex-col overflow-hidden rounded-[var(--radius)] border border-border bg-surface shadow-(--shadow-card) transition duration-200 hover:-translate-y-0.5 hover:border-accent/40 hover:bg-surface-hover hover:shadow-(--shadow-pop) active:scale-[0.98]"
 >
 	<div class="relative aspect-[3/4] overflow-hidden bg-bg">
 		{#if manga.thumbnailUrl}

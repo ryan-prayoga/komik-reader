@@ -7,12 +7,14 @@
 	import Moon from '@lucide/svelte/icons/moon';
 	import Monitor from '@lucide/svelte/icons/monitor';
 	import LogOut from '@lucide/svelte/icons/log-out';
+	import LogIn from '@lucide/svelte/icons/log-in';
 
 	interface Props {
 		open?: boolean;
 		user?: { username: string; is_admin?: boolean } | null;
+		canLogin?: boolean;
 	}
-	let { open = $bindable(false), user }: Props = $props();
+	let { open = $bindable(false), user, canLogin = false }: Props = $props();
 
 	const items = $derived(user?.is_admin ? [...manageNav, adminNav] : manageNav);
 	const themes: { value: Theme; label: string; icon: typeof Sun }[] = [
@@ -41,6 +43,14 @@
 				</button>
 			</form>
 		</div>
+	{:else if canLogin}
+		<a
+			href="/login"
+			onclick={() => (open = false)}
+			class="mb-4 flex items-center justify-center gap-2 rounded-[var(--radius)] bg-accent px-4 py-3 text-sm font-medium text-white transition hover:bg-accent-hover"
+		>
+			<LogIn size={16} /> Masuk untuk menyimpan
+		</a>
 	{/if}
 
 	<div class="grid grid-cols-2 gap-2">

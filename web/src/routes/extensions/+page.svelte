@@ -1,13 +1,17 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { page } from '$app/stores';
 	import ExtensionCard from '$lib/components/ExtensionCard.svelte';
 	import { fetchExtensionsCatalog, getExtensions } from '$lib/graphql/api';
 	import { preferences } from '$lib/preferences.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
+	import LoginGate from '$lib/components/LoginGate.svelte';
 	import { Button, Select, Switch, EmptyState, Spinner } from '$lib/components/ui';
 	import Search from '@lucide/svelte/icons/search';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import type { Extension } from '$lib/graphql/types';
+
+	const guest = $derived(!$page.data.user && $page.data.authEnabled);
 
 	let extensions = $state<Extension[]>([]);
 	let loading = $state(true);
@@ -43,7 +47,13 @@
 		}
 	}
 
-	onMount(load);
+	onMount(() => {
+		if (guest) {
+			loading = false;
+			return;
+		}
+		load();
+	});
 
 	const langs = $derived(
 		['all', ...new Set(extensions.map((e) => e.lang))].sort((a, b) => {
@@ -70,11 +80,16 @@
 
 <section>
 	<PageHeader title="Extensions" subtitle="Repo default: Keiyoushi — pilih extension untuk di-install.">
-		<Button variant="secondary" size="sm" loading={syncing} onclick={syncCatalog}>
-			<RefreshCw size={15} /> Refresh
-		</Button>
+		{#if !guest}
+			<Button variant="secondary" size="sm" loading={syncing} onclick={syncCatalog}>
+				<RefreshCw size={15} /> Refresh
+			</Button>
+		{/if}
 	</PageHeader>
 
+	{#if guest}
+		<LoginGate description="Masuk untuk mengelola extension/source. Browse dan baca tetap bebas." />
+	{:else}
 	<div class="mb-5 flex flex-wrap items-end gap-3">
 		<div class="relative min-w-[200px] flex-1">
 			<Search size={16} class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
@@ -126,5 +141,6 @@
 				<ExtensionCard extension={ext} onchange={load} />
 			{/each}
 		</div>
+	{/if}
 	{/if}
 </section>

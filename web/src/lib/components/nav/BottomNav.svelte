@@ -26,18 +26,18 @@
 			{@const active = isActive($page.url.pathname, item.href)}
 			<a
 				href={item.href}
-				class="flex flex-col items-center gap-1 py-2 text-[0.65rem] font-medium transition {active
+				class="flex flex-col items-center gap-1 py-2 text-[0.65rem] font-medium transition active:scale-95 {active
 					? 'text-accent'
 					: 'text-muted'}"
 			>
-				<item.icon size={20} />
+				<item.icon size={20} class="transition-transform duration-200 {active ? 'scale-110' : ''}" />
 				<span>{item.label}</span>
 			</a>
 		{/each}
 		<button
 			type="button"
 			onclick={onmore}
-			class="flex flex-col items-center gap-1 py-2 text-[0.65rem] font-medium transition {moreActive
+			class="flex flex-col items-center gap-1 py-2 text-[0.65rem] font-medium transition active:scale-95 {moreActive
 				? 'text-accent'
 				: 'text-muted'}"
 		>

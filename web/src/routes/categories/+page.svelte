@@ -1,11 +1,15 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { page } from '$app/stores';
 	import { createCategory, deleteCategory, getCategories } from '$lib/graphql/api';
 	import PageHeader from '$lib/components/PageHeader.svelte';
+	import LoginGate from '$lib/components/LoginGate.svelte';
 	import { Button, Input, Card, Badge, EmptyState, Spinner } from '$lib/components/ui';
 	import FolderTree from '@lucide/svelte/icons/folder-tree';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import type { Category } from '$lib/graphql/types';
+
+	const guest = $derived(!$page.data.user && $page.data.authEnabled);
 
 	let categories = $state<Category[]>([]);
 	let newName = $state('');
@@ -19,6 +23,10 @@
 	}
 
 	onMount(async () => {
+		if (guest) {
+			loading = false;
+			return;
+		}
 		try {
 			await load();
 		} catch (e) {
@@ -63,6 +71,9 @@
 <section>
 	<PageHeader title="Kategori" subtitle="Kelompokkan manga di library." />
 
+	{#if guest}
+		<LoginGate description="Masuk untuk membuat kategori library. Browse dan baca tetap bebas." />
+	{:else}
 	<form
 		class="mb-6 flex flex-wrap items-end gap-3"
 		onsubmit={(e) => {
@@ -115,5 +126,6 @@
 				{/each}
 			</div>
 		</Card>
+	{/if}
 	{/if}
 </section>

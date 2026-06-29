@@ -1,9 +1,10 @@
 import type { LayoutServerLoad } from './$types';
-import { authEnabled } from '$lib/server/env';
+import { authEnabled, allowGuest } from '$lib/server/env';
 
 export const load: LayoutServerLoad = async ({ locals }) => {
 	return {
 		user: locals.user,
-		authEnabled: authEnabled()
+		authEnabled: authEnabled(),
+		allowGuest: allowGuest()
 	};
 };

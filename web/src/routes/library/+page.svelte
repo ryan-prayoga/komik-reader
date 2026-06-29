@@ -5,6 +5,7 @@
 	import GridSkeleton from '$lib/components/GridSkeleton.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import ContinueReading from '$lib/components/ContinueReading.svelte';
+	import LoginGate from '$lib/components/LoginGate.svelte';
 	import { Tabs, EmptyState } from '$lib/components/ui';
 	import { getCategories, getLibraryManga, getRecentlyReadChapters } from '$lib/graphql/api';
 	import { continueReadingLabel, continueReadingUrl } from '$lib/library';
@@ -25,10 +26,15 @@
 			: undefined
 	);
 
+	const guest = $derived(!$page.data.user && $page.data.authEnabled);
 	const unreadCount = $derived(mangas.filter((m) => m.unreadCount > 0).length);
 	const filtered = $derived(tab === 'unread' ? mangas.filter((m) => m.unreadCount > 0) : mangas);
 
 	$effect(() => {
+		if (guest) {
+			loading = false;
+			return;
+		}
 		const id = categoryId;
 		let cancelled = false;
 		loading = true;
@@ -58,6 +64,9 @@
 <section>
 	<PageHeader title="Library" subtitle="Koleksi manga favoritmu." />
 
+	{#if guest}
+		<LoginGate description="Masuk untuk menyimpan manga ke library. Browse dan baca tetap bebas." />
+	{:else}
 	{#if error}
 		<div class="mb-4 rounded-[var(--radius)] border border-danger/30 bg-danger/10 p-4 text-sm text-danger">
 			{error}
@@ -125,5 +134,6 @@
 				{/each}
 			</MangaGrid>
 		{/if}
+	{/if}
 	{/if}
 </section>

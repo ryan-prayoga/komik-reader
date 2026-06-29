@@ -6,11 +6,13 @@
 	import PanelLeftClose from '@lucide/svelte/icons/panel-left-close';
 	import PanelLeftOpen from '@lucide/svelte/icons/panel-left-open';
 	import LogOut from '@lucide/svelte/icons/log-out';
+	import LogIn from '@lucide/svelte/icons/log-in';
 
 	interface Props {
 		user?: { username: string; is_admin?: boolean } | null;
+		canLogin?: boolean;
 	}
-	let { user }: Props = $props();
+	let { user, canLogin = false }: Props = $props();
 
 	const collapsed = $derived(preferences.sidebarCollapsed);
 	const manage = $derived(user?.is_admin ? [...manageNav, adminNav] : manageNav);
@@ -93,6 +95,17 @@
 					</form>
 				{/if}
 			</div>
+		{:else if canLogin}
+			<a
+				href="/login"
+				title="Masuk"
+				class="mt-3 flex items-center gap-3 rounded-[var(--radius)] bg-accent px-3 py-2 text-sm font-medium text-white transition hover:bg-accent-hover {collapsed
+					? 'justify-center'
+					: ''}"
+			>
+				<LogIn size={18} class="shrink-0" />
+				{#if !collapsed}<span>Masuk</span>{/if}
+			</a>
 		{/if}
 	</div>
 </aside>
