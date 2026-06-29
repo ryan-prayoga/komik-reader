@@ -2,6 +2,7 @@
 	import '../app.css';
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
+	import { fade } from 'svelte/transition';
 	import { preferences } from '$lib/preferences.svelte';
 	import InstallPrompt from '$lib/components/InstallPrompt.svelte';
 	import OfflineBanner from '$lib/components/OfflineBanner.svelte';
@@ -17,9 +18,11 @@
 	const authPages = ['/login', '/register', '/forgot-password', '/reset-password'];
 	const isAuthPage = $derived(authPages.some((p) => $page.url.pathname.startsWith(p)));
 	const isReader = $derived($page.url.pathname.startsWith('/read/'));
+	// Guests get the full shell when guest-read is enabled.
 	const showShell = $derived(
-		!isAuthPage && !isReader && (data.authEnabled ? !!data.user : true)
+		!isAuthPage && !isReader && (data.authEnabled ? !!data.user || data.allowGuest : true)
 	);
+	const canLogin = $derived(data.authEnabled && !data.user);
 
 	const themeColor = $derived(preferences.resolved === 'dark' ? '#0a0a0a' : '#ffffff');
 
@@ -33,18 +36,22 @@
 
 {#if showShell}
 	<div class="min-h-screen bg-bg text-text lg:grid lg:grid-cols-[auto_1fr]">
-		<Sidebar user={data.user} />
+		<Sidebar user={data.user} {canLogin} />
 
 		<div class="flex min-h-screen min-w-0 flex-col">
 			<MobileTopBar />
 			<OfflineBanner />
 			<main class="mx-auto w-full max-w-6xl flex-1 px-4 pb-24 pt-4 lg:px-8 lg:pb-10 lg:pt-8">
-				{@render children()}
+				{#key $page.url.pathname}
+					<div in:fade={{ duration: 160 }}>
+						{@render children()}
+					</div>
+				{/key}
 			</main>
 		</div>
 
 		<BottomNav user={data.user} onmore={() => (moreOpen = true)} />
-		<MoreSheet bind:open={moreOpen} user={data.user} />
+		<MoreSheet bind:open={moreOpen} user={data.user} {canLogin} />
 		<InstallPrompt />
 	</div>
 {:else if isReader}

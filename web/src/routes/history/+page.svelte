@@ -1,17 +1,24 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { page } from '$app/stores';
 	import { apiUrl } from '$lib/graphql/client';
 	import { getReadingHistory, markChapterRead } from '$lib/graphql/api';
 	import PageHeader from '$lib/components/PageHeader.svelte';
+	import LoginGate from '$lib/components/LoginGate.svelte';
 	import { Button, Card, Badge, EmptyState, Spinner } from '$lib/components/ui';
 	import type { HistoryChapter } from '$lib/graphql/types';
 
+	const guest = $derived(!$page.data.user && $page.data.authEnabled);
 	let chapters = $state<HistoryChapter[]>([]);
 	let loading = $state(true);
 	let error = $state('');
 	let updatingId = $state<number | null>(null);
 
 	onMount(async () => {
+		if (guest) {
+			loading = false;
+			return;
+		}
 		try {
 			chapters = await getReadingHistory(100);
 		} catch (e) {
@@ -43,6 +50,9 @@
 <section>
 	<PageHeader title="Riwayat" subtitle="Chapter terakhir yang kamu buka." />
 
+	{#if guest}
+		<LoginGate description="Masuk untuk menyimpan riwayat baca. Browse dan baca tetap bebas." />
+	{:else}
 	{#if error}
 		<div class="mb-4 rounded-[var(--radius)] border border-danger/30 bg-danger/10 p-4 text-sm text-danger">
 			{error}
@@ -94,5 +104,6 @@
 				{/each}
 			</div>
 		</Card>
+	{/if}
 	{/if}
 </section>

@@ -1,7 +1,9 @@
 <script lang="ts">
+	import { page } from '$app/stores';
 	import { setMangaInLibrary } from '$lib/graphql/api';
 	import Star from '@lucide/svelte/icons/star';
 	import Plus from '@lucide/svelte/icons/plus';
+	import LogIn from '@lucide/svelte/icons/log-in';
 	import Spinner from '$lib/components/ui/Spinner.svelte';
 
 	interface Props {
@@ -12,6 +14,9 @@
 	}
 
 	let { mangaId, inLibrary = false, size = 'md', onchange }: Props = $props();
+
+	const guest = $derived(!$page.data.user && $page.data.authEnabled);
+	const loginHref = $derived(`/login?redirectTo=${encodeURIComponent($page.url.pathname)}`);
 
 	let loading = $state(false);
 	let optimistic = $state<boolean | null>(null);
@@ -41,19 +46,28 @@
 	}
 </script>
 
-<button
-	class="inline-flex items-center {cls} border transition disabled:opacity-50 {saved
-		? 'border-accent bg-accent/15 text-accent hover:bg-accent/25'
-		: 'border-border bg-surface-hover hover:border-accent'}"
-	disabled={loading}
-	onclick={toggle}
->
-	{#if loading}
-		<Spinner size={iconSize} />
-	{:else if saved}
-		<Star size={iconSize} fill="currentColor" />
-	{:else}
-		<Plus size={iconSize} />
-	{/if}
-	{saved ? 'Di Library' : 'Library'}
-</button>
+{#if guest}
+	<a
+		href={loginHref}
+		class="inline-flex items-center {cls} border border-border bg-surface-hover transition hover:border-accent"
+	>
+		<LogIn size={iconSize} /> Library
+	</a>
+{:else}
+	<button
+		class="inline-flex items-center {cls} border transition disabled:opacity-50 {saved
+			? 'border-accent bg-accent/15 text-accent hover:bg-accent/25'
+			: 'border-border bg-surface-hover hover:border-accent'}"
+		disabled={loading}
+		onclick={toggle}
+	>
+		{#if loading}
+			<Spinner size={iconSize} />
+		{:else if saved}
+			<Star size={iconSize} fill="currentColor" />
+		{:else}
+			<Plus size={iconSize} />
+		{/if}
+		{saved ? 'Di Library' : 'Library'}
+	</button>
+{/if}

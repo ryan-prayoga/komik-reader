@@ -32,7 +32,7 @@
 	}: Props = $props();
 
 	const base =
-		'inline-flex items-center justify-center gap-2 rounded-[var(--radius)] font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:cursor-not-allowed disabled:opacity-50';
+		'inline-flex items-center justify-center gap-2 rounded-[var(--radius)] font-medium transition duration-150 active:scale-[0.97] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100';
 
 	const variants: Record<Variant, string> = {
 		primary: 'bg-accent text-white hover:bg-accent-hover',

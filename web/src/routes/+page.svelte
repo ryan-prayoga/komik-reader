@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { page } from '$app/stores';
 	import { getInstalledSources, getRecentlyReadChapters } from '$lib/graphql/api';
 	import { preferences } from '$lib/preferences.svelte';
 	import type { RecentChapter, Source } from '$lib/graphql/types';
@@ -10,6 +11,7 @@
 	import Puzzle from '@lucide/svelte/icons/puzzle';
 	import ServerCrash from '@lucide/svelte/icons/server-crash';
 
+	const guest = $derived(!$page.data.user && $page.data.authEnabled);
 	let sources = $state<Source[]>([]);
 	let recent = $state<RecentChapter[]>([]);
 	let loading = $state(true);
@@ -17,9 +19,10 @@
 
 	onMount(async () => {
 		try {
+			// Recently-read is the owner's data — only fetch it for a logged-in user.
 			const [installed, chapters] = await Promise.all([
 				getInstalledSources(preferences.nsfwFilter),
-				getRecentlyReadChapters(6)
+				guest ? Promise.resolve([]) : getRecentlyReadChapters(6)
 			]);
 			sources = installed;
 			recent = chapters;

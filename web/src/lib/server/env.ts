@@ -4,6 +4,16 @@ export function authEnabled(): boolean {
 	return env.AUTH_ENABLED !== 'false';
 }
 
+/**
+ * Optional-auth mode: when true, guests may browse/read without logging in,
+ * while save-features (library/history/downloads/categories/extensions) and any
+ * write mutation still require a session. Default ON; disable with
+ * AUTH_ALLOW_GUEST=false to force login on every page.
+ */
+export function allowGuest(): boolean {
+	return authEnabled() && env.AUTH_ALLOW_GUEST !== 'false';
+}
+
 export function authSecret(): string {
 	const secret = env.AUTH_SECRET;
 	if (!secret && authEnabled()) {

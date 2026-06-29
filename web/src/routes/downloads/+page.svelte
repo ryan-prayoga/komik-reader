@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
+	import { page } from '$app/stores';
 	import {
 		clearDownloader,
 		dequeueChapterDownload,
@@ -14,8 +15,11 @@
 		removeChapterFromDevice
 	} from '$lib/offline/cache';
 	import PageHeader from '$lib/components/PageHeader.svelte';
+	import LoginGate from '$lib/components/LoginGate.svelte';
 	import { Button, Card, Badge, EmptyState, Spinner } from '$lib/components/ui';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
+
+	const guest = $derived(!$page.data.user && $page.data.authEnabled);
 
 	let queue = $state<DownloadItem[]>([]);
 	let downloaderState = $state<'STARTED' | 'STOPPED'>('STOPPED');
@@ -107,6 +111,10 @@
 	}
 
 	onMount(async () => {
+		if (guest) {
+			loading = false;
+			return;
+		}
 		await refresh();
 		await ensureDownloaderRunning();
 		pollTimer = setInterval(refresh, 3000);
@@ -126,6 +134,9 @@
 		{/if}
 	</PageHeader>
 
+	{#if guest}
+		<LoginGate description="Masuk untuk mengelola download. Browse dan baca tetap bebas." />
+	{:else}
 	{#if error}
 		<div class="mb-4 rounded-[var(--radius)] border border-danger/30 bg-danger/10 p-4 text-sm text-danger">
 			{error}
@@ -209,5 +220,6 @@
 				</Card>
 			{/if}
 		</div>
+	{/if}
 	{/if}
 </section>
