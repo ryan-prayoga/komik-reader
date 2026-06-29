@@ -20,6 +20,22 @@ export function dbPath(): string {
 	return env.AUTH_DB_PATH || './data/auth.db';
 }
 
+export function smtpConfig() {
+	return {
+		host: env.SMTP_HOST || '',
+		port: Number(env.SMTP_PORT || 587),
+		secure: env.SMTP_SECURE === 'true',
+		user: env.SMTP_USER || '',
+		pass: env.SMTP_PASS || '',
+		from: env.SMTP_FROM || env.SMTP_USER || 'noreply@komik-reader.local'
+	};
+}
+
+export function smtpConfigured(): boolean {
+	const cfg = smtpConfig();
+	return Boolean(cfg.host && cfg.user && cfg.pass);
+}
+
 export function bootstrapAdmin() {
 	return {
 		email: env.ADMIN_EMAIL?.trim().toLowerCase() || '',

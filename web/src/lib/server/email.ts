@@ -1,17 +1,16 @@
 import nodemailer from 'nodemailer';
-import { appOrigin } from './env';
-import { getSmtpSettings } from './settings';
+import { appOrigin, smtpConfig, smtpConfigured } from './env';
 
 export function canSendEmail(): boolean {
-	const cfg = getSmtpSettings();
-	return Boolean(cfg.host && cfg.user && cfg.pass);
+	return smtpConfigured();
 }
 
 export async function sendPasswordResetEmail(to: string, token: string) {
-	const cfg = getSmtpSettings();
-	if (!cfg.host || !cfg.user || !cfg.pass) {
+	if (!smtpConfigured()) {
 		throw new Error('SMTP belum dikonfigurasi');
 	}
+
+	const cfg = smtpConfig();
 	const resetUrl = `${appOrigin()}/reset-password?token=${encodeURIComponent(token)}`;
 
 	const transporter = nodemailer.createTransport({

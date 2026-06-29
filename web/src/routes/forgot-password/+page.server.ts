@@ -8,7 +8,7 @@ import { findUserByEmail, normalizeEmail, validateEmail } from '$lib/server/user
 export const load: PageServerLoad = async ({ locals }) => {
 	if (!authEnabled()) redirect(303, '/');
 	if (locals.user) redirect(303, '/');
-	return { smtpReady: canSendEmail() };
+	return {};
 };
 
 export const actions: Actions = {

@@ -10,12 +10,6 @@
 		<h1 class="text-2xl font-semibold">Lupa Password</h1>
 		<p class="mt-1 text-sm text-muted">Kami akan kirim link reset ke email kamu.</p>
 
-		{#if !data.smtpReady}
-			<div class="mt-4 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
-				SMTP belum dikonfigurasi di server. Admin perlu set SMTP_HOST, SMTP_USER, SMTP_PASS.
-			</div>
-		{/if}
-
 		{#if form?.success}
 			<div class="mt-4 rounded-lg border border-success/30 bg-success/10 px-3 py-2 text-sm text-success">
 				Jika email terdaftar, link reset sudah dikirim ke <strong>{form.email}</strong>.
@@ -52,7 +46,7 @@
 
 				<button
 					type="submit"
-					disabled={loading || !data.smtpReady}
+					disabled={loading}
 					class="w-full rounded-lg bg-accent py-2.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
 				>
 					{loading ? 'Mengirim...' : 'Kirim link reset'}

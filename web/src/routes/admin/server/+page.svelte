@@ -70,11 +70,6 @@
 		{form.success}
 	</div>
 {/if}
-{#if form?.error}
-	<div class="mb-4 rounded-xl border border-danger/30 bg-danger/10 p-3 text-sm text-danger">
-		{form.error}
-	</div>
-{/if}
 {#if notice}
 	<div class="mb-4 rounded-xl border border-success/30 bg-success/10 p-3 text-sm text-success">
 		{notice}
@@ -108,80 +103,6 @@
 			>
 				Simpan
 			</button>
-		</form>
-	</section>
-
-	<section class="rounded-xl border border-border bg-surface p-5">
-		<h2 class="mb-1 text-lg font-medium">SMTP (Lupa Password)</h2>
-		<p class="mb-4 text-sm text-muted">
-			Status: {data.smtpReady ? 'Siap kirim email' : 'Belum dikonfigurasi'}
-		</p>
-		<form method="POST" action="?/smtp" use:enhance class="grid gap-4 sm:grid-cols-2">
-			<label class="block sm:col-span-2">
-				<span class="text-sm text-muted">Host</span>
-				<input
-					name="host"
-					type="text"
-					required
-					value={data.smtp.host}
-					placeholder="smtp.gmail.com"
-					class="mt-1 w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm outline-none focus:border-accent"
-				/>
-			</label>
-			<label class="block">
-				<span class="text-sm text-muted">Port</span>
-				<input
-					name="port"
-					type="number"
-					required
-					value={data.smtp.port}
-					class="mt-1 w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm outline-none focus:border-accent"
-				/>
-			</label>
-			<label class="flex items-end gap-2 pb-2">
-				<input name="secure" type="checkbox" class="accent-accent" checked={data.smtp.secure} />
-				<span class="text-sm">SSL/TLS (port 465)</span>
-			</label>
-			<label class="block">
-				<span class="text-sm text-muted">User</span>
-				<input
-					name="user"
-					type="text"
-					required
-					value={data.smtp.user}
-					class="mt-1 w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm outline-none focus:border-accent"
-				/>
-			</label>
-			<label class="block">
-				<span class="text-sm text-muted">
-					Password {data.smtp.passConfigured ? '(kosongkan jika tidak diubah)' : ''}
-				</span>
-				<input
-					name="pass"
-					type="password"
-					autocomplete="new-password"
-					placeholder={data.smtp.passConfigured ? '••••••••' : ''}
-					class="mt-1 w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm outline-none focus:border-accent"
-				/>
-			</label>
-			<label class="block sm:col-span-2">
-				<span class="text-sm text-muted">From</span>
-				<input
-					name="from"
-					type="text"
-					value={data.smtp.from}
-					placeholder="Komik Reader <noreply@domain.com>"
-					class="mt-1 w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm outline-none focus:border-accent"
-				/>
-			</label>
-			<div class="sm:col-span-2">
-				<button
-					type="submit"
-					class="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
-				>
-					Simpan SMTP
-				</button>
-			</div>
 		</form>
 	</section>
 
