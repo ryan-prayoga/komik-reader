@@ -4,8 +4,10 @@ import type {
 	DownloadStatus,
 	Extension,
 	FetchMangaType,
+	LibraryManga,
 	Manga,
 	MangaDetail,
+	RecentChapter,
 	Source
 } from './types';
 
@@ -253,6 +255,71 @@ export async function deleteDownloadedChapter(chapterId: number): Promise<void> 
 		}`,
 		{ id: chapterId }
 	);
+}
+
+const LIBRARY_CHAPTER_FIELDS = `
+	id name lastPageRead
+`;
+
+const LIBRARY_MANGA_FIELDS = `
+	${MANGA_FIELDS}
+	unreadCount
+	lastReadChapter { ${LIBRARY_CHAPTER_FIELDS} }
+	firstUnreadChapter { id name }
+	latestUploadedChapter { id name }
+`;
+
+export async function getLibraryManga(): Promise<LibraryManga[]> {
+	const data = await gql<{
+		mangas: { nodes: LibraryManga[] };
+	}>(
+		`query {
+			mangas(
+				filter: { inLibrary: { equalTo: true } }
+				orderBy: IN_LIBRARY_AT
+				orderByType: DESC
+			) {
+				nodes { ${LIBRARY_MANGA_FIELDS} }
+			}
+		}`
+	);
+	return data.mangas.nodes;
+}
+
+export async function setMangaInLibrary(mangaId: number, inLibrary: boolean): Promise<Manga> {
+	const data = await gql<{
+		updateManga: { manga: Manga };
+	}>(
+		`mutation($id: Int!, $inLibrary: Boolean!) {
+			updateManga(input: { id: $id, patch: { inLibrary: $inLibrary } }) {
+				manga { ${MANGA_FIELDS} }
+			}
+		}`,
+		{ id: mangaId, inLibrary }
+	);
+	return data.updateManga.manga;
+}
+
+export async function getRecentlyReadChapters(limit = 12): Promise<RecentChapter[]> {
+	const data = await gql<{
+		chapters: { nodes: RecentChapter[] };
+	}>(
+		`query($limit: Int!) {
+			chapters(
+				filter: { isRead: { equalTo: false }, inLibrary: { equalTo: true } }
+				orderBy: LAST_READ_AT
+				orderByType: DESC
+				first: $limit
+			) {
+				nodes {
+					id name mangaId lastPageRead lastReadAt
+					manga { id title thumbnailUrl }
+				}
+			}
+		}`,
+		{ limit }
+	);
+	return data.chapters.nodes.filter((c) => Number(c.lastReadAt) > 0);
 }
 
 export async function getDownloadedChapters(): Promise<

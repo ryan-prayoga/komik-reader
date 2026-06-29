@@ -33,6 +33,32 @@ export type Manga = {
 	sourceId: string;
 };
 
+export type LibraryChapterRef = {
+	id: number;
+	name: string;
+	lastPageRead?: number;
+};
+
+export type LibraryManga = Manga & {
+	unreadCount: number;
+	lastReadChapter: LibraryChapterRef | null;
+	firstUnreadChapter: LibraryChapterRef | null;
+	latestUploadedChapter: LibraryChapterRef | null;
+};
+
+export type RecentChapter = {
+	id: number;
+	name: string;
+	mangaId: number;
+	lastPageRead: number;
+	lastReadAt: string;
+	manga: {
+		id: number;
+		title: string;
+		thumbnailUrl: string | null;
+	};
+};
+
 export type MangaDetail = Manga & {
 	author: string | null;
 	artist: string | null;

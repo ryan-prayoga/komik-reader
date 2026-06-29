@@ -1,12 +1,14 @@
 <script lang="ts">
 	import '../app.css';
 	import { page } from '$app/stores';
+	import InstallPrompt from '$lib/components/InstallPrompt.svelte';
 	import OfflineBanner from '$lib/components/OfflineBanner.svelte';
 
 	let { children } = $props();
 
 	const links = [
 		{ href: '/', label: 'Home' },
+		{ href: '/library', label: 'Library' },
 		{ href: '/extensions', label: 'Extensions' },
 		{ href: '/search', label: 'Search' },
 		{ href: '/downloads', label: 'Downloads' },
@@ -21,6 +23,7 @@
 
 <div class="min-h-screen bg-bg text-text">
 	<OfflineBanner />
+	<InstallPrompt />
 	<header class="sticky top-0 z-50 border-b border-border bg-bg/90 backdrop-blur">
 		<div class="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
 			<a href="/" class="text-lg font-semibold tracking-tight">

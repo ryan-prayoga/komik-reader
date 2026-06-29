@@ -9,6 +9,7 @@
 		startDownloader
 	} from '$lib/graphql/api';
 	import DownloadButton from '$lib/components/DownloadButton.svelte';
+	import LibraryButton from '$lib/components/LibraryButton.svelte';
 	import type { Chapter, MangaDetail } from '$lib/graphql/types';
 
 	const mangaId = $derived(Number($page.params.id));
@@ -75,7 +76,16 @@
 				{/if}
 			</div>
 			<div class="min-w-0 flex-1">
-				<h1 class="text-2xl font-semibold leading-tight">{manga.title}</h1>
+				<div class="flex flex-wrap items-start justify-between gap-3">
+					<h1 class="text-2xl font-semibold leading-tight">{manga.title}</h1>
+					<LibraryButton
+						mangaId={manga.id}
+						inLibrary={manga.inLibrary}
+						onchange={(value) => {
+							if (manga) manga.inLibrary = value;
+						}}
+					/>
+				</div>
 				{#if manga.author}
 					<p class="mt-2 text-sm text-muted">Author: {manga.author}</p>
 				{/if}
