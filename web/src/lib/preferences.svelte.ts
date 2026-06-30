@@ -12,6 +12,7 @@ type StoredPrefs = {
 	extFilterLangs: string[];
 	extFilterStatus: string;
 	extFilterOnlyActive: boolean;
+	extViewMode: 'list' | 'grid';
 };
 
 const DEFAULTS: StoredPrefs = {
@@ -21,7 +22,8 @@ const DEFAULTS: StoredPrefs = {
 	activePkgNames: [],
 	extFilterLangs: [],
 	extFilterStatus: 'all',
-	extFilterOnlyActive: false
+	extFilterOnlyActive: false,
+	extViewMode: 'list'
 };
 
 function load(): StoredPrefs {
@@ -48,6 +50,7 @@ class PreferencesState {
 	extFilterLangs = $state<string[]>(this.#initial.extFilterLangs);
 	extFilterStatus = $state(this.#initial.extFilterStatus);
 	extFilterOnlyActive = $state(this.#initial.extFilterOnlyActive);
+	extViewMode = $state<'list' | 'grid'>(this.#initial.extViewMode);
 
 	#save() {
 		if (browser) {
@@ -60,7 +63,8 @@ class PreferencesState {
 					activePkgNames: this.activePkgNames,
 					extFilterLangs: this.extFilterLangs,
 					extFilterStatus: this.extFilterStatus,
-					extFilterOnlyActive: this.extFilterOnlyActive
+					extFilterOnlyActive: this.extFilterOnlyActive,
+					extViewMode: this.extViewMode
 				})
 			);
 		}
@@ -139,6 +143,11 @@ class PreferencesState {
 
 	setExtFilterOnlyActive(value: boolean) {
 		this.extFilterOnlyActive = value;
+		this.#save();
+	}
+
+	setExtViewMode(mode: 'list' | 'grid') {
+		this.extViewMode = mode;
 		this.#save();
 	}
 

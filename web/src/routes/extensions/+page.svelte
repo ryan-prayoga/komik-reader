@@ -6,11 +6,13 @@
 	import { preferences } from '$lib/preferences.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import Dropdown from '$lib/components/ui/Dropdown.svelte';
-	import { Button, Select, Switch, EmptyState, Spinner } from '$lib/components/ui';
+	import { Button, Select, EmptyState, Spinner } from '$lib/components/ui';
 	import Search from '@lucide/svelte/icons/search';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import Check from '@lucide/svelte/icons/check';
+	import LayoutGrid from '@lucide/svelte/icons/layout-grid';
+	import LayoutList from '@lucide/svelte/icons/layout-list';
 	import type { Extension } from '$lib/graphql/types';
 
 	const LANG_META: Record<string, { flag: string; name: string }> = {
@@ -61,6 +63,9 @@
 	let syncing = $state(false);
 	let error = $state('');
 	let search = $state('');
+
+	let viewMode = $state<'list' | 'grid'>(preferences.extViewMode);
+	$effect(() => { preferences.setExtViewMode(viewMode); });
 
 	// Persisted filters
 	let selectedLangs = $state<string[]>(preferences.extFilterLangs);
@@ -223,6 +228,28 @@
 			{/snippet}
 		</Dropdown>
 
+		<!-- View mode toggle -->
+		<div class="flex items-center rounded-[var(--radius)] border border-border bg-surface">
+			<button
+				type="button"
+				onclick={() => (viewMode = 'list')}
+				class="flex items-center rounded-l-[var(--radius)] px-2.5 py-2 transition
+					{viewMode === 'list' ? 'bg-accent text-white' : 'text-muted hover:text-text'}"
+				title="Tampilan list"
+			>
+				<LayoutList size={16} />
+			</button>
+			<button
+				type="button"
+				onclick={() => (viewMode = 'grid')}
+				class="flex items-center rounded-r-[var(--radius)] px-2.5 py-2 transition
+					{viewMode === 'grid' ? 'bg-accent text-white' : 'text-muted hover:text-text'}"
+				title="Tampilan grid"
+			>
+				<LayoutGrid size={16} />
+			</button>
+		</div>
+
 		<!-- Admin: status select | Non-admin: "Aktif saja" chip -->
 		{#if admin}
 			<Select bind:value={status} class="w-40">
@@ -244,17 +271,19 @@
 				Aktif saja
 			</button>
 		{/if}
-	</div>
 
-	<div class="mb-5">
-		<Switch
-			label="Tampilkan NSFW"
-			checked={preferences.showNsfw}
-			onchange={(v) => {
-				preferences.setShowNsfw(v);
-				load();
-			}}
-		/>
+		<!-- NSFW chip -->
+		<button
+			type="button"
+			onclick={() => { preferences.setShowNsfw(!preferences.showNsfw); load(); }}
+			class="flex items-center gap-1.5 rounded-[var(--radius)] border px-3 py-2 text-sm transition
+				{preferences.showNsfw
+				? 'border-danger bg-danger/10 font-medium text-danger'
+				: 'border-border bg-surface text-muted hover:bg-surface-hover hover:text-text'}"
+		>
+			{#if preferences.showNsfw}<Check size={13} />{/if}
+			NSFW
+		</button>
 	</div>
 
 	{#if error}
@@ -269,15 +298,29 @@
 		<EmptyState title="Tidak ada extension" description="Coba ubah filter." />
 	{:else}
 		<p class="mb-3 text-sm text-muted">{filtered.length} extension</p>
-		<div class="space-y-3">
-			{#each filtered as ext (ext.pkgName)}
-				<ExtensionCard
-					extension={ext}
-					{admin}
-					activationCount={data.activationCounts[ext.pkgName]}
-					onchange={load}
-				/>
-			{/each}
-		</div>
+		{#if viewMode === 'grid'}
+			<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+				{#each filtered as ext (ext.pkgName)}
+					<ExtensionCard
+						extension={ext}
+						{admin}
+						activationCount={data.activationCounts[ext.pkgName]}
+						onchange={load}
+						compact
+					/>
+				{/each}
+			</div>
+		{:else}
+			<div class="space-y-3">
+				{#each filtered as ext (ext.pkgName)}
+					<ExtensionCard
+						extension={ext}
+						{admin}
+						activationCount={data.activationCounts[ext.pkgName]}
+						onchange={load}
+					/>
+				{/each}
+			</div>
+		{/if}
 	{/if}
 </section>

@@ -8,15 +8,53 @@
 	import Button from '$lib/components/ui/Button.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
 
+	const LANG_META: Record<string, { flag: string; name: string }> = {
+		all: { flag: '🌐', name: 'Multi-bahasa' },
+		id: { flag: '🇮🇩', name: 'Indonesia' },
+		en: { flag: '🇬🇧', name: 'English' },
+		ja: { flag: '🇯🇵', name: '日本語' },
+		zh: { flag: '🇨🇳', name: '中文' },
+		'zh-Hans': { flag: '🇨🇳', name: 'Mandarin Sederhana' },
+		'zh-Hant': { flag: '🇹🇼', name: 'Mandarin Tradisional' },
+		ko: { flag: '🇰🇷', name: '한국어' },
+		ar: { flag: '🇸🇦', name: 'العربية' },
+		de: { flag: '🇩🇪', name: 'Deutsch' },
+		es: { flag: '🇪🇸', name: 'Español' },
+		fr: { flag: '🇫🇷', name: 'Français' },
+		it: { flag: '🇮🇹', name: 'Italiano' },
+		pt: { flag: '🇵🇹', name: 'Português' },
+		'pt-BR': { flag: '🇧🇷', name: 'Português (Brasil)' },
+		ru: { flag: '🇷🇺', name: 'Русский' },
+		tr: { flag: '🇹🇷', name: 'Türkçe' },
+		pl: { flag: '🇵🇱', name: 'Polski' },
+		vi: { flag: '🇻🇳', name: 'Tiếng Việt' },
+		th: { flag: '🇹🇭', name: 'ภาษาไทย' },
+		bg: { flag: '🇧🇬', name: 'Български' },
+		ca: { flag: '🏳️', name: 'Català' },
+		cs: { flag: '🇨🇿', name: 'Čeština' },
+		nl: { flag: '🇳🇱', name: 'Nederlands' },
+		ro: { flag: '🇷🇴', name: 'Română' },
+		uk: { flag: '🇺🇦', name: 'Українська' },
+		hu: { flag: '🇭🇺', name: 'Magyar' },
+		ms: { flag: '🇲🇾', name: 'Bahasa Melayu' },
+		fil: { flag: '🇵🇭', name: 'Filipino' }
+	};
+
+	function langDisplay(code: string): string {
+		const m = LANG_META[code];
+		return m ? `${m.flag} ${m.name}` : code;
+	}
+
 	interface Props {
 		extension: Extension;
 		/** Admin sees full install/uninstall/update UI + activation counts. */
 		admin?: boolean;
 		activationCount?: number;
 		onchange?: () => void;
+		compact?: boolean;
 	}
 
-	let { extension, admin = false, activationCount, onchange }: Props = $props();
+	let { extension, admin = false, activationCount, onchange, compact = false }: Props = $props();
 
 	let loading = $state(false);
 	let error = $state('');
@@ -71,59 +109,114 @@
 	}
 </script>
 
-<div class="flex items-center gap-4 rounded-[var(--radius)] border border-border bg-surface p-4 shadow-(--shadow-card)">
-	<div class="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-bg text-muted">
-		{#if extension.iconUrl}
-			<img src={apiUrl(extension.iconUrl)} alt="" class="h-full w-full object-cover" />
-		{:else}
-			<Puzzle size={22} />
-		{/if}
-	</div>
-
-	<div class="min-w-0 flex-1">
-		<div class="flex flex-wrap items-center gap-2">
-			<h3 class="font-medium text-text">{extension.name}</h3>
-			{#if admin && extension.isInstalled}<Badge tone="success">Installed</Badge>{/if}
-			{#if !admin && isActive}<Badge tone="accent">Aktif</Badge>{/if}
-			{#if extension.isNsfw}<Badge tone="danger">18+</Badge>{/if}
-			{#if admin && extension.hasUpdate}<Badge tone="accent">Update</Badge>{/if}
-		</div>
-		<div class="mt-1 flex items-center gap-3 text-sm text-muted">
-			<span>v{extension.versionName} · {extension.lang}</span>
-			{#if admin && activationCount}
-				<span class="flex items-center gap-1">
-					<Users size={12} />
-					{activationCount}
-				</span>
+{#if compact}
+	<!-- Grid card -->
+	<div class="flex flex-col items-center gap-2 rounded-[var(--radius)] border border-border bg-surface p-3 shadow-(--shadow-card) text-center">
+		<div class="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-bg text-muted">
+			{#if extension.iconUrl}
+				<img src={apiUrl(extension.iconUrl)} alt="" class="h-full w-full object-cover" />
+			{:else}
+				<Puzzle size={22} />
 			{/if}
 		</div>
-		{#if error}<p class="mt-1 text-xs text-danger">{error}</p>{/if}
-	</div>
 
-	<div class="flex shrink-0 flex-wrap justify-end gap-2">
-		{#if admin}
-			{#if extension.isObsolete}
-				<Button variant="danger" size="sm" {loading} onclick={() => runAction({ uninstall: true })}>
-					Remove
-				</Button>
-			{:else if extension.isInstalled}
-				{#if extension.hasUpdate}
-					<Button variant="secondary" size="sm" {loading} onclick={() => runAction({ update: true })}>
-						Update
+		<div class="w-full min-w-0">
+			<p class="truncate text-sm font-medium text-text">{extension.name}</p>
+			<p class="truncate text-xs text-muted">
+				{#if admin}v{extension.versionName} · {/if}{langDisplay(extension.lang)}
+			</p>
+			<div class="mt-1 flex flex-wrap justify-center gap-1">
+				{#if admin && extension.isInstalled}<Badge tone="success">Installed</Badge>{/if}
+				{#if !admin && isActive}<Badge tone="accent">Aktif</Badge>{/if}
+				{#if extension.isNsfw}<Badge tone="danger">18+</Badge>{/if}
+				{#if admin && extension.hasUpdate}<Badge tone="accent">Update</Badge>{/if}
+			</div>
+			{#if error}<p class="mt-1 text-xs text-danger">{error}</p>{/if}
+		</div>
+
+		<div class="flex w-full flex-wrap justify-center gap-1.5">
+			{#if admin}
+				{#if extension.isObsolete}
+					<Button variant="danger" size="sm" {loading} onclick={() => runAction({ uninstall: true })}>
+						Remove
+					</Button>
+				{:else if extension.isInstalled}
+					{#if extension.hasUpdate}
+						<Button variant="secondary" size="sm" {loading} onclick={() => runAction({ update: true })}>
+							Update
+						</Button>
+					{/if}
+					<Button variant="secondary" size="sm" {loading} onclick={() => runAction({ uninstall: true })}>
+						Uninstall
+					</Button>
+				{:else}
+					<Button variant="primary" size="sm" {loading} onclick={() => runAction({ install: true })}>
+						Install
 					</Button>
 				{/if}
-				<Button variant="secondary" size="sm" {loading} onclick={() => runAction({ uninstall: true })}>
-					Uninstall
-				</Button>
+			{:else if isActive}
+				<Button variant="secondary" size="sm" onclick={deactivate}>Nonaktifkan</Button>
 			{:else}
-				<Button variant="primary" size="sm" {loading} onclick={() => runAction({ install: true })}>
-					Install
-				</Button>
+				<Button variant="primary" size="sm" {loading} onclick={activate}>Aktifkan</Button>
 			{/if}
-		{:else if isActive}
-			<Button variant="secondary" size="sm" onclick={deactivate}>Nonaktifkan</Button>
-		{:else}
-			<Button variant="primary" size="sm" {loading} onclick={activate}>Aktifkan</Button>
-		{/if}
+		</div>
 	</div>
-</div>
+{:else}
+	<!-- List card -->
+	<div class="flex items-center gap-4 rounded-[var(--radius)] border border-border bg-surface p-4 shadow-(--shadow-card)">
+		<div class="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-bg text-muted">
+			{#if extension.iconUrl}
+				<img src={apiUrl(extension.iconUrl)} alt="" class="h-full w-full object-cover" />
+			{:else}
+				<Puzzle size={22} />
+			{/if}
+		</div>
+
+		<div class="min-w-0 flex-1">
+			<div class="flex flex-wrap items-center gap-2">
+				<h3 class="font-medium text-text">{extension.name}</h3>
+				{#if admin && extension.isInstalled}<Badge tone="success">Installed</Badge>{/if}
+				{#if !admin && isActive}<Badge tone="accent">Aktif</Badge>{/if}
+				{#if extension.isNsfw}<Badge tone="danger">18+</Badge>{/if}
+				{#if admin && extension.hasUpdate}<Badge tone="accent">Update</Badge>{/if}
+			</div>
+			<div class="mt-1 flex items-center gap-3 text-sm text-muted">
+				<span>{#if admin}v{extension.versionName} · {/if}{langDisplay(extension.lang)}</span>
+				{#if admin && activationCount}
+					<span class="flex items-center gap-1">
+						<Users size={12} />
+						{activationCount}
+					</span>
+				{/if}
+			</div>
+			{#if error}<p class="mt-1 text-xs text-danger">{error}</p>{/if}
+		</div>
+
+		<div class="flex shrink-0 flex-wrap justify-end gap-2">
+			{#if admin}
+				{#if extension.isObsolete}
+					<Button variant="danger" size="sm" {loading} onclick={() => runAction({ uninstall: true })}>
+						Remove
+					</Button>
+				{:else if extension.isInstalled}
+					{#if extension.hasUpdate}
+						<Button variant="secondary" size="sm" {loading} onclick={() => runAction({ update: true })}>
+							Update
+						</Button>
+					{/if}
+					<Button variant="secondary" size="sm" {loading} onclick={() => runAction({ uninstall: true })}>
+						Uninstall
+					</Button>
+				{:else}
+					<Button variant="primary" size="sm" {loading} onclick={() => runAction({ install: true })}>
+						Install
+					</Button>
+				{/if}
+			{:else if isActive}
+				<Button variant="secondary" size="sm" onclick={deactivate}>Nonaktifkan</Button>
+			{:else}
+				<Button variant="primary" size="sm" {loading} onclick={activate}>Aktifkan</Button>
+			{/if}
+		</div>
+	</div>
+{/if}
