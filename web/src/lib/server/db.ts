@@ -67,6 +67,11 @@ function migrate(database: Database.Database) {
 			PRIMARY KEY (user_id, entity, item_key)
 		);
 
+		CREATE TABLE IF NOT EXISTS extension_activations (
+			pkg_name TEXT PRIMARY KEY,
+			count INTEGER NOT NULL DEFAULT 0
+		);
+
 		CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token_hash);
 		CREATE INDEX IF NOT EXISTS idx_password_resets_token ON password_resets(token_hash);
 		CREATE INDEX IF NOT EXISTS idx_user_sync_seq ON user_sync(user_id, seq);

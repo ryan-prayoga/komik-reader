@@ -29,7 +29,8 @@ export const handle: Handle = async ({ event, resolve }) => {
 	}
 
 	// ── Suwayomi API proxy ───────────────────────────────────────────────────
-	if (pathname.startsWith('/api/') && isSuwayomiApiPath(pathname)) {
+	// Local SvelteKit API routes under /api/ext/ are NOT proxied to Suwayomi.
+	if (pathname.startsWith('/api/') && !pathname.startsWith('/api/ext/') && isSuwayomiApiPath(pathname)) {
 		const guest = authEnabled() && !event.locals.user;
 		let bodyText: string | undefined;
 

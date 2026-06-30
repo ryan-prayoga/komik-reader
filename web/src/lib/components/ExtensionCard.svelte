@@ -2,19 +2,26 @@
 	import type { Extension } from '$lib/graphql/types';
 	import { apiUrl } from '$lib/graphql/client';
 	import { updateExtension } from '$lib/graphql/api';
+	import { preferences } from '$lib/preferences.svelte';
 	import Puzzle from '@lucide/svelte/icons/puzzle';
+	import Users from '@lucide/svelte/icons/users';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
 
 	interface Props {
 		extension: Extension;
+		/** Admin sees full install/uninstall/update UI + activation counts. */
+		admin?: boolean;
+		activationCount?: number;
 		onchange?: () => void;
 	}
 
-	let { extension, onchange }: Props = $props();
+	let { extension, admin = false, activationCount, onchange }: Props = $props();
 
 	let loading = $state(false);
 	let error = $state('');
+
+	const isActive = $derived(preferences.isExtensionActive(extension.pkgName));
 
 	async function runAction(patch: { install?: boolean; uninstall?: boolean; update?: boolean }) {
 		loading = true;
@@ -27,6 +34,40 @@
 		} finally {
 			loading = false;
 		}
+	}
+
+	async function activate() {
+		loading = true;
+		error = '';
+		try {
+			if (!extension.isInstalled) {
+				const res = await fetch('/api/ext/activate', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ pkgName: extension.pkgName })
+				});
+				const data = await res.json();
+				if (!res.ok) throw new Error(data.error ?? 'Gagal install');
+			} else {
+				// Already installed — just count the activation
+				fetch('/api/ext/activate', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ pkgName: extension.pkgName })
+				}).catch(() => {});
+			}
+			preferences.activateExtension(extension.pkgName);
+			onchange?.();
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Gagal';
+		} finally {
+			loading = false;
+		}
+	}
+
+	function deactivate() {
+		preferences.deactivateExtension(extension.pkgName);
+		onchange?.();
 	}
 </script>
 
@@ -42,32 +83,47 @@
 	<div class="min-w-0 flex-1">
 		<div class="flex flex-wrap items-center gap-2">
 			<h3 class="font-medium text-text">{extension.name}</h3>
-			{#if extension.isInstalled}<Badge tone="success">Installed</Badge>{/if}
+			{#if admin && extension.isInstalled}<Badge tone="success">Installed</Badge>{/if}
+			{#if !admin && isActive}<Badge tone="accent">Aktif</Badge>{/if}
 			{#if extension.isNsfw}<Badge tone="danger">18+</Badge>{/if}
-			{#if extension.hasUpdate}<Badge tone="accent">Update</Badge>{/if}
+			{#if admin && extension.hasUpdate}<Badge tone="accent">Update</Badge>{/if}
 		</div>
-		<p class="mt-1 text-sm text-muted">v{extension.versionName} · {extension.lang}</p>
+		<div class="mt-1 flex items-center gap-3 text-sm text-muted">
+			<span>v{extension.versionName} · {extension.lang}</span>
+			{#if admin && activationCount}
+				<span class="flex items-center gap-1">
+					<Users size={12} />
+					{activationCount}
+				</span>
+			{/if}
+		</div>
 		{#if error}<p class="mt-1 text-xs text-danger">{error}</p>{/if}
 	</div>
 
 	<div class="flex shrink-0 flex-wrap justify-end gap-2">
-		{#if extension.isObsolete}
-			<Button variant="danger" size="sm" {loading} onclick={() => runAction({ uninstall: true })}>
-				Remove
-			</Button>
-		{:else if extension.isInstalled}
-			{#if extension.hasUpdate}
-				<Button variant="secondary" size="sm" {loading} onclick={() => runAction({ update: true })}>
-					Update
+		{#if admin}
+			{#if extension.isObsolete}
+				<Button variant="danger" size="sm" {loading} onclick={() => runAction({ uninstall: true })}>
+					Remove
+				</Button>
+			{:else if extension.isInstalled}
+				{#if extension.hasUpdate}
+					<Button variant="secondary" size="sm" {loading} onclick={() => runAction({ update: true })}>
+						Update
+					</Button>
+				{/if}
+				<Button variant="secondary" size="sm" {loading} onclick={() => runAction({ uninstall: true })}>
+					Uninstall
+				</Button>
+			{:else}
+				<Button variant="primary" size="sm" {loading} onclick={() => runAction({ install: true })}>
+					Install
 				</Button>
 			{/if}
-			<Button variant="secondary" size="sm" {loading} onclick={() => runAction({ uninstall: true })}>
-				Uninstall
-			</Button>
+		{:else if isActive}
+			<Button variant="secondary" size="sm" onclick={deactivate}>Nonaktifkan</Button>
 		{:else}
-			<Button variant="primary" size="sm" {loading} onclick={() => runAction({ install: true })}>
-				Install
-			</Button>
+			<Button variant="primary" size="sm" {loading} onclick={activate}>Aktifkan</Button>
 		{/if}
 	</div>
 </div>

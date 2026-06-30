@@ -15,7 +15,7 @@ const PUBLIC_PREFIXES = [
  * History/library/categories are local-first (client-side) so they are absent —
  * they sync to the account only when logged in.
  */
-const LOGIN_REQUIRED_PREFIXES = ['/downloads', '/extensions', '/admin'];
+const LOGIN_REQUIRED_PREFIXES = ['/downloads', '/admin'];
 
 export function isPublicPath(pathname: string): boolean {
 	if (pathname === '/health' || pathname.startsWith('/health/')) return true;
@@ -32,6 +32,7 @@ export function isSuwayomiApiPath(pathname: string): boolean {
 	// Local SvelteKit API routes that must NOT be proxied to Suwayomi.
 	if (pathname.startsWith('/api/auth/') || pathname === '/api/auth') return false;
 	if (pathname.startsWith('/api/sync')) return false;
+	if (pathname.startsWith('/api/ext/')) return false;
 	return (
 		pathname.startsWith('/api/graphql') ||
 		pathname.startsWith('/api/v1/') ||
@@ -43,11 +44,13 @@ export function isSuwayomiApiPath(pathname: string): boolean {
 // network fetch), so guests must be allowed to run these read-oriented ones to
 // browse and read. Everything else mutating (library, downloads, categories,
 // progress, extensions, settings) stays login-only.
+// fetchExtensions is catalog-refresh (read-oriented, no server state change).
 const GUEST_FETCH_MUTATIONS = [
 	'fetchSourceManga',
 	'fetchManga',
 	'fetchChapters',
-	'fetchChapterPages'
+	'fetchChapterPages',
+	'fetchExtensions'
 ];
 
 function isMutation(query: string): boolean {
