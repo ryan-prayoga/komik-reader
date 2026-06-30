@@ -231,46 +231,47 @@
 
 					<!-- Sticky action row -->
 					<div class="mt-5 flex flex-col gap-2">
-						<div class="flex flex-wrap gap-2">
 						{#if readTarget}
-							<Button href="/read/{readTarget.id}">
-								<BookOpen size={16} /> {startLabel}
+							<Button href="/read/{readTarget.id}" size="lg" block class="justify-start text-left">
+								<BookOpen size={18} class="shrink-0" />
+								<span class="flex min-w-0 flex-col leading-tight">
+									<span class="font-semibold">{startLabel}</span>
+									<span class="truncate text-xs font-normal text-white/80">{readTarget.name}</span>
+								</span>
 							</Button>
 						{/if}
-						<LibraryButton
-							mangaId={manga.id}
-							title={manga.title}
-							thumbnailUrl={manga.thumbnailUrl ? apiUrl(manga.thumbnailUrl) : null}
-							sourceId={manga.sourceId}
-						/>
-						{#if chapters.length > 0}
-							<Dropdown align="left">
-								{#snippet trigger({ toggle })}
-									<Button variant="secondary" loading={downloadingAll} onclick={toggle}>
-										<DownloadIcon size={16} /> Download
-									</Button>
-								{/snippet}
-								{#snippet children({ close })}
-									<button
-										class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-text hover:bg-surface-hover"
-										onclick={() => { downloadBatch('all'); close(); }}
-									>
-										<DownloadIcon size={15} /> Semua chapter
-									</button>
-									<button
-										class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-text hover:bg-surface-hover"
-										onclick={() => { downloadBatch('unread'); close(); }}
-									>
-										<DownloadIcon size={15} /> Belum dibaca saja
-									</button>
-								{/snippet}
-							</Dropdown>
-						{/if}
+						<div class="flex flex-wrap gap-2">
+							<LibraryButton
+								mangaId={manga.id}
+								title={manga.title}
+								thumbnailUrl={manga.thumbnailUrl ? apiUrl(manga.thumbnailUrl) : null}
+								sourceId={manga.sourceId}
+							/>
+							{#if chapters.length > 0}
+								<Dropdown align="left">
+									{#snippet trigger({ toggle })}
+										<Button variant="secondary" loading={downloadingAll} onclick={toggle}>
+											<DownloadIcon size={16} /> Download
+										</Button>
+									{/snippet}
+									{#snippet children({ close })}
+										<button
+											class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-text hover:bg-surface-hover"
+											onclick={() => { downloadBatch('all'); close(); }}
+										>
+											<DownloadIcon size={15} /> Semua chapter
+										</button>
+										<button
+											class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-text hover:bg-surface-hover"
+											onclick={() => { downloadBatch('unread'); close(); }}
+										>
+											<DownloadIcon size={15} /> Belum dibaca saja
+										</button>
+									{/snippet}
+								</Dropdown>
+							{/if}
+						</div>
 					</div>
-					{#if readTarget}
-						<p class="text-xs text-muted">{readTarget.name}</p>
-					{/if}
-				</div>
 			</div>
 		</div>
 		</div>

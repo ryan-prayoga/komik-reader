@@ -27,6 +27,7 @@
 	let currentSectionIdx = $state(0);
 	let currentPageIdx = $state(0);
 	let currentPageProgress = $state(0); // 0–1 scroll progress within the current page
+	let currentChapterProgress = $state(0); // 0–1 true scroll progress across the whole chapter
 	let loadingNextChapter = $state(false);
 
 	// Shared
@@ -47,9 +48,20 @@
 	$effect(() => {
 		if (!autoScroll) return;
 		let rafId: number;
-		const speed = autoScrollSpeed;
-		function step() {
-			window.scrollBy(0, speed);
+		let lastTime: number | null = null;
+		let remainder = 0;
+		function step(time: number) {
+			if (lastTime !== null) {
+				// autoScrollSpeed is "px per frame @ 60fps" — convert to px/ms and scale
+				// by actual elapsed time so speed stays constant regardless of refresh rate
+				// or dropped frames. Remainder carries fractional px so scrollBy (integer-only)
+				// never drops sub-pixel motion, keeping the motion visually smooth.
+				const delta = ((autoScrollSpeed * 60) / 1000) * (time - lastTime) + remainder;
+				const whole = Math.trunc(delta);
+				remainder = delta - whole;
+				if (whole !== 0) window.scrollBy(0, whole);
+			}
+			lastTime = time;
 			rafId = requestAnimationFrame(step);
 		}
 		rafId = requestAnimationFrame(step);
@@ -98,14 +110,13 @@
 	);
 
 	// Reading progress (0–1) for the thin top bar.
-	// Webtoon: sub-page precision via currentPageProgress (scroll position within page).
+	// Webtoon: true scroll-extent progress (currentChapterProgress) so it hits exactly
+	// 0 at chapter start and 1 once fully scrolled to chapter end.
 	const scrollProgress = $derived.by(() => {
 		if (isPaged) {
 			return pages.length > 0 ? (currentPage + 1) / pages.length : 0;
 		}
-		const section = sections[currentSectionIdx];
-		if (!section?.pages.length) return 0;
-		return (currentPageIdx + currentPageProgress) / section.pages.length;
+		return currentChapterProgress;
 	});
 
 	const pageLabel = $derived(
@@ -133,10 +144,16 @@
 		}
 	}
 
-	function reportWebtoonPage(sectionIdx: number, pageIdx: number, pageProgress: number) {
+	function reportWebtoonPage(
+		sectionIdx: number,
+		pageIdx: number,
+		pageProgress: number,
+		chapterProgress: number
+	) {
 		currentSectionIdx = sectionIdx;
 		currentPageIdx = pageIdx;
 		currentPageProgress = pageProgress;
+		currentChapterProgress = chapterProgress;
 		const section = sections[sectionIdx];
 		if (!section || !mangaId) return;
 		const isRead = pageIdx >= section.pages.length - 1;
@@ -207,6 +224,7 @@
 		currentSectionIdx = 0;
 		currentPageIdx = 0;
 		currentPageProgress = 0;
+		currentChapterProgress = 0;
 		loadingNextChapter = false;
 
 		async function load() {

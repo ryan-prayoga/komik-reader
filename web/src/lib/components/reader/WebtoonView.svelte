@@ -6,7 +6,12 @@
 
 	interface Props {
 		sections: Section[];
-		onpage: (sectionIdx: number, pageIdx: number, pageProgress: number) => void;
+		onpage: (
+			sectionIdx: number,
+			pageIdx: number,
+			pageProgress: number,
+			chapterProgress: number
+		) => void;
 		onnearend?: () => void;
 		zoom?: number;
 		gap?: boolean;
@@ -23,13 +28,29 @@
 	function reportCurrentProgress() {
 		const el = pageEls.get(`${activeSi}-${activePi}`);
 		if (!el) {
-			onpage(activeSi, activePi, 0);
+			onpage(activeSi, activePi, 0, 0);
 			return;
 		}
 		const { top, height } = el.getBoundingClientRect();
 		// progress 0 = top of page at viewport top, 1 = bottom of page at viewport top
 		const progress = height > 0 ? Math.max(0, Math.min(1, -top / height)) : 0;
-		onpage(activeSi, activePi, progress);
+		onpage(activeSi, activePi, progress, chapterScrollProgress(activeSi));
+	}
+
+	// True scroll-extent progress for the active chapter: 0 at the chapter's first
+	// page top, 1 once scrolled all the way to its last page bottom. Unlike per-page
+	// progress, this isn't bounded by individual page heights, so it actually reaches
+	// 0/1 at the real start/end instead of stalling short on short pages.
+	function chapterScrollProgress(si: number): number {
+		const lastIdx = (sections[si]?.pages.length ?? 1) - 1;
+		const firstEl = pageEls.get(`${si}-0`);
+		const lastEl = pageEls.get(`${si}-${lastIdx}`);
+		if (!firstEl || !lastEl) return 0;
+		const firstTop = firstEl.getBoundingClientRect().top;
+		const lastBottom = lastEl.getBoundingClientRect().bottom;
+		const scrollable = lastBottom - firstTop - window.innerHeight;
+		if (scrollable <= 0) return firstTop <= 0 ? 1 : 0;
+		return Math.max(0, Math.min(1, -firstTop / scrollable));
 	}
 
 	function observePage(node: HTMLElement, param: { si: number; pi: number }) {
