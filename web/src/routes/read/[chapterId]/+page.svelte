@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { apiUrl } from '$lib/graphql/client';
 	import { fetchChapterPages, getMangaChapters, updateChapterProgress } from '$lib/graphql/api';
@@ -16,7 +15,19 @@
 
 	const chapterId = $derived(Number($page.params.chapterId));
 
+	// Paged mode
 	let pages = $state<string[]>([]);
+	let currentPage = $state(0);
+
+	// Webtoon sections (each section = one chapter's pages)
+	type Section = { chapter: Chapter; pages: string[] };
+	let sections = $state<Section[]>([]);
+	let currentSectionIdx = $state(0);
+	let currentPageIdx = $state(0);
+	let currentPageProgress = $state(0); // 0–1 scroll progress within the current page
+	let loadingNextChapter = $state(false);
+
+	// Shared
 	let chapters = $state<Chapter[]>([]);
 	let current = $state<Chapter | null>(null);
 	let mangaId = $state<number | null>(null);
@@ -26,29 +37,66 @@
 	let loading = $state(true);
 	let error = $state('');
 	let offlineMode = $state(false);
-
-	let currentPage = $state(0);
 	let chromeVisible = $state(true);
 	let settingsOpen = $state(false);
-
-	const currentIndex = $derived(chapters.findIndex((c) => c.id === chapterId));
-	const prevChapter = $derived(currentIndex > 0 ? chapters[currentIndex - 1] : null);
-	const nextChapter = $derived(
-		currentIndex >= 0 && currentIndex < chapters.length - 1 ? chapters[currentIndex + 1] : null
-	);
 
 	const bgClass = $derived(BG_CLASS[readerSettings.bg]);
 	const isPaged = $derived(readerSettings.mode !== 'webtoon');
 	const backHref = $derived(mangaId ? `/manga/${mangaId}` : '/history');
+
+	// Navigation index: paged uses stable URL chapterId (same as original),
+	// webtoon uses currently-viewed section to update nav when infinite-scrolling.
+	const navChapterIndex = $derived.by(() => {
+		if (isPaged) return chapters.findIndex((c) => c.id === chapterId);
+		const secChapter = sections[currentSectionIdx]?.chapter;
+		if (!secChapter) return chapters.findIndex((c) => c.id === chapterId);
+		return chapters.findIndex((c) => c.id === secChapter.id);
+	});
+	// chapters sorted descending (newest first): index-1 = newer, index+1 = older
+	const prevChapter = $derived(
+		navChapterIndex >= 0 && navChapterIndex < chapters.length - 1
+			? chapters[navChapterIndex + 1]
+			: null
+	);
+	const nextChapter = $derived(navChapterIndex > 0 ? chapters[navChapterIndex - 1] : null);
+
+	// Next chapter for infinite scroll — chapters sorted descending (newest first),
+	// so "next to read" = index - 1 (going toward newer/higher-numbered chapters).
+	const lastSectionIndex = $derived.by(() => {
+		if (sections.length === 0) return chapters.findIndex((c) => c.id === chapterId);
+		const lastCh = sections[sections.length - 1]?.chapter;
+		return chapters.findIndex((c) => c.id === lastCh?.id);
+	});
+	const nextUnloadedChapter = $derived(
+		lastSectionIndex > 0 ? chapters[lastSectionIndex - 1] : null
+	);
+
+	// Chapter displayed in header and picker
+	const viewedChapterId = $derived(sections[currentSectionIdx]?.chapter.id ?? chapterId);
+	const viewedChapterName = $derived(
+		sections[currentSectionIdx]?.chapter.name ?? current?.name ?? ''
+	);
+
+	// Reading progress (0–1) for the thin top bar.
+	// Webtoon: sub-page precision via currentPageProgress (scroll position within page).
+	const scrollProgress = $derived.by(() => {
+		if (isPaged) {
+			return pages.length > 0 ? (currentPage + 1) / pages.length : 0;
+		}
+		const section = sections[currentSectionIdx];
+		if (!section?.pages.length) return 0;
+		return (currentPageIdx + currentPageProgress) / section.pages.length;
+	});
+
 	const pageLabel = $derived(
-		isPaged ? `${currentPage + 1} / ${pages.length}` : `${pages.length} halaman`
+		isPaged
+			? `${currentPage + 1} / ${pages.length}`
+			: `${sections[currentSectionIdx]?.pages.length ?? pages.length} halaman`
 	);
 
 	function reportPage(index: number) {
 		currentPage = index;
-		// Server progress (logged-in/owner) — best effort; guests get 401, ignored.
 		updateChapterProgress(chapterId, index, index >= pages.length - 1).catch(() => {});
-		// Local-first reading history — works for everyone, syncs if logged in.
 		if (mangaId) {
 			localData.recordHistory({
 				chapterId,
@@ -64,41 +112,132 @@
 		}
 	}
 
+	function reportWebtoonPage(sectionIdx: number, pageIdx: number, pageProgress: number) {
+		currentSectionIdx = sectionIdx;
+		currentPageIdx = pageIdx;
+		currentPageProgress = pageProgress;
+		const section = sections[sectionIdx];
+		if (!section || !mangaId) return;
+		const isRead = pageIdx >= section.pages.length - 1;
+		updateChapterProgress(section.chapter.id, pageIdx, isRead).catch(() => {});
+		localData.recordHistory({
+			chapterId: section.chapter.id,
+			mangaId,
+			mangaTitle,
+			thumbnailUrl: mangaThumb,
+			chapterName: section.chapter.name,
+			lastPage: pageIdx,
+			isRead,
+			sourceId: mangaSourceId,
+			chapterNumber: section.chapter.chapterNumber
+		});
+	}
+
+	async function handleNearEnd() {
+		if (loadingNextChapter || !nextUnloadedChapter) return;
+		loadingNextChapter = true;
+		try {
+			const nextPages = (await fetchChapterPages(nextUnloadedChapter.id)).map((p) => apiUrl(p));
+			sections = [...sections, { chapter: nextUnloadedChapter, pages: nextPages }];
+		} catch {
+			// silent — user can navigate manually
+		} finally {
+			loadingNextChapter = false;
+		}
+	}
+
 	function toggleChrome() {
 		chromeVisible = !chromeVisible;
 	}
 
-	onMount(async () => {
-		try {
-			if (!isOnline()) {
-				const cached = await getCachedPageUrls(chapterId);
+	function makeStubChapter(id: number): Chapter {
+		return {
+			id,
+			name: 'Chapter',
+			chapterNumber: 0,
+			isRead: false,
+			isDownloaded: false,
+			lastPageRead: 0,
+			uploadDate: '',
+			sourceOrder: 0
+		};
+	}
+
+	// $effect reruns whenever chapterId changes (client-side nav between chapters).
+	$effect(() => {
+		const id = chapterId;
+		let cancelled = false;
+
+		// Reset all per-chapter state
+		pages = [];
+		sections = [];
+		chapters = [];
+		current = null;
+		mangaId = null;
+		mangaTitle = '';
+		mangaThumb = null;
+		mangaSourceId = null;
+		loading = true;
+		error = '';
+		offlineMode = false;
+		currentPage = 0;
+		currentSectionIdx = 0;
+		currentPageIdx = 0;
+		currentPageProgress = 0;
+		loadingNextChapter = false;
+
+		async function load() {
+			try {
+				if (!isOnline()) {
+					const cached = await getCachedPageUrls(id);
+					if (cancelled) return;
+					if (cached?.length) {
+						pages = cached;
+						offlineMode = true;
+						sections = [{ chapter: makeStubChapter(id), pages: cached }];
+						return;
+					}
+					throw new Error('Offline — chapter belum disimpan di perangkat.');
+				}
+
+				const fetchedPages = (await fetchChapterPages(id)).map((p) => apiUrl(p));
+				if (cancelled) return;
+				pages = fetchedPages;
+
+				const resolvedMangaId = await resolveMangaId(id);
+				if (cancelled) return;
+				mangaId = resolvedMangaId;
+
+				if (resolvedMangaId) {
+					const fetchedChapters = await getMangaChapters(resolvedMangaId);
+					if (cancelled) return;
+					chapters = fetchedChapters;
+					current = chapters.find((c) => c.id === id) ?? null;
+				}
+
+				sections = [{ chapter: current ?? makeStubChapter(id), pages }];
+				if (pages.length > 0) updateChapterProgress(id, 0, false).catch(() => {});
+			} catch (e) {
+				if (cancelled) return;
+				const cached = await getCachedPageUrls(id);
+				if (cancelled) return;
 				if (cached?.length) {
 					pages = cached;
 					offlineMode = true;
-					return;
+					sections = [{ chapter: makeStubChapter(id), pages: cached }];
+				} else {
+					error = e instanceof Error ? e.message : 'Gagal memuat reader';
 				}
-				throw new Error('Offline — chapter belum disimpan di perangkat.');
+			} finally {
+				if (!cancelled) loading = false;
 			}
-
-			pages = (await fetchChapterPages(chapterId)).map((p) => apiUrl(p));
-			const resolvedMangaId = await resolveMangaId(chapterId);
-			mangaId = resolvedMangaId;
-			if (resolvedMangaId) {
-				chapters = await getMangaChapters(resolvedMangaId);
-				current = chapters.find((c) => c.id === chapterId) ?? null;
-			}
-			if (pages.length > 0) await updateChapterProgress(chapterId, 0, false);
-		} catch (e) {
-			const cached = await getCachedPageUrls(chapterId);
-			if (cached?.length) {
-				pages = cached;
-				offlineMode = true;
-			} else {
-				error = e instanceof Error ? e.message : 'Gagal memuat reader';
-			}
-		} finally {
-			loading = false;
 		}
+
+		load();
+
+		return () => {
+			cancelled = true;
+		};
 	});
 
 	async function resolveMangaId(id: number): Promise<number | null> {
@@ -128,7 +267,9 @@
 		</div>
 	{:else if error}
 		<div class="mx-auto max-w-md px-4 py-20 text-center">
-			<div class="rounded-[var(--radius)] border border-danger/30 bg-danger/10 p-4 text-sm text-danger">
+			<div
+				class="rounded-[var(--radius)] border border-danger/30 bg-danger/10 p-4 text-sm text-danger"
+			>
 				{error}
 			</div>
 			<p class="mt-4 text-sm text-white/70">
@@ -138,7 +279,6 @@
 			</p>
 		</div>
 	{:else}
-		<!-- Brightness overlay (non-interactive) -->
 		{#if readerSettings.brightness < 1}
 			<div
 				class="pointer-events-none fixed inset-0 z-20 bg-black"
@@ -158,13 +298,25 @@
 			/>
 		{:else}
 			<button type="button" class="block w-full cursor-default text-left" onclick={toggleChrome}>
-				<WebtoonView {pages} zoom={readerSettings.zoom} gap={readerSettings.gap} onpage={reportPage} />
+				<WebtoonView
+					{sections}
+					zoom={readerSettings.zoom}
+					gap={readerSettings.gap}
+					onpage={reportWebtoonPage}
+					onnearend={handleNearEnd}
+				/>
 			</button>
+			{#if loadingNextChapter}
+				<div class="flex items-center justify-center py-8 text-white/50">
+					<Spinner size={20} />
+				</div>
+			{/if}
 		{/if}
 
 		<ReaderControls
 			show={chromeVisible}
-			title={current?.name ?? 'Chapter'}
+			title={mangaTitle || (current?.name ?? 'Chapter')}
+			chapterName={viewedChapterName}
 			{pageLabel}
 			{backHref}
 			prevHref={prevChapter ? `/read/${prevChapter.id}` : null}
@@ -173,6 +325,9 @@
 			bind:current={currentPage}
 			max={pages.length - 1}
 			{offlineMode}
+			{scrollProgress}
+			{chapters}
+			currentChapterId={viewedChapterId}
 			onsettings={() => (settingsOpen = true)}
 			onseek={reportPage}
 		/>
