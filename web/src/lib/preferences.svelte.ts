@@ -8,12 +8,20 @@ type StoredPrefs = {
 	showNsfw: boolean;
 	theme: Theme;
 	sidebarCollapsed: boolean;
+	activePkgNames: string[];
+	extFilterLangs: string[];
+	extFilterStatus: string;
+	extFilterOnlyActive: boolean;
 };
 
 const DEFAULTS: StoredPrefs = {
 	showNsfw: false,
 	theme: 'system',
-	sidebarCollapsed: false
+	sidebarCollapsed: false,
+	activePkgNames: [],
+	extFilterLangs: [],
+	extFilterStatus: 'all',
+	extFilterOnlyActive: false
 };
 
 function load(): StoredPrefs {
@@ -36,6 +44,10 @@ class PreferencesState {
 	showNsfw = $state(this.#initial.showNsfw);
 	theme = $state<Theme>(this.#initial.theme);
 	sidebarCollapsed = $state(this.#initial.sidebarCollapsed);
+	activePkgNames = $state<string[]>(this.#initial.activePkgNames);
+	extFilterLangs = $state<string[]>(this.#initial.extFilterLangs);
+	extFilterStatus = $state(this.#initial.extFilterStatus);
+	extFilterOnlyActive = $state(this.#initial.extFilterOnlyActive);
 
 	#save() {
 		if (browser) {
@@ -44,7 +56,11 @@ class PreferencesState {
 				JSON.stringify({
 					showNsfw: this.showNsfw,
 					theme: this.theme,
-					sidebarCollapsed: this.sidebarCollapsed
+					sidebarCollapsed: this.sidebarCollapsed,
+					activePkgNames: this.activePkgNames,
+					extFilterLangs: this.extFilterLangs,
+					extFilterStatus: this.extFilterStatus,
+					extFilterOnlyActive: this.extFilterOnlyActive
 				})
 			);
 		}
@@ -93,6 +109,37 @@ class PreferencesState {
 		window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
 			if (this.theme === 'system') this.applyTheme();
 		});
+	}
+
+	activateExtension(pkgName: string) {
+		if (!this.activePkgNames.includes(pkgName)) {
+			this.activePkgNames = [...this.activePkgNames, pkgName];
+			this.#save();
+		}
+	}
+
+	deactivateExtension(pkgName: string) {
+		this.activePkgNames = this.activePkgNames.filter((p) => p !== pkgName);
+		this.#save();
+	}
+
+	isExtensionActive(pkgName: string): boolean {
+		return this.activePkgNames.includes(pkgName);
+	}
+
+	setExtFilterLangs(langs: string[]) {
+		this.extFilterLangs = langs;
+		this.#save();
+	}
+
+	setExtFilterStatus(status: string) {
+		this.extFilterStatus = status;
+		this.#save();
+	}
+
+	setExtFilterOnlyActive(value: boolean) {
+		this.extFilterOnlyActive = value;
+		this.#save();
 	}
 
 	get nsfwFilter(): boolean | null {

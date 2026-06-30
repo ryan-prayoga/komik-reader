@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { page } from '$app/stores';
 	import { getInstalledSources } from '$lib/graphql/api';
 	import { preferences } from '$lib/preferences.svelte';
 	import { localData } from '$lib/local/data.svelte';
@@ -11,9 +12,20 @@
 	import Puzzle from '@lucide/svelte/icons/puzzle';
 	import ServerCrash from '@lucide/svelte/icons/server-crash';
 
-	let sources = $state<Source[]>([]);
+	// Non-admin users (including guests) use per-device active extension preferences.
+	const filterByActive = $derived($page.data.authEnabled && !$page.data.user?.is_admin);
+
+	let allSources = $state<Source[]>([]);
 	let loading = $state(true);
 	let error = $state('');
+
+	const sources = $derived(
+		filterByActive && preferences.activePkgNames.length > 0
+			? allSources.filter((s) => preferences.activePkgNames.includes(s.extension.pkgName))
+			: filterByActive
+				? []
+				: allSources
+	);
 
 	// Continue-reading from local history (works for everyone, no login).
 	// Only unfinished chapters — fully-read and marked-read rows are excluded.
@@ -35,7 +47,7 @@
 
 	onMount(async () => {
 		try {
-			sources = await getInstalledSources(preferences.nsfwFilter);
+			allSources = await getInstalledSources(preferences.nsfwFilter);
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Gagal memuat source';
 		} finally {
@@ -72,11 +84,15 @@
 		<h2 class="mb-3 text-lg font-semibold text-text">Source Terinstall</h2>
 		{#if sources.length === 0}
 			<EmptyState
-				title="Belum ada source"
-				description="Install extension dulu untuk menampilkan source baca komik."
+				title="Belum ada source aktif"
+				description={filterByActive
+					? 'Aktifkan extension dulu untuk menampilkan source baca komik.'
+					: 'Install extension dulu untuk menampilkan source baca komik.'}
 			>
 				{#snippet icon()}<Puzzle size={32} />{/snippet}
-				{#snippet action()}<Button href="/extensions">Buka Extensions</Button>{/snippet}
+				{#snippet action()}<Button href="/extensions">
+					{filterByActive ? 'Pilih Extension' : 'Buka Extensions'}
+				</Button>{/snippet}
 			</EmptyState>
 		{:else}
 			<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

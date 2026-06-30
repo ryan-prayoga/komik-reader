@@ -53,7 +53,12 @@ export default defineConfig({
 		proxy: {
 			'/api': {
 				target: 'http://localhost:4567',
-				changeOrigin: true
+				changeOrigin: true,
+				bypass(req) {
+					// Local SvelteKit server routes — do not proxy to Suwayomi.
+					if (req.url?.startsWith('/api/ext/')) return req.url;
+					return null;
+				}
 			}
 		}
 	}

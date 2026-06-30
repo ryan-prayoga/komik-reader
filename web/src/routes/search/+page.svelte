@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { page } from '$app/stores';
 	import MangaCard from '$lib/components/MangaCard.svelte';
 	import MangaGrid from '$lib/components/MangaGrid.svelte';
 	import GridSkeleton from '$lib/components/GridSkeleton.svelte';
@@ -10,7 +11,9 @@
 	import Search from '@lucide/svelte/icons/search';
 	import type { Manga, Source } from '$lib/graphql/types';
 
-	let sources = $state<Source[]>([]);
+	const filterByActive = $derived($page.data.authEnabled && !$page.data.user?.is_admin);
+
+	let allSources = $state<Source[]>([]);
 	let sourceId = $state('');
 	let query = $state('');
 	let mangas = $state<Manga[]>([]);
@@ -18,9 +21,17 @@
 	let searched = $state(false);
 	let error = $state('');
 
+	const sources = $derived(
+		filterByActive && preferences.activePkgNames.length > 0
+			? allSources.filter((s) => preferences.activePkgNames.includes(s.extension.pkgName))
+			: filterByActive
+				? []
+				: allSources
+	);
+
 	onMount(async () => {
 		try {
-			sources = await getInstalledSources(preferences.nsfwFilter);
+			allSources = await getInstalledSources(preferences.nsfwFilter);
 			if (sources[0]) sourceId = sources[0].id;
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Gagal memuat source';
@@ -72,10 +83,14 @@
 
 	{#if sources.length === 0}
 		<EmptyState
-			title="Belum ada source"
-			description="Install extension dulu untuk mulai mencari."
+			title="Belum ada source aktif"
+			description={filterByActive
+				? 'Aktifkan extension dulu untuk mulai mencari.'
+				: 'Install extension dulu untuk mulai mencari.'}
 		>
-			{#snippet action()}<Button href="/extensions">Install extension</Button>{/snippet}
+			{#snippet action()}<Button href="/extensions">
+				{filterByActive ? 'Pilih Extension' : 'Install extension'}
+			</Button>{/snippet}
 		</EmptyState>
 	{/if}
 
