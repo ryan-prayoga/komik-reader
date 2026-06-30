@@ -52,6 +52,8 @@ class LocalData {
 		chapterName: string;
 		lastPage: number;
 		isRead: boolean;
+		sourceId?: string | null;
+		chapterNumber?: number;
 	}) {
 		const existing = this.history.find((h) => h.chapterId === entry.chapterId);
 		const row: LocalHistory = {
@@ -59,6 +61,8 @@ class LocalData {
 			// Keep richer metadata if a later write lacks it.
 			mangaTitle: entry.mangaTitle || existing?.mangaTitle || '',
 			thumbnailUrl: entry.thumbnailUrl ?? existing?.thumbnailUrl ?? null,
+			sourceId: entry.sourceId ?? existing?.sourceId ?? null,
+			chapterNumber: entry.chapterNumber ?? existing?.chapterNumber,
 			updatedAt: nowMs(),
 			deleted: false
 		};
@@ -78,11 +82,107 @@ class LocalData {
 		this.#changed();
 	}
 
+	/**
+	 * Upsert a single chapter's read flag, creating a history row if absent.
+	 * Used by the detail page so read/unread marks persist locally (works for
+	 * guests too) and override the server `isRead` in the UI.
+	 */
+	async setChapterRead(
+		entry: {
+			chapterId: number;
+			mangaId: number;
+			mangaTitle: string;
+			thumbnailUrl: string | null;
+			chapterName: string;
+			sourceId?: string | null;
+			chapterNumber?: number;
+		},
+		isRead: boolean
+	) {
+		const existing = this.history.find((h) => h.chapterId === entry.chapterId);
+		const row: LocalHistory = {
+			chapterId: entry.chapterId,
+			mangaId: entry.mangaId,
+			mangaTitle: entry.mangaTitle || existing?.mangaTitle || '',
+			thumbnailUrl: entry.thumbnailUrl ?? existing?.thumbnailUrl ?? null,
+			chapterName: entry.chapterName || existing?.chapterName || 'Chapter',
+			sourceId: entry.sourceId ?? existing?.sourceId ?? null,
+			chapterNumber: entry.chapterNumber ?? existing?.chapterNumber,
+			lastPage: existing?.lastPage ?? 0,
+			isRead,
+			updatedAt: nowMs(),
+			deleted: false
+		};
+		await putItem('history', row);
+		this.history = [row, ...this.history.filter((h) => h.chapterId !== row.chapterId)].sort(
+			(a, b) => b.updatedAt - a.updatedAt
+		);
+		this.#changed();
+	}
+
+	/** Batch read-flag upsert (e.g. "mark all previous as read"). One sync trigger. */
+	async setManyChaptersRead(
+		entries: Array<{
+			chapterId: number;
+			mangaId: number;
+			mangaTitle: string;
+			thumbnailUrl: string | null;
+			chapterName: string;
+			sourceId?: string | null;
+			chapterNumber?: number;
+		}>,
+		isRead: boolean
+	) {
+		if (!entries.length) return;
+		// Stable, monotonic timestamps: highest chapterNumber lands newest so the
+		// per-manga history view resolves the boundary chapter as "last read".
+		const base = nowMs();
+		const ordered = [...entries].sort(
+			(a, b) => (a.chapterNumber ?? 0) - (b.chapterNumber ?? 0)
+		);
+		const rows: LocalHistory[] = ordered.map((entry, i) => {
+			const existing = this.history.find((h) => h.chapterId === entry.chapterId);
+			return {
+				chapterId: entry.chapterId,
+				mangaId: entry.mangaId,
+				mangaTitle: entry.mangaTitle || existing?.mangaTitle || '',
+				thumbnailUrl: entry.thumbnailUrl ?? existing?.thumbnailUrl ?? null,
+				chapterName: entry.chapterName || existing?.chapterName || 'Chapter',
+				sourceId: entry.sourceId ?? existing?.sourceId ?? null,
+				chapterNumber: entry.chapterNumber ?? existing?.chapterNumber,
+				lastPage: existing?.lastPage ?? 0,
+				isRead,
+				updatedAt: base + i,
+				deleted: false
+			};
+		});
+		await putMany('history', rows);
+		const byId = new Map(rows.map((r) => [r.chapterId, r]));
+		this.history = [
+			...rows,
+			...this.history.filter((h) => !byId.has(h.chapterId))
+		].sort((a, b) => b.updatedAt - a.updatedAt);
+		this.#changed();
+	}
+
 	async removeHistory(chapterId: number) {
 		const row = this.history.find((h) => h.chapterId === chapterId);
 		if (!row) return;
 		await putItem('history', { ...row, deleted: true, updatedAt: nowMs() });
 		this.history = this.history.filter((h) => h.chapterId !== chapterId);
+		this.#changed();
+	}
+
+	/** Tombstone every history row for a manga (per-manga delete in Riwayat). */
+	async removeHistoryByManga(mangaId: number) {
+		const rows = this.history.filter((h) => h.mangaId === mangaId);
+		if (!rows.length) return;
+		const ts = nowMs();
+		await putMany(
+			'history',
+			rows.map((r) => ({ ...r, deleted: true, updatedAt: ts }))
+		);
+		this.history = this.history.filter((h) => h.mangaId !== mangaId);
 		this.#changed();
 	}
 

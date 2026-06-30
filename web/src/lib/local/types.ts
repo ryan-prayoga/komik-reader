@@ -11,6 +11,9 @@ export type LocalHistory = {
 	lastPage: number;
 	isRead: boolean;
 	updatedAt: number;
+	// Added later; optional for backward-compat with rows written before this.
+	sourceId?: string | null;
+	chapterNumber?: number;
 	deleted?: boolean;
 };
 

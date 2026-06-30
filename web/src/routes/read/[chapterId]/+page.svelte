@@ -22,6 +22,7 @@
 	let mangaId = $state<number | null>(null);
 	let mangaTitle = $state('');
 	let mangaThumb = $state<string | null>(null);
+	let mangaSourceId = $state<string | null>(null);
 	let loading = $state(true);
 	let error = $state('');
 	let offlineMode = $state(false);
@@ -56,7 +57,9 @@
 				thumbnailUrl: mangaThumb,
 				chapterName: current?.name ?? 'Chapter',
 				lastPage: index,
-				isRead: index >= pages.length - 1
+				isRead: index >= pages.length - 1,
+				sourceId: mangaSourceId,
+				chapterNumber: current?.chapterNumber
 			});
 		}
 	}
@@ -103,7 +106,7 @@
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({
-				query: `query($id: Int!) { chapter(id: $id) { mangaId name manga { title thumbnailUrl } } }`,
+				query: `query($id: Int!) { chapter(id: $id) { mangaId name manga { title thumbnailUrl sourceId } } }`,
 				variables: { id }
 			})
 		});
@@ -112,6 +115,7 @@
 		if (ch?.manga) {
 			mangaTitle = ch.manga.title ?? '';
 			mangaThumb = ch.manga.thumbnailUrl ? apiUrl(ch.manga.thumbnailUrl) : null;
+			mangaSourceId = ch.manga.sourceId ?? null;
 		}
 		return ch?.mangaId ?? null;
 	}

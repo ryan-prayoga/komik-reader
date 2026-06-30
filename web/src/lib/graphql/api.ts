@@ -524,6 +524,18 @@ export async function markChapterRead(chapterId: number, isRead: boolean): Promi
 	);
 }
 
+export async function markChaptersRead(chapterIds: number[], isRead: boolean): Promise<void> {
+	if (!chapterIds.length) return;
+	await gql(
+		`mutation($ids: [Int!]!, $isRead: Boolean!) {
+			updateChapters(input: { ids: $ids, patch: { isRead: $isRead } }) {
+				chapters { id isRead }
+			}
+		}`,
+		{ ids: chapterIds, isRead }
+	);
+}
+
 export async function getDownloadedChapters(): Promise<
 	Array<Chapter & { mangaId: number; mangaTitle: string }>
 > {
