@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/stores';
+	import { untrack } from 'svelte';
 	import { apiUrl } from '$lib/graphql/client';
 	import { fetchChapterPages, getMangaChapters, updateChapterProgress } from '$lib/graphql/api';
 	import { isOnline } from '$lib/offline/connection.svelte';
@@ -40,6 +41,24 @@
 	let offlineMode = $state(false);
 	let chromeVisible = $state(true);
 	let settingsOpen = $state(false);
+	let autoScroll = $state(false);
+	let autoScrollSpeed = $state(readerSettings.autoScrollSpeed);
+
+	$effect(() => {
+		if (!autoScroll) return;
+		let rafId: number;
+		const speed = autoScrollSpeed;
+		function step() {
+			window.scrollBy(0, speed);
+			rafId = requestAnimationFrame(step);
+		}
+		rafId = requestAnimationFrame(step);
+		return () => cancelAnimationFrame(rafId);
+	});
+
+	$effect(() => {
+		readerSettings.set('autoScrollSpeed', autoScrollSpeed);
+	});
 
 	const bgClass = $derived(BG_CLASS[readerSettings.bg]);
 	const isPaged = $derived(readerSettings.mode !== 'webtoon');
@@ -184,7 +203,7 @@
 		error = '';
 		offlineMode = false;
 		currentPage = 0;
-		initialPage = localData.history.find((h) => h.chapterId === id)?.lastPage ?? 0;
+		initialPage = untrack(() => localData.history.find((h) => h.chapterId === id)?.lastPage ?? 0);
 		currentSectionIdx = 0;
 		currentPageIdx = 0;
 		currentPageProgress = 0;
@@ -222,6 +241,8 @@
 				sections = [{ chapter: current ?? makeStubChapter(id), pages }];
 				if (initialPage > 0 && initialPage < pages.length) {
 					currentPage = initialPage;
+				} else {
+					document.documentElement.scrollTop = 0;
 				}
 				if (pages.length > 0) updateChapterProgress(id, currentPage, false).catch(() => {});
 			} catch (e) {
@@ -272,8 +293,18 @@
 
 <section class="relative min-h-screen w-full {bgClass}">
 	{#if loading}
-		<div class="flex min-h-screen items-center justify-center text-white/70">
-			<Spinner size={28} />
+		<div class="flex min-h-screen flex-col">
+			<!-- shimmer strips — full width, no border-radius, mimic page panels -->
+			<div class="flex flex-col gap-[3px] pt-[3px]">
+				{#each [42, 58, 48, 62, 50, 55, 44] as pct}
+					<div
+						class="w-full overflow-hidden bg-white/[0.05]"
+						style="height: {pct}vh"
+					>
+						<div class="h-full w-full animate-[shimmer_1.6s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-white/[0.06] to-transparent bg-[length:200%_100%]"></div>
+					</div>
+				{/each}
+			</div>
 		</div>
 	{:else if error}
 		<div class="mx-auto max-w-md px-4 py-20 text-center">
@@ -283,7 +314,7 @@
 				{error}
 			</div>
 			<p class="mt-4 text-sm text-white/70">
-				<a href="/offline" class="text-accent hover:underline">Lihat chapter offline</a>
+				<a href="/downloads" class="text-accent hover:underline">Lihat chapter offline</a>
 				<span class="mx-2 text-white/30">·</span>
 				<a href={backHref} class="text-accent hover:underline">Kembali</a>
 			</p>
@@ -341,8 +372,13 @@
 			currentChapterId={viewedChapterId}
 			onsettings={() => (settingsOpen = true)}
 			onseek={reportPage}
+			autoScroll={!isPaged ? autoScroll : undefined}
+			{autoScrollSpeed}
+			onautoscroll={!isPaged ? () => { autoScroll = !autoScroll; if (autoScroll) chromeVisible = false; } : undefined}
+			onautoscrollspeed={!isPaged ? (d) => (autoScrollSpeed = Math.min(8, Math.max(0.5, +(autoScrollSpeed + d).toFixed(1)))) : undefined}
 		/>
 
 		<ReaderSettings bind:open={settingsOpen} />
+
 	{/if}
 </section>

@@ -7,6 +7,8 @@
 	import BookOpen from '@lucide/svelte/icons/book-open';
 	import List from '@lucide/svelte/icons/list';
 	import X from '@lucide/svelte/icons/x';
+	import Play from '@lucide/svelte/icons/play';
+	import Pause from '@lucide/svelte/icons/pause';
 	import type { Chapter } from '$lib/graphql/types';
 
 	interface Props {
@@ -24,8 +26,12 @@
 		scrollProgress?: number;
 		chapters?: Chapter[];
 		currentChapterId?: number;
+		autoScroll?: boolean;
+		autoScrollSpeed?: number;
 		onsettings: () => void;
 		onseek?: (index: number) => void;
+		onautoscroll?: () => void;
+		onautoscrollspeed?: (delta: number) => void;
 	}
 
 	let {
@@ -43,8 +49,12 @@
 		scrollProgress = 0,
 		chapters = [],
 		currentChapterId,
+		autoScroll = false,
+		autoScrollSpeed = 2,
 		onsettings,
-		onseek
+		onseek,
+		onautoscroll,
+		onautoscrollspeed
 	}: Props = $props();
 
 	let pickerOpen = $state(false);
@@ -86,6 +96,31 @@
 				{chapterName}{#if offlineMode} · <span class="text-accent">Offline</span>{/if}
 			</p>
 		</div>
+		{#if onautoscroll}
+			{#if autoScroll}
+				<!-- Active: compact speed control -->
+				<div class="flex items-center gap-0.5 rounded-full bg-black/50 px-1 py-1">
+					<button
+						onclick={() => onautoscrollspeed?.(-0.5)}
+						class="flex h-6 w-6 items-center justify-center rounded-full text-sm font-bold text-white/70 hover:bg-white/10"
+					>−</button>
+					<span class="w-7 text-center text-[11px] tabular-nums text-white/90">{autoScrollSpeed}×</span>
+					<button
+						onclick={() => onautoscrollspeed?.(+0.5)}
+						class="flex h-6 w-6 items-center justify-center rounded-full text-sm font-bold text-white/70 hover:bg-white/10"
+					>+</button>
+				</div>
+			{/if}
+			<button
+				type="button"
+				onclick={onautoscroll}
+				aria-label={autoScroll ? 'Stop auto-scroll' : 'Auto-scroll'}
+				class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition
+					{autoScroll ? 'bg-accent text-white' : 'bg-black/40 hover:bg-black/60'}"
+			>
+				{#if autoScroll}<Pause size={16} />{:else}<Play size={16} />{/if}
+			</button>
+		{/if}
 		<button
 			type="button"
 			onclick={onsettings}

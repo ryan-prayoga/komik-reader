@@ -60,6 +60,12 @@
 	--shadow-card: var(--shadow-sm);
 	--shadow-pop: var(--shadow-md);
 	--shadow-float: var(--shadow-lg);
+
+	--animate-shimmer: shimmer 1.6s ease-in-out infinite;
+	@keyframes shimmer {
+		0% { background-position: -200% 0; }
+		100% { background-position: 200% 0; }
+	}
 }
 
 html,

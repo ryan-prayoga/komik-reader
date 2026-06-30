@@ -18,7 +18,9 @@ export async function cacheChapterToDevice(
 	mangaId: number,
 	mangaTitle: string,
 	chapterName: string,
-	onProgress?: (done: number, total: number) => void
+	onProgress?: (done: number, total: number) => void,
+	thumbnailUrl?: string | null,
+	sourceId?: string | null
 ): Promise<OfflineChapter> {
 	const pageUrls = await fetchChapterPages(chapterId);
 	if (pageUrls.length === 0) throw new Error('Chapter tidak punya halaman');
@@ -45,7 +47,9 @@ export async function cacheChapterToDevice(
 		chapterName,
 		pageUrls,
 		pageCount: pageUrls.length,
-		cachedAt: Date.now()
+		cachedAt: Date.now(),
+		thumbnailUrl,
+		sourceId
 	};
 
 	await saveOfflineChapter(record);

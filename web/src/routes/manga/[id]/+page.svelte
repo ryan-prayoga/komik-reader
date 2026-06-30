@@ -14,7 +14,9 @@
 	import CategoryPicker from '$lib/components/CategoryPicker.svelte';
 	import LibraryButton from '$lib/components/LibraryButton.svelte';
 	import { localData } from '$lib/local/data.svelte';
-	import { Button, Badge, Card, EmptyState, Spinner, Input, Select, Dropdown, IconButton } from '$lib/components/ui';
+	import { listOfflineChapters } from '$lib/offline/db';
+	import { cacheChapterToDevice } from '$lib/offline/cache';
+	import { Button, Badge, Card, EmptyState, Spinner, Input, Dropdown, IconButton } from '$lib/components/ui';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import BookOpen from '@lucide/svelte/icons/book-open';
 	import DownloadIcon from '@lucide/svelte/icons/download';
@@ -26,9 +28,15 @@
 	import EyeOff from '@lucide/svelte/icons/eye-off';
 	import ChevronsDown from '@lucide/svelte/icons/chevrons-down';
 	import ChevronsUp from '@lucide/svelte/icons/chevrons-up';
+	import ArrowDown from '@lucide/svelte/icons/arrow-down';
+	import ArrowUp from '@lucide/svelte/icons/arrow-up';
+	import HardDriveDownload from '@lucide/svelte/icons/hard-drive-download';
+	import CloudOff from '@lucide/svelte/icons/cloud-off';
 	import type { Chapter, MangaDetail } from '$lib/graphql/types';
 
 	const mangaId = $derived(Number($page.params.id));
+
+	const guest = $derived(!$page.data.user && $page.data.authEnabled);
 
 	let manga = $state<MangaDetail | null>(null);
 	let chapters = $state<Chapter[]>([]);
@@ -36,6 +44,7 @@
 	let downloadingAll = $state(false);
 	let error = $state('');
 	let notice = $state('');
+	let offlineIds = $state<Set<number>>(new Set());
 
 	// Chapter list controls
 	let search = $state('');
@@ -57,7 +66,7 @@
 		[...merged].reverse().find((c) => !c.read) ?? merged[merged.length - 1] ?? null
 	);
 	const startLabel = $derived(
-		!hasAnyRead ? 'Mulai baca' : unreadCount > 0 ? 'Baca selanjutnya' : 'Baca ulang'
+		!hasAnyRead ? 'Mulai baca' : unreadCount > 0 ? 'Lanjutkan baca' : 'Baca ulang'
 	);
 
 	const visible = $derived.by(() => {
@@ -89,6 +98,9 @@
 		} finally {
 			loading = false;
 		}
+		listOfflineChapters().then((list) => {
+			offlineIds = new Set(list.map((c) => c.chapterId));
+		});
 	});
 
 	function entryOf(c: Chapter) {
@@ -123,21 +135,38 @@
 		notice = `${targets.length} chapter ditandai sudah dibaca.`;
 	}
 
-	async function downloadAll() {
-		const pending = chapters.filter((c) => !c.isDownloaded).map((c) => c.id);
-		if (pending.length === 0) {
-			notice = 'Semua chapter sudah terdownload.';
-			return;
-		}
+	async function downloadBatch(filter: 'all' | 'unread') {
 		downloadingAll = true;
 		notice = '';
 		error = '';
 		try {
-			await startDownloader();
-			await enqueueChapterDownloads(pending);
-			notice = `${pending.length} chapter masuk antrian. Cek halaman Downloads.`;
+			const sorted = [...merged].sort((a, b) => a.sourceOrder - b.sourceOrder);
+			const base = filter === 'unread' ? sorted.filter((c) => !c.read) : sorted;
+			if (guest) {
+				const targets = base.filter((c) => !offlineIds.has(c.id));
+				if (targets.length === 0) {
+					notice = filter === 'unread' ? 'Semua chapter belum dibaca sudah offline.' : 'Semua chapter sudah offline.';
+					return;
+				}
+				for (const c of targets) {
+					await cacheChapterToDevice(c.id, mangaId, manga!.title, c.name, undefined, manga!.thumbnailUrl, manga!.sourceId);
+					offlineIds = new Set([...offlineIds, c.id]);
+				}
+				notice = `${targets.length} chapter tersimpan di perangkat.`;
+			} else {
+				const pending = base
+					.filter((c) => !c.isDownloaded)
+					.map((c) => c.id);
+				if (pending.length === 0) {
+					notice = filter === 'unread' ? 'Semua chapter belum dibaca sudah terdownload.' : 'Semua chapter sudah terdownload.';
+					return;
+				}
+				await startDownloader();
+				await enqueueChapterDownloads(pending);
+				notice = `${pending.length} chapter masuk antrian. Cek halaman Downloads.`;
+			}
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Gagal antri download';
+			error = e instanceof Error ? e.message : 'Gagal download';
 		} finally {
 			downloadingAll = false;
 		}
@@ -168,9 +197,9 @@
 		</a>
 
 		<!-- Hero with blurred backdrop -->
-		<div class="relative -mx-4 -mt-4 overflow-hidden lg:-mx-8 lg:-mt-8">
+		<div class="relative -mx-4 -mt-4 lg:-mx-8 lg:-mt-8">
 			{#if manga.thumbnailUrl}
-				<div class="absolute inset-0">
+				<div class="absolute inset-0 overflow-hidden">
 					<img src={apiUrl(manga.thumbnailUrl)} alt="" class="h-full w-full scale-110 object-cover blur-2xl" />
 					<div class="absolute inset-0 bg-bg/80 backdrop-blur-sm"></div>
 					<div class="absolute inset-0 bg-gradient-to-t from-bg to-transparent"></div>
@@ -201,11 +230,11 @@
 					{/if}
 
 					<!-- Sticky action row -->
-					<div class="mt-5 flex flex-wrap gap-2">
+					<div class="mt-5 flex flex-col gap-2">
+						<div class="flex flex-wrap gap-2">
 						{#if readTarget}
 							<Button href="/read/{readTarget.id}">
-								<BookOpen size={16} />
-								{startLabel}
+								<BookOpen size={16} /> {startLabel}
 							</Button>
 						{/if}
 						<LibraryButton
@@ -215,11 +244,32 @@
 							sourceId={manga.sourceId}
 						/>
 						{#if chapters.length > 0}
-							<Button variant="secondary" loading={downloadingAll} onclick={downloadAll}>
-								<DownloadIcon size={16} /> Semua
-							</Button>
+							<Dropdown align="left">
+								{#snippet trigger({ toggle })}
+									<Button variant="secondary" loading={downloadingAll} onclick={toggle}>
+										<DownloadIcon size={16} /> Download
+									</Button>
+								{/snippet}
+								{#snippet children({ close })}
+									<button
+										class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-text hover:bg-surface-hover"
+										onclick={() => { downloadBatch('all'); close(); }}
+									>
+										<DownloadIcon size={15} /> Semua chapter
+									</button>
+									<button
+										class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-text hover:bg-surface-hover"
+										onclick={() => { downloadBatch('unread'); close(); }}
+									>
+										<DownloadIcon size={15} /> Belum dibaca saja
+									</button>
+								{/snippet}
+							</Dropdown>
 						{/if}
 					</div>
+					{#if readTarget}
+						<p class="text-xs text-muted">{readTarget.name}</p>
+					{/if}
 				</div>
 			</div>
 		</div>
@@ -233,11 +283,14 @@
 		{/if}
 
 		{#if notice}
-			<div class="mt-6 rounded-[var(--radius)] border border-success/30 bg-success/10 p-3 text-sm text-success">
-				{notice}
-				{#if notice.includes('antrian')}
-					<a href="/downloads" class="ml-1 underline">Lihat antrian →</a>
-				{/if}
+			<div class="mt-6 flex items-start justify-between gap-2 rounded-[var(--radius)] border border-success/30 bg-success/10 p-3 text-sm text-success">
+				<span>
+					{notice}
+					{#if notice.includes('antrian')}
+						<a href="/downloads" class="ml-1 underline">Lihat antrian →</a>
+					{/if}
+				</span>
+				<button onclick={() => (notice = '')} class="shrink-0 opacity-60 hover:opacity-100" aria-label="Tutup">✕</button>
 			</div>
 		{/if}
 
@@ -248,34 +301,51 @@
 		{#if chapters.length === 0}
 			<EmptyState title="Belum ada chapter" description="Source belum menyediakan chapter." />
 		{:else}
-			<!-- Search / sort / filter toolbar -->
-			<div class="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center">
-				<Input bind:value={search} placeholder="Cari chapter…" class="sm:flex-1">
-					{#snippet icon()}<Search size={16} />{/snippet}
-				</Input>
-				<div class="grid grid-cols-3 gap-2 sm:flex sm:w-auto">
-					<Select bind:value={sortDir} class="sm:w-32" aria-label="Urutkan">
-						<option value="desc">Terbaru</option>
-						<option value="asc">Terlama</option>
-					</Select>
-					<Select bind:value={readFilter} class="sm:w-36" aria-label="Filter baca">
-						<option value="all">Semua</option>
-						<option value="unread">Belum dibaca</option>
-						<option value="read">Sudah dibaca</option>
-					</Select>
-					<Select bind:value={downloadFilter} class="sm:w-40" aria-label="Filter download">
-						<option value="all">Semua</option>
-						<option value="downloaded">Terdownload</option>
-						<option value="not">Belum download</option>
-					</Select>
-				</div>
-			</div>
-
-			{#if visible.length === 0}
-				<EmptyState title="Tidak ada chapter cocok" description="Ubah pencarian atau filter." />
-			{:else}
-				<Card padding="none">
-					<div class="divide-y divide-border">
+			<Card padding="none">
+				<div class="divide-y divide-border">
+					<!-- Toolbar row -->
+					<div class="flex items-center gap-2 px-4 py-2.5">
+						<div class="relative flex-1">
+							<Search size={14} class="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+							<input
+								bind:value={search}
+								placeholder="Cari chapter…"
+								class="w-full rounded-md border border-border bg-bg py-1.5 pl-8 pr-3 text-sm text-text placeholder:text-muted focus:border-accent focus:outline-none"
+							/>
+						</div>
+						<div class="flex items-center rounded-md border border-border bg-bg p-0.5">
+							<button
+								onclick={() => (sortDir = 'desc')}
+								title="Terbaru dulu"
+								class="rounded p-1.5 transition {sortDir === 'desc' ? 'bg-accent text-white' : 'text-muted hover:text-text'}"
+							><ArrowDown size={13} /></button>
+							<button
+								onclick={() => (sortDir = 'asc')}
+								title="Terlama dulu"
+								class="rounded p-1.5 transition {sortDir === 'asc' ? 'bg-accent text-white' : 'text-muted hover:text-text'}"
+							><ArrowUp size={13} /></button>
+							<div class="mx-1 h-3.5 w-px bg-border"></div>
+							<button
+								onclick={() => (readFilter = readFilter === 'all' ? 'unread' : readFilter === 'unread' ? 'read' : 'all')}
+								title={readFilter === 'all' ? 'Semua chapter' : readFilter === 'unread' ? 'Belum dibaca' : 'Sudah dibaca'}
+								class="relative rounded p-1.5 transition {readFilter !== 'all' ? 'text-accent' : 'text-muted hover:text-text'}"
+							>
+								{#if readFilter === 'read'}<Eye size={13} />{:else}<EyeOff size={13} />{/if}
+								{#if readFilter !== 'all'}<span class="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-accent"></span>{/if}
+							</button>
+							<button
+								onclick={() => (downloadFilter = downloadFilter === 'all' ? 'downloaded' : downloadFilter === 'downloaded' ? 'not' : 'all')}
+								title={downloadFilter === 'all' ? 'Semua chapter' : downloadFilter === 'downloaded' ? 'Sudah diunduh' : 'Belum diunduh'}
+								class="relative rounded p-1.5 transition {downloadFilter !== 'all' ? 'text-accent' : 'text-muted hover:text-text'}"
+							>
+								{#if downloadFilter === 'not'}<CloudOff size={13} />{:else}<HardDriveDownload size={13} />{/if}
+								{#if downloadFilter !== 'all'}<span class="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-accent"></span>{/if}
+							</button>
+						</div>
+					</div>
+					{#if visible.length === 0}
+						<div class="px-4 py-10 text-center text-sm text-muted">Tidak ada chapter cocok.</div>
+					{:else}
 						{#each visible as chapter (chapter.id)}
 							<div class="flex items-center justify-between gap-2 px-4 py-3 transition hover:bg-surface-hover">
 								<a href="/read/{chapter.id}" class="flex min-w-0 flex-1 items-center gap-3">
@@ -299,7 +369,17 @@
 									<DownloadButton
 										chapterId={chapter.id}
 										isDownloaded={chapter.isDownloaded}
+										isOffline={offlineIds.has(chapter.id)}
+										mangaId={mangaId}
+										mangaTitle={manga?.title}
+										chapterName={chapter.name}
+										thumbnailUrl={manga?.thumbnailUrl}
+										sourceId={manga?.sourceId}
 										onqueued={() => (notice = 'Chapter masuk antrian download.')}
+										oncached={() => {
+											offlineIds = new Set([...offlineIds, chapter.id]);
+											notice = 'Chapter tersimpan di perangkat.';
+										}}
 									/>
 									<Dropdown align="right">
 										{#snippet trigger({ toggle })}
@@ -332,9 +412,9 @@
 								</div>
 							</div>
 						{/each}
+					{/if}
 					</div>
 				</Card>
-			{/if}
 		{/if}
 	{/if}
 </section>

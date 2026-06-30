@@ -672,14 +672,14 @@ export async function markChaptersRead(chapterIds: number[], isRead: boolean): P
 }
 
 export async function getDownloadedChapters(): Promise<
-	Array<Chapter & { mangaId: number; mangaTitle: string }>
+	Array<Chapter & { mangaId: number; mangaTitle: string; thumbnailUrl: string | null; sourceId: string }>
 > {
 	const data = await gql<{
 		chapters: {
 			nodes: Array<
 				Chapter & {
 					mangaId: number;
-					manga: { title: string };
+					manga: { title: string; thumbnailUrl: string | null; sourceId: string };
 				}
 			>;
 		};
@@ -689,13 +689,15 @@ export async function getDownloadedChapters(): Promise<
 				nodes {
 					id name chapterNumber isRead isDownloaded lastPageRead uploadDate sourceOrder
 					mangaId
-					manga { title }
+					manga { title thumbnailUrl sourceId }
 				}
 			}
 		}`
 	);
 	return data.chapters.nodes.map((c) => ({
 		...c,
-		mangaTitle: c.manga.title
+		mangaTitle: c.manga.title,
+		thumbnailUrl: c.manga.thumbnailUrl,
+		sourceId: c.manga.sourceId
 	}));
 }

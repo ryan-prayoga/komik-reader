@@ -6,6 +6,8 @@ export type OfflineChapter = {
 	pageUrls: string[];
 	pageCount: number;
 	cachedAt: number;
+	thumbnailUrl?: string | null;
+	sourceId?: string | null;
 };
 
 const DB_NAME = 'komik-reader-offline';

@@ -13,6 +13,7 @@ type StoredReader = {
 	brightness: number; // 0.2 – 1 (1 = full)
 	bg: ReaderBg;
 	gap: boolean; // webtoon page gap
+	autoScrollSpeed: number; // px per frame @ 60fps
 };
 
 const DEFAULTS: StoredReader = {
@@ -21,7 +22,8 @@ const DEFAULTS: StoredReader = {
 	zoom: 1,
 	brightness: 1,
 	bg: 'black',
-	gap: true
+	gap: true,
+	autoScrollSpeed: 2
 };
 
 function load(): StoredReader {
@@ -49,6 +51,7 @@ class ReaderSettingsState {
 	brightness = $state(this.#initial.brightness);
 	bg = $state<ReaderBg>(this.#initial.bg);
 	gap = $state(this.#initial.gap);
+	autoScrollSpeed = $state(this.#initial.autoScrollSpeed);
 
 	#save() {
 		if (!browser) return;
@@ -60,7 +63,8 @@ class ReaderSettingsState {
 				zoom: this.zoom,
 				brightness: this.brightness,
 				bg: this.bg,
-				gap: this.gap
+				gap: this.gap,
+				autoScrollSpeed: this.autoScrollSpeed
 			})
 		);
 	}

@@ -68,16 +68,20 @@
 	}
 
 	onMount(() => {
-		let rafId: number;
+		let scrollRafId: number;
+		let retryTimers: ReturnType<typeof setTimeout>[] = [];
 
 		if (initialPage > 0) {
-			// Scroll to last read page. Use rAF so elements are painted before scrolling.
-			requestAnimationFrame(() => {
-				const el = pageEls.get(`0-${initialPage}`);
-				el?.scrollIntoView({ block: 'start', behavior: 'instant' });
-			});
+			function scrollToTarget() {
+				pageEls.get(`0-${initialPage}`)?.scrollIntoView({ block: 'start', behavior: 'instant' });
+			}
+			// Retry a few times as images above the target finish loading and establish height.
+			scrollRafId = requestAnimationFrame(scrollToTarget);
+			retryTimers.push(setTimeout(scrollToTarget, 400));
+			retryTimers.push(setTimeout(scrollToTarget, 1200));
 		}
 
+		let rafId: number;
 		function onScroll() {
 			cancelAnimationFrame(rafId);
 			rafId = requestAnimationFrame(reportCurrentProgress);
@@ -87,6 +91,8 @@
 		return () => {
 			window.removeEventListener('scroll', onScroll);
 			cancelAnimationFrame(rafId);
+			cancelAnimationFrame(scrollRafId);
+			retryTimers.forEach(clearTimeout);
 		};
 	});
 
@@ -110,7 +116,7 @@
 					src={pageUrl}
 					alt="Halaman {pi + 1}"
 					class="mx-auto block w-full"
-					loading="lazy"
+					loading={si === 0 && pi <= initialPage ? 'eager' : 'lazy'}
 				/>
 			</div>
 		{/each}

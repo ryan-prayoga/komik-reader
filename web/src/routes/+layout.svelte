@@ -7,6 +7,7 @@
 	import { localData } from '$lib/local/data.svelte';
 	import { syncEngine } from '$lib/local/sync.svelte';
 	import InstallPrompt from '$lib/components/InstallPrompt.svelte';
+	import Toast from '$lib/components/ui/Toast.svelte';
 	import OfflineBanner from '$lib/components/OfflineBanner.svelte';
 	import Sidebar from '$lib/components/nav/Sidebar.svelte';
 	import BottomNav from '$lib/components/nav/BottomNav.svelte';
@@ -59,6 +60,7 @@
 		<BottomNav user={data.user} onmore={() => (moreOpen = true)} />
 		<MoreSheet bind:open={moreOpen} user={data.user} {canLogin} />
 		<InstallPrompt />
+		<Toast />
 	</div>
 {:else if isReader}
 	<div class="min-h-screen bg-black text-text">

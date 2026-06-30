@@ -10,7 +10,7 @@
 		<WifiOff size={15} />
 		<span>
 			Offline — baca chapter tersimpan di
-			<a href="/offline" class="font-medium underline hover:no-underline">Perangkat</a>
+			<a href="/downloads" class="font-medium underline hover:no-underline">Perangkat</a>
 		</span>
 	</div>
 {/if}

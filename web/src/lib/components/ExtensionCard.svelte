@@ -3,47 +3,11 @@
 	import { apiUrl } from '$lib/graphql/client';
 	import { updateExtension } from '$lib/graphql/api';
 	import { preferences } from '$lib/preferences.svelte';
+	import { langDisplay } from '$lib/lang';
 	import Puzzle from '@lucide/svelte/icons/puzzle';
 	import Users from '@lucide/svelte/icons/users';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
-
-	const LANG_META: Record<string, { flag: string; name: string }> = {
-		all: { flag: '🌐', name: 'Multi-bahasa' },
-		id: { flag: '🇮🇩', name: 'Indonesia' },
-		en: { flag: '🇬🇧', name: 'English' },
-		ja: { flag: '🇯🇵', name: '日本語' },
-		zh: { flag: '🇨🇳', name: '中文' },
-		'zh-Hans': { flag: '🇨🇳', name: 'Mandarin Sederhana' },
-		'zh-Hant': { flag: '🇹🇼', name: 'Mandarin Tradisional' },
-		ko: { flag: '🇰🇷', name: '한국어' },
-		ar: { flag: '🇸🇦', name: 'العربية' },
-		de: { flag: '🇩🇪', name: 'Deutsch' },
-		es: { flag: '🇪🇸', name: 'Español' },
-		fr: { flag: '🇫🇷', name: 'Français' },
-		it: { flag: '🇮🇹', name: 'Italiano' },
-		pt: { flag: '🇵🇹', name: 'Português' },
-		'pt-BR': { flag: '🇧🇷', name: 'Português (Brasil)' },
-		ru: { flag: '🇷🇺', name: 'Русский' },
-		tr: { flag: '🇹🇷', name: 'Türkçe' },
-		pl: { flag: '🇵🇱', name: 'Polski' },
-		vi: { flag: '🇻🇳', name: 'Tiếng Việt' },
-		th: { flag: '🇹🇭', name: 'ภาษาไทย' },
-		bg: { flag: '🇧🇬', name: 'Български' },
-		ca: { flag: '🏳️', name: 'Català' },
-		cs: { flag: '🇨🇿', name: 'Čeština' },
-		nl: { flag: '🇳🇱', name: 'Nederlands' },
-		ro: { flag: '🇷🇴', name: 'Română' },
-		uk: { flag: '🇺🇦', name: 'Українська' },
-		hu: { flag: '🇭🇺', name: 'Magyar' },
-		ms: { flag: '🇲🇾', name: 'Bahasa Melayu' },
-		fil: { flag: '🇵🇭', name: 'Filipino' }
-	};
-
-	function langDisplay(code: string): string {
-		const m = LANG_META[code];
-		return m ? `${m.flag} ${m.name}` : code;
-	}
 
 	interface Props {
 		extension: Extension;

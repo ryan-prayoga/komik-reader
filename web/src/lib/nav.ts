@@ -6,7 +6,6 @@ import History from '@lucide/svelte/icons/history';
 import FolderTree from '@lucide/svelte/icons/folder-tree';
 import Puzzle from '@lucide/svelte/icons/puzzle';
 import Download from '@lucide/svelte/icons/download';
-import WifiOff from '@lucide/svelte/icons/wifi-off';
 import Settings from '@lucide/svelte/icons/settings';
 import Shield from '@lucide/svelte/icons/shield';
 
@@ -29,7 +28,6 @@ export const manageNav: NavItem[] = [
 	{ href: '/categories', label: 'Categories', icon: FolderTree },
 	{ href: '/extensions', label: 'Extensions', icon: Puzzle },
 	{ href: '/downloads', label: 'Downloads', icon: Download },
-	{ href: '/offline', label: 'Offline', icon: WifiOff },
 	{ href: '/settings', label: 'Settings', icon: Settings }
 ];
 

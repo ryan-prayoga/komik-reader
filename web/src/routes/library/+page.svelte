@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { localData } from '$lib/local/data.svelte';
 	import { syncEngine } from '$lib/local/sync.svelte';
@@ -6,19 +7,22 @@
 	import MangaGrid from '$lib/components/MangaGrid.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import ContinueReading from '$lib/components/ContinueReading.svelte';
-	import { Button, Badge, EmptyState } from '$lib/components/ui';
+	import { Button, Badge, EmptyState, Spinner } from '$lib/components/ui';
 	import Cloud from '@lucide/svelte/icons/cloud';
 	import type { RecentChapter } from '$lib/graphql/types';
+
+	onMount(() => {
+		localData.reload();
+	});
 
 	const categoryId = $derived(
 		$page.url.searchParams.get('category') ? Number($page.url.searchParams.get('category')) : null
 	);
 
-	const items = $derived(
-		categoryId
-			? localData.library.filter((l) => l.categoryIds.includes(categoryId))
-			: localData.library
-	);
+	const items = $derived.by(() => {
+		const lib = localData.library;
+		return categoryId ? lib.filter((l) => l.categoryIds.includes(categoryId)) : lib;
+	});
 
 	// Recent reads as a Continue-Reading rail — deduplicated per manga, latest chapter only.
 	const recent = $derived.by<RecentChapter[]>(() => {
@@ -81,7 +85,9 @@
 		</div>
 	{/if}
 
-	{#if items.length === 0}
+	{#if !localData.ready}
+		<div class="flex justify-center py-20 text-muted"><Spinner size={28} /></div>
+	{:else if items.length === 0}
 		<EmptyState
 			title="Library masih kosong"
 			description="Browse komik lalu tap + Library di halaman detail."
