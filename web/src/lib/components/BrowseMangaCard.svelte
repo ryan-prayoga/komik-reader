@@ -103,7 +103,7 @@
 		{/if}
 
 		{#if format()}
-			<span class="absolute left-2 top-2 rounded px-1.5 py-0.5 text-[9px] font-bold tracking-wide backdrop-blur-sm {format()!.cls}">
+			<span class="absolute left-2 top-3 rounded-md px-2 py-1 text-[11px] font-bold tracking-wide backdrop-blur-sm {format()!.cls}">
 				{format()!.label}
 			</span>
 		{/if}
@@ -111,10 +111,10 @@
 		<button
 			type="button"
 			onclick={toggleLibrary}
-			class="absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-lg transition {inLibrary ? 'text-accent' : 'text-white/70 opacity-0 group-hover:opacity-100'} {saving ? 'pointer-events-none opacity-60' : ''}"
+			class="absolute right-2 top-2 flex h-10 w-10 items-center justify-center rounded-xl transition {inLibrary ? 'text-accent' : 'text-white/70 opacity-0 group-hover:opacity-100'} {saving ? 'pointer-events-none opacity-60' : ''}"
 			aria-label={inLibrary ? 'Hapus dari library' : 'Tambah ke library'}
 		>
-			<Bookmark size={15} fill={inLibrary ? 'currentColor' : 'none'} stroke-width={2} />
+			<Bookmark size={22} fill={inLibrary ? 'currentColor' : 'none'} stroke-width={2} />
 		</button>
 
 		{#if statusInfo()}

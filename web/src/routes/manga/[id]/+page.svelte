@@ -15,6 +15,7 @@
 	import LibraryButton from '$lib/components/LibraryButton.svelte';
 	import { localData } from '$lib/local/data.svelte';
 	import { Button, Badge, Card, EmptyState, Spinner, Input, Select, Dropdown, IconButton } from '$lib/components/ui';
+	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import BookOpen from '@lucide/svelte/icons/book-open';
 	import DownloadIcon from '@lucide/svelte/icons/download';
 	import Check from '@lucide/svelte/icons/check';
@@ -157,6 +158,15 @@
 			{error}
 		</div>
 	{:else if manga}
+		<!-- Fixed back button -->
+		<a
+			href="/browse/{manga.sourceId}"
+			class="fixed left-4 top-[68px] z-20 inline-flex items-center gap-1 rounded-full bg-bg/85 px-3 py-1.5 text-sm text-muted shadow backdrop-blur transition hover:text-accent lg:left-64 lg:top-4"
+		>
+			<ArrowLeft size={14} />
+			Source
+		</a>
+
 		<!-- Hero with blurred backdrop -->
 		<div class="relative -mx-4 -mt-4 overflow-hidden lg:-mx-8 lg:-mt-8">
 			{#if manga.thumbnailUrl}
