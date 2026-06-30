@@ -1,18 +1,21 @@
 import { gql } from './client';
 import type {
 	AboutServer,
+	BrowseManga,
 	Category,
 	Chapter,
 	DownloadStatus,
 	Extension,
 	FetchMangaType,
+	FilterChangeInput,
 	HistoryChapter,
 	LibraryManga,
 	Manga,
 	MangaDetail,
 	RecentChapter,
 	ServerSettings,
-	Source
+	Source,
+	SourceFilter
 } from './types';
 
 const EXTENSION_FIELDS = `
@@ -87,24 +90,156 @@ export async function getInstalledSources(isNsfw: boolean | null = false): Promi
 	return data.sources.nodes;
 }
 
+export async function getSourceById(id: string): Promise<(Source & { baseUrl?: string }) | null> {
+	try {
+		const data = await gql<{ source: Source & { baseUrl?: string } }>(
+			`query($id: LongString!) {
+				source(id: $id) {
+					${SOURCE_FIELDS}
+					baseUrl
+				}
+			}`,
+			{ id }
+		);
+		return data.source;
+	} catch {
+		try {
+			const data = await gql<{ source: Source }>(
+				`query($id: LongString!) {
+					source(id: $id) { ${SOURCE_FIELDS} }
+				}`,
+				{ id }
+			);
+			return data.source;
+		} catch {
+			return null;
+		}
+	}
+}
+
 export async function fetchSourceManga(
 	sourceId: string,
 	type: FetchMangaType,
 	page: number,
-	query = ''
+	query = '',
+	filters: FilterChangeInput[] = []
 ): Promise<{ mangas: Manga[]; hasNextPage: boolean }> {
 	const data = await gql<{
 		fetchSourceManga: { mangas: Manga[]; hasNextPage: boolean };
 	}>(
-		`mutation($source: LongString!, $type: FetchSourceMangaType!, $page: Int!, $query: String) {
-			fetchSourceManga(input: { source: $source, type: $type, page: $page, query: $query }) {
+		`mutation($source: LongString!, $type: FetchSourceMangaType!, $page: Int!, $query: String, $filters: [FilterChangeInput!]) {
+			fetchSourceManga(input: { source: $source, type: $type, page: $page, query: $query, filters: $filters }) {
 				hasNextPage
 				mangas { ${MANGA_FIELDS} }
 			}
 		}`,
-		{ source: sourceId, type, page, query: query || null }
+		{ source: sourceId, type, page, query: query || null, filters: filters.length ? filters : null }
 	);
 	return data.fetchSourceManga;
+}
+
+type MangaEnrichment = {
+	id: number;
+	status: string;
+	genre: string[];
+	latestUploadedChapter: { name: string; chapterNumber: number; uploadDate: string } | null;
+};
+
+export async function getMangasDetail(ids: number[]): Promise<MangaEnrichment[]> {
+	if (!ids.length) return [];
+	try {
+		const data = await gql<{ mangas: { nodes: MangaEnrichment[] } }>(
+			`query($ids: [Int!]) {
+				mangas(filter: { id: { in: $ids } }) {
+					nodes {
+						id status genre
+						latestUploadedChapter { name chapterNumber uploadDate }
+					}
+				}
+			}`,
+			{ ids }
+		);
+		return data.mangas.nodes;
+	} catch {
+		return [];
+	}
+}
+
+export async function fetchBrowseManga(
+	sourceId: string,
+	type: FetchMangaType,
+	page: number,
+	query = '',
+	filters: FilterChangeInput[] = []
+): Promise<{ mangas: BrowseManga[]; hasNextPage: boolean }> {
+	const fields = `
+		id title thumbnailUrl inLibrary sourceId
+		status genre
+		latestUploadedChapter { name chapterNumber uploadDate }
+	`;
+	const data = await gql<{
+		fetchSourceManga: { mangas: BrowseManga[]; hasNextPage: boolean };
+	}>(
+		`mutation($source: LongString!, $type: FetchSourceMangaType!, $page: Int!, $query: String, $filters: [FilterChangeInput!]) {
+			fetchSourceManga(input: { source: $source, type: $type, page: $page, query: $query, filters: $filters }) {
+				hasNextPage
+				mangas { ${fields} }
+			}
+		}`,
+		{ source: sourceId, type, page, query: query || null, filters: filters.length ? filters : null }
+	);
+	return data.fetchSourceManga;
+}
+
+export async function getSourceFilters(sourceId: string): Promise<SourceFilter[]> {
+	try {
+		const data = await gql<{ source: { filters: unknown[] } }>(
+			`query($id: LongString!) {
+				source(id: $id) {
+					filters {
+						__typename
+						... on CheckBoxFilter { name }
+						... on HeaderFilter { name }
+						... on SelectFilter { name values }
+						... on SeparatorFilter { name }
+						... on SortFilter { name values }
+						... on TextFilter { name }
+						... on TriStateFilter { name }
+						... on GroupFilter {
+							name
+							filters {
+								__typename
+								... on CheckBoxFilter { name }
+								... on TriStateFilter { name }
+								... on TextFilter { name }
+								... on SelectFilter { name values }
+							}
+						}
+					}
+				}
+			}`,
+			{ id: sourceId }
+		);
+		return (data.source?.filters ?? []).map(initFilterState);
+	} catch (e) {
+		console.error('[getSourceFilters]', e);
+		return [];
+	}
+}
+
+function initFilterState(f: unknown): SourceFilter {
+	const filter = f as { __typename: string; name: string; values?: string[]; filters?: unknown[] };
+	switch (filter.__typename) {
+		case 'CheckBoxFilter': return { __typename: 'CheckBoxFilter', name: filter.name, state: false };
+		case 'SelectFilter': return { __typename: 'SelectFilter', name: filter.name, values: filter.values ?? [], state: 0 };
+		case 'SortFilter': return { __typename: 'SortFilter', name: filter.name, values: filter.values ?? [], state: null };
+		case 'TextFilter': return { __typename: 'TextFilter', name: filter.name, state: '' };
+		case 'TriStateFilter': return { __typename: 'TriStateFilter', name: filter.name, state: 'IGNORED' };
+		case 'GroupFilter': return { __typename: 'GroupFilter', name: filter.name, filters: (filter.filters ?? []).map(initFilterState) as Parameters<typeof initFilterState>[] extends never[] ? never : ReturnType<typeof initFilterState>[] } as import('./types').GroupFilter;
+		case 'HeaderFilter': return { __typename: 'HeaderFilter', name: filter.name };
+		case 'SeparatorFilter': return { __typename: 'SeparatorFilter', name: filter.name };
+		default: return { __typename: 'HeaderFilter', name: filter.name };
+	}
 }
 
 export async function fetchMangaDetail(id: number): Promise<MangaDetail> {

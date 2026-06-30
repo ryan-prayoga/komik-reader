@@ -129,6 +129,16 @@ export type ServerSettings = {
 	extensionRepos: string[];
 };
 
+export type BrowseManga = Manga & {
+	status: string;
+	genre: string[];
+	latestUploadedChapter: {
+		name: string;
+		chapterNumber: number;
+		uploadDate: string;
+	} | null;
+};
+
 export type HistoryChapter = {
 	id: number;
 	name: string;
@@ -141,4 +151,44 @@ export type HistoryChapter = {
 		title: string;
 		thumbnailUrl: string | null;
 	};
+};
+
+export type TriState = 'IGNORED' | 'INCLUDE' | 'EXCLUDE';
+
+export type CheckBoxFilter = { __typename: 'CheckBoxFilter'; name: string; state: boolean };
+export type HeaderFilter = { __typename: 'HeaderFilter'; name: string };
+export type SelectFilter = { __typename: 'SelectFilter'; name: string; values: string[]; state: number };
+export type SeparatorFilter = { __typename: 'SeparatorFilter'; name: string };
+export type SortFilter = {
+	__typename: 'SortFilter';
+	name: string;
+	values: string[];
+	state: { index: number; ascending: boolean } | null;
+};
+export type TextFilter = { __typename: 'TextFilter'; name: string; state: string };
+export type TriStateFilter = { __typename: 'TriStateFilter'; name: string; state: TriState };
+export type GroupFilter = {
+	__typename: 'GroupFilter';
+	name: string;
+	filters: (CheckBoxFilter | TriStateFilter | TextFilter | SelectFilter)[];
+};
+
+export type SourceFilter =
+	| CheckBoxFilter
+	| HeaderFilter
+	| SelectFilter
+	| SeparatorFilter
+	| SortFilter
+	| TextFilter
+	| TriStateFilter
+	| GroupFilter;
+
+export type FilterChangeInput = {
+	position: number;
+	checkBoxState?: boolean;
+	selectState?: number;
+	triState?: TriState;
+	sortState?: { ascending: boolean; index: number };
+	textState?: string;
+	groupState?: FilterChangeInput[];
 };
