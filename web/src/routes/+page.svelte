@@ -16,8 +16,12 @@
 	let error = $state('');
 
 	// Continue-reading from local history (works for everyone, no login).
+	// Only unfinished chapters — fully-read and marked-read rows are excluded.
 	const recent = $derived(
-		localData.history.slice(0, 6).map(
+		localData.history
+			.filter((h) => !h.isRead)
+			.slice(0, 6)
+			.map(
 			(h): RecentChapter => ({
 				id: h.chapterId,
 				name: h.chapterName,
