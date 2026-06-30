@@ -14,6 +14,7 @@ export type LocalHistory = {
 	// Added later; optional for backward-compat with rows written before this.
 	sourceId?: string | null;
 	chapterNumber?: number;
+	totalPages?: number;
 	deleted?: boolean;
 };
 

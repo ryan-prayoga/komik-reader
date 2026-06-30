@@ -10,9 +10,10 @@
 		onnearend?: () => void;
 		zoom?: number;
 		gap?: boolean;
+		initialPage?: number;
 	}
 
-	let { sections, onpage, onnearend, zoom = 1, gap = true }: Props = $props();
+	let { sections, onpage, onnearend, zoom = 1, gap = true, initialPage = 0 }: Props = $props();
 
 	// Track current page element for scroll-based progress
 	const pageEls = new Map<string, HTMLElement>();
@@ -68,6 +69,14 @@
 
 	onMount(() => {
 		let rafId: number;
+
+		if (initialPage > 0) {
+			// Scroll to last read page. Use rAF so elements are painted before scrolling.
+			requestAnimationFrame(() => {
+				const el = pageEls.get(`0-${initialPage}`);
+				el?.scrollIntoView({ block: 'start', behavior: 'instant' });
+			});
+		}
 
 		function onScroll() {
 			cancelAnimationFrame(rafId);

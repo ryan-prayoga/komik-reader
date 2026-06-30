@@ -1,9 +1,7 @@
 <script lang="ts">
-	import { page } from '$app/stores';
 	import { enqueueChapterDownload } from '$lib/graphql/api';
 	import Download from '@lucide/svelte/icons/download';
 	import Check from '@lucide/svelte/icons/check';
-	import LogIn from '@lucide/svelte/icons/log-in';
 	import Spinner from '$lib/components/ui/Spinner.svelte';
 
 	interface Props {
@@ -14,9 +12,6 @@
 	}
 
 	let { chapterId, isDownloaded = false, size = 'sm', onqueued }: Props = $props();
-
-	const guest = $derived(!$page.data.user && $page.data.authEnabled);
-	const loginHref = $derived(`/login?redirectTo=${encodeURIComponent($page.url.pathname)}`);
 
 	let loading = $state(false);
 	let error = $state('');
@@ -37,27 +32,20 @@
 
 	const cls = $derived(
 		size === 'md'
-			? 'gap-2 rounded-[var(--radius)] px-4 py-2 text-sm font-medium'
-			: 'gap-1 rounded-md px-2 py-1 text-xs'
+			? 'rounded-[var(--radius)] p-2'
+			: 'rounded-md p-1.5'
 	);
-	const iconSize = $derived(size === 'md' ? 16 : 13);
+	const iconSize = $derived(size === 'md' ? 16 : 14);
 </script>
 
 {#if isDownloaded}
-	<span class="inline-flex items-center {cls} bg-success/15 text-success">
-		<Check size={iconSize} /> Downloaded
+	<span class="inline-flex items-center {cls} bg-success/15 text-success" title="Sudah diunduh">
+		<Check size={iconSize} />
 	</span>
-{:else if guest}
-	<a
-		href={loginHref}
-		class="inline-flex items-center {cls} border border-border bg-surface-hover transition hover:border-accent"
-		onclick={(e) => e.stopPropagation()}
-	>
-		<LogIn size={iconSize} /> Download
-	</a>
 {:else}
 	<button
 		class="inline-flex items-center {cls} border border-border bg-surface-hover transition hover:border-accent disabled:opacity-50"
+		title="Download chapter"
 		disabled={loading}
 		onclick={(e) => {
 			e.preventDefault();
@@ -66,7 +54,6 @@
 		}}
 	>
 		{#if loading}<Spinner size={iconSize} />{:else}<Download size={iconSize} />{/if}
-		Download
 	</button>
 {/if}
 {#if error}

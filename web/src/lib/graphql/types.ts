@@ -51,6 +51,7 @@ export type RecentChapter = {
 	name: string;
 	mangaId: number;
 	lastPageRead: number;
+	totalPages?: number;
 	lastReadAt: string;
 	manga: {
 		id: number;

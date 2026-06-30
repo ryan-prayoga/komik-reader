@@ -54,6 +54,7 @@ class LocalData {
 		isRead: boolean;
 		sourceId?: string | null;
 		chapterNumber?: number;
+		totalPages?: number;
 	}) {
 		const existing = this.history.find((h) => h.chapterId === entry.chapterId);
 		const row: LocalHistory = {
@@ -63,6 +64,7 @@ class LocalData {
 			thumbnailUrl: entry.thumbnailUrl ?? existing?.thumbnailUrl ?? null,
 			sourceId: entry.sourceId ?? existing?.sourceId ?? null,
 			chapterNumber: entry.chapterNumber ?? existing?.chapterNumber,
+			totalPages: entry.totalPages ?? existing?.totalPages,
 			updatedAt: nowMs(),
 			deleted: false
 		};

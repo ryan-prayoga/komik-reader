@@ -18,6 +18,7 @@
 	// Paged mode
 	let pages = $state<string[]>([]);
 	let currentPage = $state(0);
+	let initialPage = $state(0);
 
 	// Webtoon sections (each section = one chapter's pages)
 	type Section = { chapter: Chapter; pages: string[] };
@@ -107,7 +108,8 @@
 				lastPage: index,
 				isRead: index >= pages.length - 1,
 				sourceId: mangaSourceId,
-				chapterNumber: current?.chapterNumber
+				chapterNumber: current?.chapterNumber,
+				totalPages: pages.length
 			});
 		}
 	}
@@ -129,7 +131,8 @@
 			lastPage: pageIdx,
 			isRead,
 			sourceId: mangaSourceId,
-			chapterNumber: section.chapter.chapterNumber
+			chapterNumber: section.chapter.chapterNumber,
+			totalPages: section.pages.length
 		});
 	}
 
@@ -181,6 +184,7 @@
 		error = '';
 		offlineMode = false;
 		currentPage = 0;
+		initialPage = localData.history.find((h) => h.chapterId === id)?.lastPage ?? 0;
 		currentSectionIdx = 0;
 		currentPageIdx = 0;
 		currentPageProgress = 0;
@@ -216,7 +220,10 @@
 				}
 
 				sections = [{ chapter: current ?? makeStubChapter(id), pages }];
-				if (pages.length > 0) updateChapterProgress(id, 0, false).catch(() => {});
+				if (initialPage > 0 && initialPage < pages.length) {
+					currentPage = initialPage;
+				}
+				if (pages.length > 0) updateChapterProgress(id, currentPage, false).catch(() => {});
 			} catch (e) {
 				if (cancelled) return;
 				const cached = await getCachedPageUrls(id);
@@ -225,6 +232,9 @@
 					pages = cached;
 					offlineMode = true;
 					sections = [{ chapter: makeStubChapter(id), pages: cached }];
+					if (initialPage > 0 && initialPage < cached.length) {
+						currentPage = initialPage;
+					}
 				} else {
 					error = e instanceof Error ? e.message : 'Gagal memuat reader';
 				}
@@ -304,6 +314,7 @@
 					gap={readerSettings.gap}
 					onpage={reportWebtoonPage}
 					onnearend={handleNearEnd}
+					{initialPage}
 				/>
 			</button>
 			{#if loadingNextChapter}

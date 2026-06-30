@@ -20,19 +20,26 @@
 			: localData.library
 	);
 
-	// Recent reads as a Continue-Reading rail (mapped from local history).
-	const recent = $derived(
-		localData.history.slice(0, 8).map(
-			(h): RecentChapter => ({
+	// Recent reads as a Continue-Reading rail — deduplicated per manga, latest chapter only.
+	const recent = $derived.by<RecentChapter[]>(() => {
+		const seen = new Set<number>();
+		const out: RecentChapter[] = [];
+		for (const h of localData.history) {
+			if (seen.has(h.mangaId)) continue;
+			seen.add(h.mangaId);
+			out.push({
 				id: h.chapterId,
 				name: h.chapterName,
 				mangaId: h.mangaId,
 				lastPageRead: h.lastPage,
+				totalPages: h.totalPages,
 				lastReadAt: '',
 				manga: { id: h.mangaId, title: h.mangaTitle, thumbnailUrl: h.thumbnailUrl }
-			})
-		)
-	);
+			});
+			if (out.length >= 8) break;
+		}
+		return out;
+	});
 
 	function lastRead(mangaId: number) {
 		return localData.history.find((h) => h.mangaId === mangaId) ?? null;

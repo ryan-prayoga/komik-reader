@@ -9,6 +9,13 @@
 		seeAllHref?: string;
 	}
 	let { chapters, title = 'Lanjut Baca', seeAllHref }: Props = $props();
+
+	function progressPct(ch: RecentChapter): number | null {
+		if (!ch.totalPages || ch.totalPages <= 1) return null;
+		if (ch.lastPageRead <= 0) return null;
+		if (ch.lastPageRead >= ch.totalPages - 1) return null;
+		return Math.round(((ch.lastPageRead + 1) / ch.totalPages) * 100);
+	}
 </script>
 
 {#if chapters.length > 0}
@@ -21,6 +28,7 @@
 		</div>
 		<div class="-mx-1 flex gap-3 overflow-x-auto px-1 pb-2">
 			{#each chapters as chapter (chapter.id)}
+				{@const pct = progressPct(chapter)}
 				<a
 					href="/read/{chapter.id}"
 					class="group relative w-32 shrink-0 overflow-hidden rounded-[var(--radius)] border border-border bg-surface shadow-(--shadow-card) transition hover:border-accent/40 sm:w-36"
@@ -39,6 +47,14 @@
 								<Play size={16} fill="currentColor" />
 							</span>
 						</div>
+						{#if pct !== null}
+							<div class="absolute bottom-0 left-0 right-0 bg-black/60 px-1.5 py-0.5 text-right">
+								<span class="text-[10px] font-medium text-white/90">{pct}%</span>
+							</div>
+							<div class="absolute bottom-0 left-0 right-0 h-[3px] bg-white/20">
+								<div class="h-full bg-accent" style="width: {pct}%"></div>
+							</div>
+						{/if}
 					</div>
 					<div class="p-2">
 						<p class="line-clamp-1 text-xs font-medium text-text">{chapter.manga.title}</p>

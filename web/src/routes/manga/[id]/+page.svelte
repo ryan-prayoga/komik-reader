@@ -146,7 +146,7 @@
 	function formatDate(ts: string) {
 		const n = Number(ts);
 		if (!n) return '';
-		return new Date(n).toLocaleDateString('id-ID');
+		return new Date(n).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
 	}
 </script>
 
@@ -325,16 +325,7 @@
 													close();
 												}}
 											>
-												<ChevronsDown size={15} /> Tandai ini & sebelumnya
-											</button>
-											<button
-												class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-text hover:bg-surface-hover"
-												onclick={() => {
-													markRange(chapter, 'newer');
-													close();
-												}}
-											>
-												<ChevronsUp size={15} /> Tandai ini & berikutnya
+												{#if sortDir === 'desc'}<ChevronsDown size={15} />{:else}<ChevronsUp size={15} />{/if} Tandai ini & sebelumnya
 											</button>
 										{/snippet}
 									</Dropdown>
