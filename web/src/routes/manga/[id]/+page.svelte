@@ -273,6 +273,7 @@
 				</div>
 			</div>
 		</div>
+		</div>
 
 		{#if manga.description}
 			<p class="mt-6 whitespace-pre-line text-sm leading-relaxed text-muted">{manga.description}</p>
