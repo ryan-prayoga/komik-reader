@@ -31,3 +31,6 @@ web/data/
 
 # Logs
 *.log
+
+# Playwright MCP artifacts
+.playwright-mcp/
