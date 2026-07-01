@@ -2,6 +2,7 @@
 	import type { BrowseManga } from '$lib/graphql/types';
 	import { apiUrl } from '$lib/graphql/client';
 	import { setMangaInLibrary } from '$lib/graphql/api';
+	import { localData } from '$lib/local/data.svelte';
 	import ImageOff from '@lucide/svelte/icons/image-off';
 	import Bookmark from '@lucide/svelte/icons/bookmark';
 
@@ -12,7 +13,7 @@
 
 	let { manga, href }: Props = $props();
 
-	let inLibrary = $state(manga.inLibrary);
+	const inLibrary = $derived(localData.isInLibrary(manga.id));
 	let saving = $state(false);
 
 	async function toggleLibrary(e: MouseEvent) {
@@ -20,12 +21,16 @@
 		e.stopPropagation();
 		if (saving) return;
 		saving = true;
-		const next = !inLibrary;
-		inLibrary = next;
 		try {
-			await setMangaInLibrary(manga.id, next);
-		} catch {
-			inLibrary = !next;
+			const next = await localData.toggleLibrary({
+				mangaId: manga.id,
+				title: manga.title,
+				thumbnailUrl: manga.thumbnailUrl,
+				sourceId: manga.sourceId
+			});
+			// Best-effort: also flag it in-library on the source server (extension
+			// update crons key off this). Local state above is the source of truth.
+			await setMangaInLibrary(manga.id, next).catch(() => {});
 		} finally {
 			saving = false;
 		}

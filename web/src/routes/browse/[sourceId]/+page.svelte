@@ -8,6 +8,7 @@
 	import { fetchBrowseManga, fetchChapters, fetchMangaDetail, getMangasDetail, getSourceById, getSourceFilters } from '$lib/graphql/api';
 	import { getCached, getMissingIds, setCache } from '$lib/stores/mangaDetailCache';
 	import { apiUrl } from '$lib/graphql/client';
+	import { localData } from '$lib/local/data.svelte';
 	import type {
 		BrowseManga,
 		FetchMangaType,
@@ -309,8 +310,8 @@
 
 	const displayMangas = $derived<BrowseManga[]>(
 		mangas.filter((m) => {
-			if (filterLib === 'in_library') return m.inLibrary;
-			if (filterLib === 'not_in_library') return !m.inLibrary;
+			if (filterLib === 'in_library') return localData.isInLibrary(m.id);
+			if (filterLib === 'not_in_library') return !localData.isInLibrary(m.id);
 			return true;
 		})
 	);
