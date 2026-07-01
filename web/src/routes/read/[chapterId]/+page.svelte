@@ -144,6 +144,8 @@
 		}
 	}
 
+	let lastReportedPageKey = '';
+
 	function reportWebtoonPage(
 		sectionIdx: number,
 		pageIdx: number,
@@ -156,6 +158,12 @@
 		currentChapterProgress = chapterProgress;
 		const section = sections[sectionIdx];
 		if (!section || !mangaId) return;
+		// Persisting (GraphQL mutation + IndexedDB write) is only needed once per page,
+		// not on every scroll-driven progress tick — guard so autoscroll doesn't fire
+		// dozens of writes/sec and stutter the main thread.
+		const pageKey = `${section.chapter.id}-${pageIdx}`;
+		if (pageKey === lastReportedPageKey) return;
+		lastReportedPageKey = pageKey;
 		const isRead = pageIdx >= section.pages.length - 1;
 		updateChapterProgress(section.chapter.id, pageIdx, isRead).catch(() => {});
 		localData.recordHistory({
