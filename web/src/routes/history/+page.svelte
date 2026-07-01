@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { localData } from '$lib/local/data.svelte';
 	import { syncEngine } from '$lib/local/sync.svelte';
 	import { getInstalledSources } from '$lib/graphql/api';
@@ -7,6 +8,9 @@
 	import { Button, Card, Badge, EmptyState } from '$lib/components/ui';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import Cloud from '@lucide/svelte/icons/cloud';
+	import BookOpen from '@lucide/svelte/icons/book-open';
+	import Clock from '@lucide/svelte/icons/clock';
+	import Flag from '@lucide/svelte/icons/flag';
 	import type { LocalHistory } from '$lib/local/types';
 
 	type Group = {
@@ -16,7 +20,6 @@
 		sourceId: string | null;
 		lastChapterId: number;
 		lastChapterName: string;
-		lastPage: number;
 		lastReadAt: number;
 		furthestRead: number | null;
 		count: number;
@@ -60,7 +63,6 @@
 				sourceId: rows.find((r) => r.sourceId)?.sourceId ?? librarySource.get(mangaId) ?? null,
 				lastChapterId: recent.chapterId,
 				lastChapterName: recent.chapterName,
-				lastPage: recent.lastPage,
 				lastReadAt: recent.updatedAt,
 				furthestRead: readNums.length ? Math.max(...readNums) : null,
 				count: rows.length
@@ -76,7 +78,15 @@
 
 	function formatDate(ts: number) {
 		if (!ts) return '';
-		return new Date(ts).toLocaleString('id-ID');
+		const diff = Date.now() - ts;
+		const mins = Math.floor(diff / 60000);
+		const hours = Math.floor(diff / 3600000);
+		const days = Math.floor(diff / 86400000);
+		if (mins < 1) return 'Baru saja';
+		if (mins < 60) return `${mins} menit lalu`;
+		if (hours < 24) return `${hours} jam lalu`;
+		if (days < 7) return `${days} hari lalu`;
+		return new Date(ts).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
 	}
 </script>
 
@@ -98,32 +108,44 @@
 		<Card padding="none">
 			<div class="divide-y divide-border">
 				{#each groups as g (g.mangaId)}
-					<div class="flex flex-wrap items-center gap-4 px-4 py-3">
-						<a href="/manga/{g.mangaId}" class="h-16 w-11 shrink-0 overflow-hidden rounded-lg bg-bg">
+					<div
+						class="flex cursor-pointer items-center gap-4 px-4 py-3 transition hover:bg-bg/60"
+						role="button"
+						tabindex="0"
+						onclick={() => goto(`/read/${g.lastChapterId}`)}
+						onkeydown={(e) => e.key === 'Enter' && goto(`/read/${g.lastChapterId}`)}
+					>
+						<div class="h-16 w-11 shrink-0 overflow-hidden rounded-lg bg-bg">
 							{#if g.thumbnailUrl}
 								<img src={g.thumbnailUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
 							{/if}
-						</a>
-						<a href="/manga/{g.mangaId}" class="min-w-0 flex-1">
-							<p class="truncate text-sm font-medium text-text">{g.mangaTitle}</p>
-							<p class="truncate text-xs text-muted">
-								{#if sourceLabel(g)}{sourceLabel(g)} · {/if}Terakhir: {g.lastChapterName}
-								{#if g.lastPage > 0} · hal. {g.lastPage + 1}{/if}
-							</p>
-							<p class="truncate text-[11px] text-muted">
-								{#if g.furthestRead != null}Sampai ch {g.furthestRead} · {/if}{formatDate(g.lastReadAt)}
-							</p>
-						</a>
-						<div class="flex shrink-0 items-center gap-2">
-							<Button href="/read/{g.lastChapterId}" size="sm">Lanjut</Button>
-							<Button
-								variant="ghost"
-								size="sm"
-								onclick={() => localData.removeHistoryByManga(g.mangaId)}
-							>
-								<Trash2 size={14} />
-							</Button>
 						</div>
+						<div class="min-w-0 flex-1">
+							<p class="truncate text-sm font-medium text-text">{g.mangaTitle}</p>
+							<p class="flex items-center gap-1 text-xs text-muted">
+								{#if sourceLabel(g)}<span class="shrink-0">{sourceLabel(g)} ·</span>{/if}
+								<BookOpen size={12} class="shrink-0" />
+								<span class="min-w-0 flex-1 truncate">{g.lastChapterName}</span>
+							</p>
+							<p class="flex items-center gap-1 text-[11px] text-muted">
+								<Clock size={11} class="shrink-0" />
+								<span>{formatDate(g.lastReadAt)}</span>
+								{#if g.furthestRead != null}
+									<Flag size={11} class="shrink-0" />
+									<span>Ch {g.furthestRead}</span>
+								{/if}
+							</p>
+						</div>
+						<Button
+							variant="ghost"
+							size="sm"
+							onclick={(e: MouseEvent) => {
+								e.stopPropagation();
+								localData.removeHistoryByManga(g.mangaId);
+							}}
+						>
+							<Trash2 size={14} />
+						</Button>
 					</div>
 				{/each}
 			</div>
