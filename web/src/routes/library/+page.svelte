@@ -6,10 +6,10 @@
 	import MangaCard from '$lib/components/MangaCard.svelte';
 	import MangaGrid from '$lib/components/MangaGrid.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
-	import ContinueReading from '$lib/components/ContinueReading.svelte';
-	import { Button, Badge, EmptyState, Spinner } from '$lib/components/ui';
+	import { Button, Badge, EmptyState, Spinner, Input, Modal } from '$lib/components/ui';
 	import Cloud from '@lucide/svelte/icons/cloud';
-	import type { RecentChapter } from '$lib/graphql/types';
+	import FolderTree from '@lucide/svelte/icons/folder-tree';
+	import Trash2 from '@lucide/svelte/icons/trash-2';
 
 	onMount(() => {
 		localData.reload();
@@ -24,29 +24,23 @@
 		return categoryId ? lib.filter((l) => l.categoryIds.includes(categoryId)) : lib;
 	});
 
-	// Recent reads as a Continue-Reading rail — deduplicated per manga, latest chapter only.
-	const recent = $derived.by<RecentChapter[]>(() => {
-		const seen = new Set<number>();
-		const out: RecentChapter[] = [];
-		for (const h of localData.history) {
-			if (seen.has(h.mangaId)) continue;
-			seen.add(h.mangaId);
-			out.push({
-				id: h.chapterId,
-				name: h.chapterName,
-				mangaId: h.mangaId,
-				lastPageRead: h.lastPage,
-				totalPages: h.totalPages,
-				lastReadAt: '',
-				manga: { id: h.mangaId, title: h.mangaTitle, thumbnailUrl: h.thumbnailUrl }
-			});
-			if (out.length >= 8) break;
-		}
-		return out;
-	});
-
 	function lastRead(mangaId: number) {
 		return localData.history.find((h) => h.mangaId === mangaId) ?? null;
+	}
+
+	let manageOpen = $state(false);
+	let newCategoryName = $state('');
+
+	async function createCategory() {
+		const name = newCategoryName.trim();
+		if (!name) return;
+		await localData.createCategory(name);
+		newCategoryName = '';
+	}
+
+	async function removeCategory(id: number, name: string) {
+		if (!confirm(`Hapus kategori "${name}"?`)) return;
+		await localData.deleteCategory(id);
 	}
 </script>
 
@@ -59,10 +53,8 @@
 		{/if}
 	</PageHeader>
 
-	<ContinueReading chapters={recent} />
-
-	{#if localData.categories.length > 0}
-		<div class="mb-4 flex flex-wrap gap-2">
+	<div class="mb-4 flex flex-wrap items-center gap-2">
+		{#if localData.categories.length > 0}
 			<a
 				href="/library"
 				class="rounded-full border px-3 py-1 text-xs font-medium transition {!categoryId
@@ -82,8 +74,15 @@
 					{category.name}
 				</a>
 			{/each}
-		</div>
-	{/if}
+		{/if}
+		<button
+			type="button"
+			class="flex items-center gap-1 rounded-full border border-dashed border-border px-3 py-1 text-xs font-medium text-muted transition hover:border-accent hover:text-accent"
+			onclick={() => (manageOpen = true)}
+		>
+			<FolderTree size={13} /> Kelola Kategori
+		</button>
+	</div>
 
 	{#if !localData.ready}
 		<div class="flex justify-center py-20 text-muted"><Spinner size={28} /></div>
@@ -120,3 +119,33 @@
 		</MangaGrid>
 	{/if}
 </section>
+
+<Modal bind:open={manageOpen} title="Kelola Kategori">
+	<form
+		class="mb-4 flex flex-wrap items-end gap-2"
+		onsubmit={(e) => {
+			e.preventDefault();
+			createCategory();
+		}}
+	>
+		<Input bind:value={newCategoryName} placeholder="Nama kategori baru..." class="min-w-[160px] flex-1" />
+		<Button type="submit" size="sm" disabled={!newCategoryName.trim()}>Buat</Button>
+	</form>
+	{#if localData.categories.length === 0}
+		<p class="text-xs text-muted">Belum ada kategori.</p>
+	{:else}
+		<div class="divide-y divide-border">
+			{#each localData.categories as category (category.id)}
+				<div class="flex items-center justify-between gap-3 py-2">
+					<div class="min-w-0">
+						<p class="text-sm font-medium text-text">{category.name}</p>
+						<p class="text-xs text-muted">{localData.mangaInCategory(category.id).length} manga</p>
+					</div>
+					<Button variant="ghost" size="sm" onclick={() => removeCategory(category.id, category.name)}>
+						<Trash2 size={14} /> Hapus
+					</Button>
+				</div>
+			{/each}
+		</div>
+	{/if}
+</Modal>

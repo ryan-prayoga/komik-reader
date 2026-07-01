@@ -23,7 +23,7 @@
 	<h3 class="mb-2 text-sm font-medium text-muted">Kategori</h3>
 	{#if all.length === 0}
 		<p class="text-xs text-muted">
-			Belum ada kategori. <a href="/categories" class="text-accent hover:underline">Buat di sini</a>
+			Belum ada kategori. <a href="/library" class="text-accent hover:underline">Buat di sini</a>
 		</p>
 	{:else}
 		<div class="flex flex-wrap gap-2">

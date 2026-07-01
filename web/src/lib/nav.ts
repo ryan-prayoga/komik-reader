@@ -3,7 +3,6 @@ import House from '@lucide/svelte/icons/house';
 import LibraryBig from '@lucide/svelte/icons/library-big';
 import Search from '@lucide/svelte/icons/search';
 import History from '@lucide/svelte/icons/history';
-import FolderTree from '@lucide/svelte/icons/folder-tree';
 import Puzzle from '@lucide/svelte/icons/puzzle';
 import Download from '@lucide/svelte/icons/download';
 import Settings from '@lucide/svelte/icons/settings';
@@ -25,7 +24,6 @@ export const primaryNav: NavItem[] = [
 
 /** Secondary destinations — sidebar lower section + mobile "More" sheet. */
 export const manageNav: NavItem[] = [
-	{ href: '/categories', label: 'Categories', icon: FolderTree },
 	{ href: '/extensions', label: 'Extensions', icon: Puzzle },
 	{ href: '/downloads', label: 'Downloads', icon: Download },
 	{ href: '/settings', label: 'Settings', icon: Settings }
