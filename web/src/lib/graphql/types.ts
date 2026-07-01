@@ -81,31 +81,6 @@ export type Chapter = {
 
 export type FetchMangaType = 'POPULAR' | 'LATEST' | 'SEARCH';
 
-export type DownloaderState = 'STARTED' | 'STOPPED';
-export type DownloadState = 'QUEUED' | 'DOWNLOADING' | 'FINISHED' | 'ERROR';
-
-export type DownloadItem = {
-	position: number;
-	progress: number;
-	state: DownloadState;
-	tries: number;
-	chapter: {
-		id: number;
-		name: string;
-		isDownloaded: boolean;
-	};
-	manga: {
-		id: number;
-		title: string;
-		thumbnailUrl: string | null;
-	};
-};
-
-export type DownloadStatus = {
-	queue: DownloadItem[];
-	state: DownloaderState;
-};
-
 export type Category = {
 	id: number;
 	name: string;

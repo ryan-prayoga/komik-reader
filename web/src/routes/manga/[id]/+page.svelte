@@ -2,14 +2,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { apiUrl } from '$lib/graphql/client';
-	import {
-		enqueueChapterDownloads,
-		fetchChapters,
-		fetchMangaDetail,
-		markChapterRead,
-		markChaptersRead,
-		startDownloader
-	} from '$lib/graphql/api';
+	import { fetchChapters, fetchMangaDetail, markChapterRead, markChaptersRead } from '$lib/graphql/api';
 	import DownloadButton from '$lib/components/DownloadButton.svelte';
 	import CategoryPicker from '$lib/components/CategoryPicker.svelte';
 	import LibraryButton from '$lib/components/LibraryButton.svelte';
@@ -35,8 +28,6 @@
 	import type { Chapter, MangaDetail } from '$lib/graphql/types';
 
 	const mangaId = $derived(Number($page.params.id));
-
-	const guest = $derived(!$page.data.user && $page.data.authEnabled);
 
 	let manga = $state<MangaDetail | null>(null);
 	let chapters = $state<Chapter[]>([]);
@@ -76,8 +67,8 @@
 				return false;
 			if (readFilter === 'read' && !c.read) return false;
 			if (readFilter === 'unread' && c.read) return false;
-			if (downloadFilter === 'downloaded' && !c.isDownloaded) return false;
-			if (downloadFilter === 'not' && c.isDownloaded) return false;
+			if (downloadFilter === 'downloaded' && !offlineIds.has(c.id)) return false;
+			if (downloadFilter === 'not' && offlineIds.has(c.id)) return false;
 			return true;
 		});
 		return list.sort((a, b) =>
@@ -142,29 +133,16 @@
 		try {
 			const sorted = [...merged].sort((a, b) => a.sourceOrder - b.sourceOrder);
 			const base = filter === 'unread' ? sorted.filter((c) => !c.read) : sorted;
-			if (guest) {
-				const targets = base.filter((c) => !offlineIds.has(c.id));
-				if (targets.length === 0) {
-					notice = filter === 'unread' ? 'Semua chapter belum dibaca sudah offline.' : 'Semua chapter sudah offline.';
-					return;
-				}
-				for (const c of targets) {
-					await cacheChapterToDevice(c.id, mangaId, manga!.title, c.name, undefined, manga!.thumbnailUrl, manga!.sourceId);
-					offlineIds = new Set([...offlineIds, c.id]);
-				}
-				notice = `${targets.length} chapter tersimpan di perangkat.`;
-			} else {
-				const pending = base
-					.filter((c) => !c.isDownloaded)
-					.map((c) => c.id);
-				if (pending.length === 0) {
-					notice = filter === 'unread' ? 'Semua chapter belum dibaca sudah terdownload.' : 'Semua chapter sudah terdownload.';
-					return;
-				}
-				await startDownloader();
-				await enqueueChapterDownloads(pending);
-				notice = `${pending.length} chapter masuk antrian. Cek halaman Downloads.`;
+			const targets = base.filter((c) => !offlineIds.has(c.id));
+			if (targets.length === 0) {
+				notice = filter === 'unread' ? 'Semua chapter belum dibaca sudah offline.' : 'Semua chapter sudah offline.';
+				return;
 			}
+			for (const c of targets) {
+				await cacheChapterToDevice(c.id, mangaId, manga!.title, c.name, undefined, manga!.thumbnailUrl, manga!.sourceId);
+				offlineIds = new Set([...offlineIds, c.id]);
+			}
+			notice = `${targets.length} chapter tersimpan di perangkat.`;
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Gagal download';
 		} finally {
@@ -286,12 +264,7 @@
 
 		{#if notice}
 			<div class="mt-6 flex items-start justify-between gap-2 rounded-[var(--radius)] border border-success/30 bg-success/10 p-3 text-sm text-success">
-				<span>
-					{notice}
-					{#if notice.includes('antrian')}
-						<a href="/downloads" class="ml-1 underline">Lihat antrian →</a>
-					{/if}
-				</span>
+				<span>{notice}</span>
 				<button onclick={() => (notice = '')} class="shrink-0 opacity-60 hover:opacity-100" aria-label="Tutup">✕</button>
 			</div>
 		{/if}
@@ -370,14 +343,12 @@
 								<div class="flex shrink-0 items-center gap-1">
 									<DownloadButton
 										chapterId={chapter.id}
-										isDownloaded={chapter.isDownloaded}
 										isOffline={offlineIds.has(chapter.id)}
 										mangaId={mangaId}
 										mangaTitle={manga?.title}
 										chapterName={chapter.name}
 										thumbnailUrl={manga?.thumbnailUrl}
 										sourceId={manga?.sourceId}
-										onqueued={() => (notice = 'Chapter masuk antrian download.')}
 										oncached={() => {
 											offlineIds = new Set([...offlineIds, chapter.id]);
 											notice = 'Chapter tersimpan di perangkat.';
