@@ -34,7 +34,7 @@
 			onclick={close}
 		></button>
 		<div
-			class="relative z-10 w-full max-w-md rounded-2xl border border-border bg-bg shadow-(--shadow-float)"
+			class="panel-cut relative z-10 w-full max-w-md border-[1.5px] border-border bg-bg shadow-(--shadow-float)"
 			transition:scale={{ duration: 180, start: 0.95 }}
 			role="dialog"
 			aria-modal="true"
@@ -44,7 +44,7 @@
 				<button
 					type="button"
 					aria-label="Tutup"
-					class="rounded-lg p-1.5 text-muted transition hover:bg-surface hover:text-text"
+					class="rounded-[var(--radius-sm)] p-1.5 text-muted transition hover:bg-surface hover:text-text"
 					onclick={close}
 				>
 					<X size={18} />

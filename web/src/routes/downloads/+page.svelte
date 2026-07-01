@@ -6,6 +6,7 @@
 	import { apiUrl } from '$lib/graphql/client';
 	import { localData } from '$lib/local/data.svelte';
 	import { showToast } from '$lib/stores/toast.svelte';
+	import { relativeTime as formatDate } from '$lib/utils/format';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import { Button, Card, EmptyState, Spinner, Modal } from '$lib/components/ui';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
@@ -92,18 +93,6 @@
 		});
 	}
 
-	function formatDate(ts: number) {
-		const diff = Date.now() - ts;
-		const mins = Math.floor(diff / 60000);
-		const hours = Math.floor(diff / 3600000);
-		const days = Math.floor(diff / 86400000);
-		if (mins < 1) return 'Baru saja';
-		if (mins < 60) return `${mins} menit lalu`;
-		if (hours < 24) return `${hours} jam lalu`;
-		if (days < 7) return `${days} hari lalu`;
-		return new Date(ts).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
-	}
-
 	function sourceLabel(sourceId?: string | null): string | null {
 		if (!sourceId) return null;
 		return sourceNames[sourceId] ?? null;
@@ -153,7 +142,7 @@
 						class="flex w-full items-center gap-3 px-3 py-3 text-left"
 						onclick={() => toggleGroup(key)}
 					>
-						<div class="h-14 w-10 shrink-0 overflow-hidden rounded bg-surface-hover">
+						<div class="h-14 w-10 shrink-0 overflow-hidden rounded-[var(--radius-sm)] bg-surface-hover">
 							{#if group.thumbnailUrl}
 								<img src={apiUrl(group.thumbnailUrl)} alt="" class="h-full w-full object-cover" />
 							{/if}
@@ -176,7 +165,7 @@
 					{#if open}
 						<div class="divide-y divide-border border-t border-border">
 							{#each group.chapters as chapter (chapter.chapterId)}
-								<div class="flex items-center justify-between gap-3 px-4 py-2.5">
+								<div class="flex items-center justify-between gap-3 px-4 py-3">
 									<div class="min-w-0">
 										<p class="truncate text-sm text-text">{chapter.chapterName}</p>
 										<p class="text-xs text-muted">{chapter.pageCount} hlm · {formatDate(chapter.cachedAt)}</p>
@@ -189,7 +178,7 @@
 									</div>
 								</div>
 							{/each}
-							<div class="flex gap-2 border-t border-border px-4 py-2.5">
+							<div class="flex gap-2 border-t border-border px-4 py-3">
 								<Button variant="ghost" size="sm" onclick={() => confirmRemoveRead(group)}>
 									<Trash2 size={13} /> Hapus sudah dibaca
 								</Button>

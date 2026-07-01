@@ -54,7 +54,7 @@
 					<button
 						type="button"
 						aria-label="Tutup"
-						class="rounded-lg p-1.5 text-muted transition hover:bg-surface hover:text-text"
+						class="rounded-[var(--radius-sm)] p-1.5 text-muted transition hover:bg-surface hover:text-text"
 						onclick={close}
 					>
 						<X size={18} />

@@ -6,34 +6,41 @@
 /* ── Raw palette: light defaults in :root, dark overrides in .dark ────────── */
 :root {
 	--bg: #ffffff;
-	--surface: #f5f5f5;
-	--surface-hover: #ececec;
-	--border: #e5e5e5;
+	--surface: #f6f5f3;
+	--surface-hover: #ececea;
+	--border: #dcdad5;
 	--text: #171717;
 	--muted: #6b7280;
-	--accent: #f97316;
-	--accent-hover: #ea580c;
+	/* "Obi red" — the promo band wrapped around printed manga volumes. */
+	--accent: #e63946;
+	--accent-hover: #c62b37;
 	--danger: #ef4444;
 	--success: #22c55e;
 
 	--radius: 0.75rem;
 	--radius-sm: 0.5rem;
 	--radius-lg: 1rem;
+	/* Corner size for the "panel-cut" signature shape (see components/ui/Card etc). */
+	--panel-cut: 14px;
 
 	--shadow-sm: 0 1px 2px rgb(0 0 0 / 0.06);
 	--shadow-md: 0 4px 12px rgb(0 0 0 / 0.08);
 	--shadow-lg: 0 12px 32px rgb(0 0 0 / 0.12);
+
+	--font-display: 'Big Shoulders Display', ui-sans-serif, system-ui, sans-serif;
+	--font-body:
+		'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
 .dark {
-	--bg: #0a0a0a;
-	--surface: #141414;
-	--surface-hover: #1c1c1c;
-	--border: #2a2a2a;
+	--bg: #0b0a09;
+	--surface: #161412;
+	--surface-hover: #1e1b18;
+	--border: #332e29;
 	--text: #f5f5f5;
 	--muted: #a3a3a3;
-	--accent: #f97316;
-	--accent-hover: #ea580c;
+	--accent: #e63946;
+	--accent-hover: #f0525e;
 	--danger: #ef4444;
 	--success: #22c55e;
 
@@ -61,11 +68,47 @@
 	--shadow-pop: var(--shadow-md);
 	--shadow-float: var(--shadow-lg);
 
+	--font-display: var(--font-display);
+	--font-body: var(--font-body);
+
 	--animate-shimmer: shimmer 1.6s ease-in-out infinite;
 	@keyframes shimmer {
 		0% { background-position: -200% 0; }
 		100% { background-position: 200% 0; }
 	}
+}
+
+/* Self-hosted (PWA-precached) variable fonts — see static/fonts/. */
+@font-face {
+	font-family: 'Big Shoulders Display';
+	font-style: normal;
+	font-weight: 400 900;
+	font-display: swap;
+	src: url('/fonts/big-shoulders-display-variable.woff2') format('woff2');
+}
+
+@font-face {
+	font-family: 'Inter';
+	font-style: normal;
+	font-weight: 400 900;
+	font-display: swap;
+	src: url('/fonts/inter-variable.woff2') format('woff2');
+}
+
+/*
+ * Signature shape — one corner sheared off, like a comic panel cut on the
+ * page grid. Used on Card/Modal/MangaCard instead of a rounded corner.
+ * Trades border-radius for a straight diagonal, so don't combine the two.
+ */
+.panel-cut {
+	border-radius: 0;
+	clip-path: polygon(
+		0 0,
+		calc(100% - var(--panel-cut)) 0,
+		100% var(--panel-cut),
+		100% 100%,
+		0 100%
+	);
 }
 
 html,
@@ -76,13 +119,7 @@ body {
 body {
 	background-color: var(--bg);
 	color: var(--text);
-	font-family:
-		ui-sans-serif,
-		system-ui,
-		-apple-system,
-		BlinkMacSystemFont,
-		'Segoe UI',
-		sans-serif;
+	font-family: var(--font-body);
 	-webkit-font-smoothing: antialiased;
 	text-rendering: optimizeLegibility;
 }

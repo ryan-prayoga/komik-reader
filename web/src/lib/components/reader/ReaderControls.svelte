@@ -58,6 +58,7 @@
 	}: Props = $props();
 
 	let pickerOpen = $state(false);
+	const hasChapters = $derived(chapters.length > 0);
 
 	function scrollActiveTo(node: HTMLElement, isActive: boolean) {
 		if (isActive) {
@@ -67,7 +68,7 @@
 </script>
 
 <!-- Thin progress bar — always visible, z above chrome -->
-<div class="pointer-events-none fixed inset-x-0 top-0 z-50 h-0.5 bg-white/10">
+<div class="pointer-events-none fixed inset-x-0 top-0 z-50 h-0.5 bg-white/10 {hasChapters ? 'lg:right-72' : ''}">
 	<div
 		class="h-full bg-accent transition-[width] duration-150 ease-out"
 		style="width: {scrollProgress * 100}%"
@@ -76,7 +77,7 @@
 
 <!-- Top bar -->
 <div
-	class="fixed inset-x-0 top-0 z-30 transition-transform duration-200 {show
+	class="fixed inset-x-0 top-0 z-30 transition-transform duration-200 {hasChapters ? 'lg:right-72' : ''} {show
 		? 'translate-y-0'
 		: '-translate-y-full'}"
 >
@@ -134,7 +135,7 @@
 
 <!-- Bottom bar -->
 <div
-	class="fixed inset-x-0 bottom-0 z-30 transition-transform duration-200 {show
+	class="fixed inset-x-0 bottom-0 z-30 transition-transform duration-200 {hasChapters ? 'lg:right-72' : ''} {show
 		? 'translate-y-0'
 		: 'translate-y-full'}"
 	style="padding-bottom: env(safe-area-inset-bottom)"
@@ -178,7 +179,7 @@
 				onclick={() => {
 					if (chapters.length > 0) pickerOpen = true;
 				}}
-				class="flex flex-1 items-center justify-center gap-1.5 text-xs text-white/70 transition active:text-white"
+				class="flex flex-1 items-center justify-center gap-1.5 text-xs text-white/70 transition active:text-white {hasChapters ? 'lg:hidden' : ''}"
 			>
 				<BookOpen size={14} class="shrink-0" />
 				<span class="truncate">{chapterName || pageLabel}</span>
@@ -218,7 +219,7 @@
 	></div>
 	<div
 		transition:fly={{ y: 320, duration: 260, opacity: 1 }}
-		class="fixed inset-x-0 bottom-0 z-50 flex max-h-[65vh] flex-col rounded-t-2xl bg-[var(--color-surface)] shadow-2xl"
+		class="fixed inset-x-0 bottom-0 z-50 flex max-h-[65vh] flex-col rounded-t-2xl bg-[var(--color-surface)] shadow-(--shadow-float)"
 	>
 		<div
 			class="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3"
@@ -250,4 +251,34 @@
 			{/each}
 		</div>
 	</div>
+{/if}
+
+<!-- Desktop-only chapter dock — a persistent right rail, replaces the tap-to-open picker on lg:. -->
+{#if hasChapters}
+	<aside
+		class="fixed inset-y-0 right-0 z-30 hidden w-72 flex-col border-l border-white/10 bg-black/70 backdrop-blur-sm transition-opacity duration-200 lg:flex {show
+			? 'opacity-100'
+			: 'pointer-events-none opacity-0'}"
+	>
+		<div class="flex shrink-0 items-center gap-2 border-b border-white/10 px-4 py-4 text-white">
+			<List size={16} class="shrink-0 opacity-70" />
+			<span class="text-sm font-semibold">Daftar Chapter</span>
+		</div>
+		<div class="flex-1 overflow-y-auto">
+			{#each chapters as ch (ch.id)}
+				{@const isActive = ch.id === currentChapterId}
+				<a
+					href="/read/{ch.id}"
+					use:scrollActiveTo={isActive}
+					class="flex items-center px-4 py-2.5 text-sm transition hover:bg-white/5 {isActive
+						? 'bg-white/10 font-medium text-accent'
+						: ch.isRead
+							? 'text-white/40'
+							: 'text-white/80'}"
+				>
+					{ch.name}
+				</a>
+			{/each}
+		</div>
+	</aside>
 {/if}

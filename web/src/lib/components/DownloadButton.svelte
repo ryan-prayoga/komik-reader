@@ -65,7 +65,7 @@
 		}
 	}
 
-	const cls = $derived(size === 'md' ? 'rounded-[var(--radius)] p-2' : 'rounded-md p-1.5');
+	const cls = $derived(size === 'md' ? 'rounded-[var(--radius)] p-2' : 'rounded-[var(--radius-sm)] p-1.5');
 	const iconSize = $derived(size === 'md' ? 16 : 14);
 </script>
 

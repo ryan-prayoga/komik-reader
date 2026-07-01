@@ -2,7 +2,7 @@
 	import '../app.css';
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
-	import { fade } from 'svelte/transition';
+	import { panelSnap } from '$lib/utils/motion';
 	import { preferences } from '$lib/preferences.svelte';
 	import { localData } from '$lib/local/data.svelte';
 	import { syncEngine } from '$lib/local/sync.svelte';
@@ -13,6 +13,8 @@
 	import BottomNav from '$lib/components/nav/BottomNav.svelte';
 	import MobileTopBar from '$lib/components/nav/MobileTopBar.svelte';
 	import MoreSheet from '$lib/components/nav/MoreSheet.svelte';
+	import ContinueReadingRail from '$lib/components/nav/ContinueReadingRail.svelte';
+	import KeyboardShortcuts from '$lib/components/nav/KeyboardShortcuts.svelte';
 
 	let { data, children } = $props();
 
@@ -27,7 +29,7 @@
 	);
 	const canLogin = $derived(data.authEnabled && !data.user);
 
-	const themeColor = $derived(preferences.resolved === 'dark' ? '#0a0a0a' : '#ffffff');
+	const themeColor = $derived(preferences.resolved === 'dark' ? '#0b0a09' : '#ffffff');
 
 	onMount(async () => {
 		preferences.init();
@@ -42,7 +44,7 @@
 </svelte:head>
 
 {#if showShell}
-	<div class="min-h-screen bg-bg text-text lg:grid lg:grid-cols-[auto_1fr]">
+	<div class="min-h-screen bg-bg text-text lg:grid lg:grid-cols-[auto_1fr] 2xl:grid-cols-[auto_1fr_auto]">
 		<Sidebar user={data.user} {canLogin} />
 
 		<div class="flex min-h-screen min-w-0 flex-col">
@@ -50,12 +52,15 @@
 			<OfflineBanner />
 			<main class="mx-auto w-full max-w-6xl flex-1 px-4 pb-24 pt-4 lg:px-8 lg:pb-10 lg:pt-8">
 				{#key $page.url.pathname}
-					<div in:fade={{ duration: 160 }}>
+					<div in:panelSnap>
 						{@render children()}
 					</div>
 				{/key}
 			</main>
 		</div>
+
+		<ContinueReadingRail />
+		<KeyboardShortcuts />
 
 		<BottomNav user={data.user} onmore={() => (moreOpen = true)} />
 		<MoreSheet bind:open={moreOpen} user={data.user} {canLogin} />

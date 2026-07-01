@@ -6,17 +6,17 @@
 	import GridSkeleton from '$lib/components/GridSkeleton.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import { Button, Select, EmptyState } from '$lib/components/ui';
-	import { fetchSourceManga, getInstalledSources } from '$lib/graphql/api';
+	import { fetchBrowseManga, getInstalledSources } from '$lib/graphql/api';
 	import { preferences } from '$lib/preferences.svelte';
 	import Search from '@lucide/svelte/icons/search';
-	import type { Manga, Source } from '$lib/graphql/types';
+	import type { BrowseManga, Source } from '$lib/graphql/types';
 
 	const filterByActive = $derived($page.data.authEnabled && !$page.data.user?.is_admin);
 
 	let allSources = $state<Source[]>([]);
 	let sourceId = $state('');
 	let query = $state('');
-	let mangas = $state<Manga[]>([]);
+	let mangas = $state<BrowseManga[]>([]);
 	let loading = $state(false);
 	let searched = $state(false);
 	let error = $state('');
@@ -44,7 +44,7 @@
 		searched = true;
 		error = '';
 		try {
-			const result = await fetchSourceManga(sourceId, 'SEARCH', 1, query.trim());
+			const result = await fetchBrowseManga(sourceId, 'SEARCH', 1, query.trim());
 			mangas = result.mangas;
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Gagal mencari';
@@ -75,6 +75,7 @@
 				type="search"
 				placeholder="Cari judul manga..."
 				bind:value={query}
+				autofocus
 				class="w-full rounded-[var(--radius)] border border-border bg-surface py-2 pl-9 pr-3 text-sm text-text outline-none transition placeholder:text-muted focus:border-accent"
 			/>
 		</div>
@@ -107,7 +108,7 @@
 	{:else if mangas.length > 0}
 		<MangaGrid>
 			{#each mangas as manga (manga.id)}
-				<MangaCard {manga} href="/manga/{manga.id}" />
+				<MangaCard {manga} href="/manga/{manga.id}" showLibraryToggle />
 			{/each}
 		</MangaGrid>
 	{/if}

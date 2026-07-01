@@ -4,6 +4,7 @@
 	import { localData } from '$lib/local/data.svelte';
 	import { syncEngine } from '$lib/local/sync.svelte';
 	import { getInstalledSources } from '$lib/graphql/api';
+	import { relativeTime as formatDate } from '$lib/utils/format';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import { Button, Card, Badge, EmptyState } from '$lib/components/ui';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
@@ -76,18 +77,6 @@
 		return sourceNames[g.sourceId] ?? null;
 	}
 
-	function formatDate(ts: number) {
-		if (!ts) return '';
-		const diff = Date.now() - ts;
-		const mins = Math.floor(diff / 60000);
-		const hours = Math.floor(diff / 3600000);
-		const days = Math.floor(diff / 86400000);
-		if (mins < 1) return 'Baru saja';
-		if (mins < 60) return `${mins} menit lalu`;
-		if (hours < 24) return `${hours} jam lalu`;
-		if (days < 7) return `${days} hari lalu`;
-		return new Date(ts).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
-	}
 </script>
 
 <section>
@@ -115,7 +104,7 @@
 						onclick={() => goto(`/read/${g.lastChapterId}`)}
 						onkeydown={(e) => e.key === 'Enter' && goto(`/read/${g.lastChapterId}`)}
 					>
-						<div class="h-16 w-11 shrink-0 overflow-hidden rounded-lg bg-bg">
+						<div class="h-16 w-11 shrink-0 overflow-hidden rounded-[var(--radius-sm)] bg-bg">
 							{#if g.thumbnailUrl}
 								<img src={g.thumbnailUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
 							{/if}

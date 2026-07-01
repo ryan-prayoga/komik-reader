@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
-	import BrowseMangaCard from '$lib/components/BrowseMangaCard.svelte';
+	import MangaCard from '$lib/components/MangaCard.svelte';
 	import MangaGrid from '$lib/components/MangaGrid.svelte';
 	import GridSkeleton from '$lib/components/GridSkeleton.svelte';
-	import { Tabs, Button, EmptyState, Select, Badge, Sheet } from '$lib/components/ui';
+	import { Tabs, Button, EmptyState, Select, Badge, Chip, Sheet } from '$lib/components/ui';
 	import { fetchBrowseManga, fetchChapters, fetchMangaDetail, getMangasDetail, getSourceById, getSourceFilters } from '$lib/graphql/api';
 	import { getCached, getMissingIds, setCache } from '$lib/stores/mangaDetailCache';
 	import { apiUrl } from '$lib/graphql/client';
@@ -458,7 +458,7 @@
 	{:else}
 		<MangaGrid>
 			{#each displayMangas as manga (manga.id)}
-				<BrowseMangaCard {manga} href="/manga/{manga.id}" />
+				<MangaCard {manga} href="/manga/{manga.id}" showLibraryToggle />
 			{/each}
 		</MangaGrid>
 
@@ -510,13 +510,9 @@
 						<h3 class="mb-3 text-sm font-semibold text-text">{filter.name}</h3>
 						<div class="flex flex-wrap gap-2">
 							{#each filter.values as option, vi}
-								<button
-									type="button"
-									class="rounded-full border px-3 py-1 text-xs font-medium transition {filter.state === vi ? 'border-accent bg-accent/10 text-accent' : 'border-border text-muted hover:border-accent/40 hover:text-text'}"
-									onclick={() => updateSelect(fi, vi)}
-								>
+								<Chip selected={filter.state === vi} onclick={() => updateSelect(fi, vi)}>
 									{option}
-								</button>
+								</Chip>
 							{/each}
 						</div>
 					</div>

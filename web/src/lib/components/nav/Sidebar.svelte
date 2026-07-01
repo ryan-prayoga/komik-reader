@@ -19,7 +19,8 @@
 
 	function linkCls(item: NavItem): string {
 		const active = isActive($page.url.pathname, item.href);
-		return `flex items-center gap-3 rounded-[var(--radius)] px-3 py-2 text-sm font-medium transition ${
+		const shape = active ? 'panel-cut [--panel-cut:8px]' : 'rounded-[var(--radius)]';
+		return `flex items-center gap-3 ${shape} px-3 py-2 text-sm font-medium transition ${
 			active ? 'bg-accent/15 text-accent' : 'text-muted hover:bg-surface hover:text-text'
 		} ${collapsed ? 'justify-center' : ''}`;
 	}
@@ -32,9 +33,14 @@
 >
 	<div class="flex items-center gap-2 px-4 py-4 {collapsed ? 'justify-center' : ''}">
 		<a href="/" class="flex items-center gap-2 overflow-hidden">
-			<span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent text-sm font-bold text-white">K</span>
+			<span
+				class="panel-cut [--panel-cut:6px] flex h-8 w-8 shrink-0 items-center justify-center bg-accent text-sm font-bold text-white"
+				>K</span
+			>
 			{#if !collapsed}
-				<span class="truncate text-lg font-semibold tracking-tight">Komik<span class="text-accent">Reader</span></span>
+				<span class="truncate font-display text-xl font-bold uppercase tracking-tight"
+					>Komik<span class="text-accent">Reader</span></span
+				>
 			{/if}
 		</a>
 	</div>
@@ -43,7 +49,15 @@
 		{#each primaryNav as item}
 			<a href={item.href} class={linkCls(item)} title={collapsed ? item.label : undefined}>
 				<item.icon size={18} class="shrink-0" />
-				{#if !collapsed}<span class="truncate">{item.label}</span>{/if}
+				{#if !collapsed}
+					<span class="truncate">{item.label}</span>
+					{#if item.href === '/search'}
+						<kbd
+							class="ml-auto rounded border border-border bg-surface px-1.5 py-0.5 font-mono text-[10px] text-muted"
+							>/</kbd
+						>
+					{/if}
+				{/if}
 			</a>
 		{/each}
 

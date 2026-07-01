@@ -317,7 +317,7 @@
 	}
 </script>
 
-<section class="relative min-h-screen w-full {bgClass}">
+<section class="relative min-h-screen w-full {bgClass} {chapters.length > 0 ? 'lg:pr-72' : ''}">
 	{#if loading}
 		<div class="flex min-h-screen flex-col">
 			<!-- shimmer strips — full width, no border-radius, mimic page panels -->

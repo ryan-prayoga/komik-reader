@@ -7,8 +7,12 @@
 	class="sticky top-0 z-30 flex items-center justify-between border-b border-border bg-bg/90 px-4 py-3 backdrop-blur lg:hidden"
 >
 	<a href="/" class="flex items-center gap-2">
-		<span class="flex h-7 w-7 items-center justify-center rounded-lg bg-accent text-xs font-bold text-white">K</span>
-		<span class="text-base font-semibold tracking-tight">Komik<span class="text-accent">Reader</span></span>
+		<span class="panel-cut [--panel-cut:5px] flex h-7 w-7 items-center justify-center bg-accent text-xs font-bold text-white"
+			>K</span
+		>
+		<span class="font-display text-base font-bold uppercase tracking-tight"
+			>Komik<span class="text-accent">Reader</span></span
+		>
 	</a>
 	<div class="flex items-center gap-1">
 		<a

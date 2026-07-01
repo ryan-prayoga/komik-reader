@@ -254,140 +254,147 @@
 		</div>
 		</div>
 
-		{#if manga.description}
-			<p class="mt-6 whitespace-pre-line text-sm leading-relaxed text-muted">{manga.description}</p>
-		{/if}
+		<div class="lg:flex lg:items-start lg:gap-8">
+			{#if manga.description || localData.isInLibrary(manga.id)}
+				<div class="mt-6 lg:sticky lg:top-8 lg:mt-0 lg:w-72 lg:shrink-0">
+					{#if manga.description}
+						<p class="whitespace-pre-line text-sm leading-relaxed text-muted">{manga.description}</p>
+					{/if}
+					{#if localData.isInLibrary(manga.id)}
+						<div class="mt-6"><CategoryPicker mangaId={manga.id} /></div>
+					{/if}
+				</div>
+			{/if}
 
-		{#if localData.isInLibrary(manga.id)}
-			<div class="mt-6"><CategoryPicker mangaId={manga.id} /></div>
-		{/if}
-
-		{#if notice}
-			<div class="mt-6 flex items-start justify-between gap-2 rounded-[var(--radius)] border border-success/30 bg-success/10 p-3 text-sm text-success">
-				<span>{notice}</span>
-				<button onclick={() => (notice = '')} class="shrink-0 opacity-60 hover:opacity-100" aria-label="Tutup">✕</button>
-			</div>
-		{/if}
-
-		<h2 class="mb-3 mt-8 text-lg font-semibold text-text">
-			Chapter ({visible.length}{visible.length !== chapters.length ? `/${chapters.length}` : ''})
-		</h2>
-
-		{#if chapters.length === 0}
-			<EmptyState title="Belum ada chapter" description="Source belum menyediakan chapter." />
-		{:else}
-			<Card padding="none">
-				<div class="divide-y divide-border">
-					<!-- Toolbar row -->
-					<div class="flex items-center gap-2 px-4 py-2.5">
-						<div class="relative flex-1">
-							<Search size={14} class="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
-							<input
-								bind:value={search}
-								placeholder="Cari chapter…"
-								class="w-full rounded-md border border-border bg-bg py-1.5 pl-8 pr-3 text-sm text-text placeholder:text-muted focus:border-accent focus:outline-none"
-							/>
-						</div>
-						<div class="flex items-center rounded-md border border-border bg-bg p-0.5">
-							<button
-								onclick={() => (sortDir = 'desc')}
-								title="Terbaru dulu"
-								class="rounded p-1.5 transition {sortDir === 'desc' ? 'bg-accent text-white' : 'text-muted hover:text-text'}"
-							><ArrowDown size={13} /></button>
-							<button
-								onclick={() => (sortDir = 'asc')}
-								title="Terlama dulu"
-								class="rounded p-1.5 transition {sortDir === 'asc' ? 'bg-accent text-white' : 'text-muted hover:text-text'}"
-							><ArrowUp size={13} /></button>
-							<div class="mx-1 h-3.5 w-px bg-border"></div>
-							<button
-								onclick={() => (readFilter = readFilter === 'all' ? 'unread' : readFilter === 'unread' ? 'read' : 'all')}
-								title={readFilter === 'all' ? 'Semua chapter' : readFilter === 'unread' ? 'Belum dibaca' : 'Sudah dibaca'}
-								class="relative rounded p-1.5 transition {readFilter !== 'all' ? 'text-accent' : 'text-muted hover:text-text'}"
-							>
-								{#if readFilter === 'read'}<Eye size={13} />{:else}<EyeOff size={13} />{/if}
-								{#if readFilter !== 'all'}<span class="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-accent"></span>{/if}
-							</button>
-							<button
-								onclick={() => (downloadFilter = downloadFilter === 'all' ? 'downloaded' : downloadFilter === 'downloaded' ? 'not' : 'all')}
-								title={downloadFilter === 'all' ? 'Semua chapter' : downloadFilter === 'downloaded' ? 'Sudah diunduh' : 'Belum diunduh'}
-								class="relative rounded p-1.5 transition {downloadFilter !== 'all' ? 'text-accent' : 'text-muted hover:text-text'}"
-							>
-								{#if downloadFilter === 'not'}<CloudOff size={13} />{:else}<HardDriveDownload size={13} />{/if}
-								{#if downloadFilter !== 'all'}<span class="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-accent"></span>{/if}
-							</button>
-						</div>
+			<div class="mt-6 min-w-0 flex-1 lg:mt-0">
+				{#if notice}
+					<div class="mb-6 flex items-start justify-between gap-2 rounded-[var(--radius)] border border-success/30 bg-success/10 p-3 text-sm text-success">
+						<span>{notice}</span>
+						<button onclick={() => (notice = '')} class="shrink-0 opacity-60 hover:opacity-100" aria-label="Tutup">✕</button>
 					</div>
-					{#if visible.length === 0}
-						<div class="px-4 py-10 text-center text-sm text-muted">Tidak ada chapter cocok.</div>
-					{:else}
-						{#each visible as chapter (chapter.id)}
-							<div class="flex items-center justify-between gap-2 px-4 py-3 transition hover:bg-surface-hover">
-								<a href="/read/{chapter.id}" class="flex min-w-0 flex-1 items-center gap-3">
-									{#if chapter.read}
-										<span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-success/15 text-success">
-											<Check size={13} />
-										</span>
-									{:else}
-										<span class="h-2 w-2 shrink-0 rounded-full bg-accent"></span>
-									{/if}
-									<div class="min-w-0">
-										<p class="truncate text-sm font-medium {chapter.read ? 'text-muted' : 'text-text'}">
-											{chapter.name}
-										</p>
-										{#if formatDate(chapter.uploadDate)}
-											<p class="text-xs text-muted">{formatDate(chapter.uploadDate)}</p>
-										{/if}
-									</div>
-								</a>
-								<div class="flex shrink-0 items-center gap-1">
-									<DownloadButton
-										chapterId={chapter.id}
-										isOffline={offlineIds.has(chapter.id)}
-										mangaId={mangaId}
-										mangaTitle={manga?.title}
-										chapterName={chapter.name}
-										thumbnailUrl={manga?.thumbnailUrl}
-										sourceId={manga?.sourceId}
-										oncached={() => {
-											offlineIds = new Set([...offlineIds, chapter.id]);
-											notice = 'Chapter tersimpan di perangkat.';
-										}}
+				{/if}
+
+				<h2 class="mb-3 text-lg font-semibold text-text">
+					Chapter ({visible.length}{visible.length !== chapters.length ? `/${chapters.length}` : ''})
+				</h2>
+
+				{#if chapters.length === 0}
+					<EmptyState title="Belum ada chapter" description="Source belum menyediakan chapter." />
+				{:else}
+					<Card padding="none">
+						<div class="divide-y divide-border">
+							<!-- Toolbar row -->
+							<div class="flex items-center gap-2 px-4 py-2.5">
+								<div class="relative flex-1">
+									<Search size={14} class="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+									<input
+										bind:value={search}
+										placeholder="Cari chapter…"
+										class="w-full rounded-md border border-border bg-bg py-1.5 pl-8 pr-3 text-sm text-text placeholder:text-muted focus:border-accent focus:outline-none"
 									/>
-									<Dropdown align="right">
-										{#snippet trigger({ toggle })}
-											<IconButton label="Aksi chapter" variant="ghost" size="sm" onclick={toggle}>
-												<EllipsisVertical size={16} />
-											</IconButton>
-										{/snippet}
-										{#snippet children({ close })}
-											<button
-												class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-text hover:bg-surface-hover"
-												onclick={() => {
-													toggleRead(chapter);
-													close();
-												}}
-											>
-												{#if chapter.read}<EyeOff size={15} /> Tandai belum dibaca
-												{:else}<Eye size={15} /> Tandai sudah dibaca{/if}
-											</button>
-											<button
-												class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-text hover:bg-surface-hover"
-												onclick={() => {
-													markRange(chapter, 'older');
-													close();
-												}}
-											>
-												{#if sortDir === 'desc'}<ChevronsDown size={15} />{:else}<ChevronsUp size={15} />{/if} Tandai ini & sebelumnya
-											</button>
-										{/snippet}
-									</Dropdown>
+								</div>
+								<div class="flex items-center rounded-md border border-border bg-bg p-0.5">
+									<button
+										onclick={() => (sortDir = 'desc')}
+										title="Terbaru dulu"
+										class="rounded p-1.5 transition {sortDir === 'desc' ? 'bg-accent text-white' : 'text-muted hover:text-text'}"
+									><ArrowDown size={13} /></button>
+									<button
+										onclick={() => (sortDir = 'asc')}
+										title="Terlama dulu"
+										class="rounded p-1.5 transition {sortDir === 'asc' ? 'bg-accent text-white' : 'text-muted hover:text-text'}"
+									><ArrowUp size={13} /></button>
+									<div class="mx-1 h-3.5 w-px bg-border"></div>
+									<button
+										onclick={() => (readFilter = readFilter === 'all' ? 'unread' : readFilter === 'unread' ? 'read' : 'all')}
+										title={readFilter === 'all' ? 'Semua chapter' : readFilter === 'unread' ? 'Belum dibaca' : 'Sudah dibaca'}
+										class="relative rounded p-1.5 transition {readFilter !== 'all' ? 'text-accent' : 'text-muted hover:text-text'}"
+									>
+										{#if readFilter === 'read'}<Eye size={13} />{:else}<EyeOff size={13} />{/if}
+										{#if readFilter !== 'all'}<span class="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-accent"></span>{/if}
+									</button>
+									<button
+										onclick={() => (downloadFilter = downloadFilter === 'all' ? 'downloaded' : downloadFilter === 'downloaded' ? 'not' : 'all')}
+										title={downloadFilter === 'all' ? 'Semua chapter' : downloadFilter === 'downloaded' ? 'Sudah diunduh' : 'Belum diunduh'}
+										class="relative rounded p-1.5 transition {downloadFilter !== 'all' ? 'text-accent' : 'text-muted hover:text-text'}"
+									>
+										{#if downloadFilter === 'not'}<CloudOff size={13} />{:else}<HardDriveDownload size={13} />{/if}
+										{#if downloadFilter !== 'all'}<span class="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-accent"></span>{/if}
+									</button>
 								</div>
 							</div>
-						{/each}
-					{/if}
-					</div>
-				</Card>
-		{/if}
+							{#if visible.length === 0}
+								<div class="px-4 py-10 text-center text-sm text-muted">Tidak ada chapter cocok.</div>
+							{:else}
+								{#each visible as chapter (chapter.id)}
+									<div class="flex items-center justify-between gap-2 px-4 py-3 transition hover:bg-surface-hover">
+										<a href="/read/{chapter.id}" class="flex min-w-0 flex-1 items-center gap-3">
+											{#if chapter.read}
+												<span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-success/15 text-success">
+													<Check size={13} />
+												</span>
+											{:else}
+												<span class="h-2 w-2 shrink-0 rounded-full bg-accent"></span>
+											{/if}
+											<div class="min-w-0">
+												<p class="truncate text-sm font-medium {chapter.read ? 'text-muted' : 'text-text'}">
+													{chapter.name}
+												</p>
+												{#if formatDate(chapter.uploadDate)}
+													<p class="text-xs text-muted">{formatDate(chapter.uploadDate)}</p>
+												{/if}
+											</div>
+										</a>
+										<div class="flex shrink-0 items-center gap-1">
+											<DownloadButton
+												chapterId={chapter.id}
+												isOffline={offlineIds.has(chapter.id)}
+												mangaId={mangaId}
+												mangaTitle={manga?.title}
+												chapterName={chapter.name}
+												thumbnailUrl={manga?.thumbnailUrl}
+												sourceId={manga?.sourceId}
+												oncached={() => {
+													offlineIds = new Set([...offlineIds, chapter.id]);
+													notice = 'Chapter tersimpan di perangkat.';
+												}}
+											/>
+											<Dropdown align="right">
+												{#snippet trigger({ toggle })}
+													<IconButton label="Aksi chapter" variant="ghost" size="sm" onclick={toggle}>
+														<EllipsisVertical size={16} />
+													</IconButton>
+												{/snippet}
+												{#snippet children({ close })}
+													<button
+														class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-text hover:bg-surface-hover"
+														onclick={() => {
+															toggleRead(chapter);
+															close();
+														}}
+													>
+														{#if chapter.read}<EyeOff size={15} /> Tandai belum dibaca
+														{:else}<Eye size={15} /> Tandai sudah dibaca{/if}
+													</button>
+													<button
+														class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-text hover:bg-surface-hover"
+														onclick={() => {
+															markRange(chapter, 'older');
+															close();
+														}}
+													>
+														{#if sortDir === 'desc'}<ChevronsDown size={15} />{:else}<ChevronsUp size={15} />{/if} Tandai ini & sebelumnya
+													</button>
+												{/snippet}
+											</Dropdown>
+										</div>
+									</div>
+								{/each}
+							{/if}
+						</div>
+					</Card>
+				{/if}
+			</div>
+		</div>
 	{/if}
 </section>

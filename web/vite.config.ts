@@ -13,8 +13,8 @@ export default defineConfig({
 				name: 'Komik Reader',
 				short_name: 'Komik',
 				description: 'Baca komik via Keiyoushi extensions',
-				theme_color: '#0a0a0a',
-				background_color: '#0a0a0a',
+				theme_color: '#0b0a09',
+				background_color: '#0b0a09',
 				display: 'standalone',
 				start_url: '/',
 				icons: [

@@ -6,7 +6,7 @@
 	import MangaCard from '$lib/components/MangaCard.svelte';
 	import MangaGrid from '$lib/components/MangaGrid.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
-	import { Button, Badge, EmptyState, Spinner, Input, Modal } from '$lib/components/ui';
+	import { Button, Badge, Chip, EmptyState, Spinner, Input, Modal } from '$lib/components/ui';
 	import Cloud from '@lucide/svelte/icons/cloud';
 	import FolderTree from '@lucide/svelte/icons/folder-tree';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
@@ -55,33 +55,16 @@
 
 	<div class="mb-4 flex flex-wrap items-center gap-2">
 		{#if localData.categories.length > 0}
-			<a
-				href="/library"
-				class="rounded-full border px-3 py-1 text-xs font-medium transition {!categoryId
-					? 'border-accent bg-accent/15 text-accent'
-					: 'border-border text-muted hover:border-accent'}"
-			>
-				Semua
-			</a>
+			<Chip href="/library" selected={!categoryId}>Semua</Chip>
 			{#each localData.categories as category (category.id)}
-				<a
-					href="/library?category={category.id}"
-					class="rounded-full border px-3 py-1 text-xs font-medium transition {categoryId ===
-					category.id
-						? 'border-accent bg-accent/15 text-accent'
-						: 'border-border text-muted hover:border-accent'}"
-				>
+				<Chip href="/library?category={category.id}" selected={categoryId === category.id}>
 					{category.name}
-				</a>
+				</Chip>
 			{/each}
 		{/if}
-		<button
-			type="button"
-			class="flex items-center gap-1 rounded-full border border-dashed border-border px-3 py-1 text-xs font-medium text-muted transition hover:border-accent hover:text-accent"
-			onclick={() => (manageOpen = true)}
-		>
+		<Chip dashed onclick={() => (manageOpen = true)}>
 			<FolderTree size={13} /> Kelola Kategori
-		</button>
+		</Chip>
 	</div>
 
 	{#if !localData.ready}

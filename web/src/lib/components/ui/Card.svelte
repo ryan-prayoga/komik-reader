@@ -20,8 +20,7 @@
 	}: Props = $props();
 
 	const pad = { none: '', sm: 'p-3', md: 'p-4', lg: 'p-6' };
-	const base =
-		'rounded-[var(--radius)] border border-border bg-surface shadow-(--shadow-card)';
+	const base = 'panel-cut border-[1.5px] border-border bg-surface shadow-(--shadow-card)';
 	const cls = $derived(
 		`${base} ${pad[padding]} ${hover ? 'transition hover:border-accent/40 hover:bg-surface-hover' : ''} ${klass}`
 	);
