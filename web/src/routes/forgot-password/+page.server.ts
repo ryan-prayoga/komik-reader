@@ -36,17 +36,17 @@ export const actions: Actions = {
 		if (!email) return fail(400, { error: 'Email wajib diisi', email });
 		if (!validateEmail(email)) return fail(400, { error: 'Format email tidak valid', email });
 
-		// Always show success to avoid email enumeration
+		// Always show success regardless of whether the account exists or the send
+		// succeeds — a differing response (e.g. a 500 only when the user is real)
+		// leaks which emails are registered. Send failures are swallowed here and
+		// should be caught via server logs / SMTP monitoring instead.
 		const user = findUserByEmail(normalizeEmail(email));
 		if (user) {
 			try {
 				const token = createPasswordReset(user.id);
 				await sendPasswordResetEmail(user.email, token);
-			} catch {
-				return fail(500, {
-					error: 'Gagal mengirim email. Cek konfigurasi SMTP.',
-					email
-				});
+			} catch (e) {
+				console.error('[forgot-password] send failed', e);
 			}
 		}
 

@@ -100,9 +100,17 @@ export function createUser(
 	return database.prepare('SELECT * FROM users WHERE id = ?').get(result.lastInsertRowid) as UserRow;
 }
 
+// A precomputed bcrypt hash of a throwaway value. When no user matches we still
+// run a compare against this so response time doesn't reveal whether the account
+// exists (timing-based username/email enumeration).
+const DUMMY_HASH = '$2b$12$CUr732D.a2MphtBzAnfVWuCo7UnqaxgHChTijY2XT8KqRIXNPB5y.';
+
 export function verifyUserLogin(login: string, password: string): UserRow | null {
 	const user = findUserByLogin(login);
-	if (!user) return null;
+	if (!user) {
+		verifyPassword(password, DUMMY_HASH);
+		return null;
+	}
 	if (!verifyPassword(password, user.password_hash)) return null;
 	return user;
 }

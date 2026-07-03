@@ -8,7 +8,12 @@ description = "Allow placeholder env examples and app code"
 paths = [
   '''\.env\.example$''',
   '''web/src/lib/server/password\.ts$''',
+  '''web/src/lib/server/users\.ts$''',
   '''web/src/routes/(forgot-password|reset-password|login|register)/''',
+]
+regexes = [
+  # Throwaway bcrypt hash for timing-safe login — not a real credential.
+  '''\$2b\$12\$CUr732D\.a2MphtBzAnfVWuCo7UnqaxgHChTijY2XT8KqRIXNPB5y\.''',
 ]
 
 [[rules]]

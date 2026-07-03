@@ -7,6 +7,7 @@ import { createSession, setSessionCookie } from '$lib/server/session';
 import {
 	createUser,
 	findUserByEmail,
+	findUserByUsername,
 	getUserCount,
 	normalizeEmail,
 	validateEmail,
@@ -59,6 +60,9 @@ export const actions: Actions = {
 		}
 		if (findUserByEmail(email)) {
 			return fail(409, { error: 'Email sudah terdaftar', email, username });
+		}
+		if (findUserByUsername(username)) {
+			return fail(409, { error: 'Username sudah dipakai', email, username });
 		}
 
 		const user = createUser(email, username, password, getUserCount() === 0);
