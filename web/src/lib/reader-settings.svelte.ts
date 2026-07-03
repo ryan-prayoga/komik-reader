@@ -22,7 +22,7 @@ const DEFAULTS: StoredReader = {
 	zoom: 1,
 	brightness: 1,
 	bg: 'black',
-	gap: true,
+	gap: false,
 	autoScrollSpeed: 2
 };
 
