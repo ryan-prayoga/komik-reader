@@ -18,15 +18,18 @@ ENV HOST=0.0.0.0
 ENV PORT=3000
 ENV AUTH_DB_PATH=/app/data/auth.db
 
+# su-exec lets the entrypoint fix volume ownership as root, then hand off to the
+# unprivileged node user — the actual node process never runs as root.
+RUN apk add --no-cache su-exec
+
 COPY --from=builder /app/build ./build
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/node_modules ./node_modules
 
-# Drop root: run as the built-in unprivileged `node` user and give it ownership
-# of the data volume mount point so SQLite can write there.
-RUN mkdir -p /app/data && chown -R node:node /app/data
-USER node
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh && mkdir -p /app/data && chown -R node:node /app/data
 
 VOLUME ["/app/data"]
 EXPOSE 3000
+ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["node", "build"]
