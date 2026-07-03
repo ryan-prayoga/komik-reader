@@ -7,6 +7,7 @@
 	import { localData } from '$lib/local/data.svelte';
 	import { syncEngine } from '$lib/local/sync.svelte';
 	import InstallPrompt from '$lib/components/InstallPrompt.svelte';
+	import UpdatePrompt from '$lib/components/UpdatePrompt.svelte';
 	import Toast from '$lib/components/ui/Toast.svelte';
 	import OfflineBanner from '$lib/components/OfflineBanner.svelte';
 	import Sidebar from '$lib/components/nav/Sidebar.svelte';
@@ -76,3 +77,5 @@
 		{@render children()}
 	</div>
 {/if}
+
+<UpdatePrompt />
