@@ -5,7 +5,8 @@
 		readerSettings,
 		type ReaderMode,
 		type ReaderFit,
-		type ReaderBg
+		type ReaderBg,
+		type ReaderDirection
 	} from '$lib/reader-settings.svelte';
 	import ScrollText from '@lucide/svelte/icons/scroll-text';
 	import BookOpen from '@lucide/svelte/icons/book-open';
@@ -76,6 +77,33 @@
 					{/each}
 				</div>
 			</div>
+
+			<!-- Reading direction (paged/double) -->
+			<div>
+				<p class="mb-2 text-xs font-medium uppercase tracking-wide text-muted">Arah baca</p>
+				<div class="grid grid-cols-2 gap-2">
+					{#each [{ value: 'ltr', label: 'Kiri → Kanan' }, { value: 'rtl', label: 'Kanan → Kiri (manga)' }] as d}
+						<button
+							type="button"
+							onclick={() => readerSettings.set('direction', d.value as ReaderDirection)}
+							class="rounded-[var(--radius)] border px-3 py-2 text-xs font-medium transition {readerSettings.direction ===
+							d.value
+								? 'border-accent/40 bg-accent/15 text-accent'
+								: 'border-border bg-surface text-muted hover:bg-surface-hover'}"
+						>
+							{d.label}
+						</button>
+					{/each}
+				</div>
+			</div>
+
+			{#if readerSettings.mode === 'double'}
+				<Switch
+					label="Halaman pertama sendiri (offset spread)"
+					checked={readerSettings.doubleOffset}
+					onchange={(v) => readerSettings.set('doubleOffset', v)}
+				/>
+			{/if}
 		{:else}
 			<Switch
 				label="Jarak antar halaman"

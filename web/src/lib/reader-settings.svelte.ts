@@ -5,6 +5,7 @@ const STORAGE_KEY = 'komik-reader-reader';
 export type ReaderMode = 'webtoon' | 'paged' | 'double';
 export type ReaderFit = 'width' | 'height' | 'original';
 export type ReaderBg = 'black' | 'gray' | 'white';
+export type ReaderDirection = 'ltr' | 'rtl';
 
 type StoredReader = {
 	mode: ReaderMode;
@@ -14,6 +15,8 @@ type StoredReader = {
 	bg: ReaderBg;
 	gap: boolean; // webtoon page gap
 	autoScrollSpeed: number; // px per frame @ 60fps
+	direction: ReaderDirection; // paged/double swipe + tap direction (rtl = manga)
+	doubleOffset: boolean; // double mode: show first page alone so spreads pair up
 };
 
 const DEFAULTS: StoredReader = {
@@ -23,7 +26,9 @@ const DEFAULTS: StoredReader = {
 	brightness: 1,
 	bg: 'black',
 	gap: false,
-	autoScrollSpeed: 2
+	autoScrollSpeed: 2,
+	direction: 'ltr',
+	doubleOffset: false
 };
 
 function load(): StoredReader {
@@ -52,6 +57,8 @@ class ReaderSettingsState {
 	bg = $state<ReaderBg>(this.#initial.bg);
 	gap = $state(this.#initial.gap);
 	autoScrollSpeed = $state(this.#initial.autoScrollSpeed);
+	direction = $state<ReaderDirection>(this.#initial.direction);
+	doubleOffset = $state(this.#initial.doubleOffset);
 
 	#save() {
 		if (!browser) return;
@@ -64,7 +71,9 @@ class ReaderSettingsState {
 				brightness: this.brightness,
 				bg: this.bg,
 				gap: this.gap,
-				autoScrollSpeed: this.autoScrollSpeed
+				autoScrollSpeed: this.autoScrollSpeed,
+				direction: this.direction,
+				doubleOffset: this.doubleOffset
 			})
 		);
 	}

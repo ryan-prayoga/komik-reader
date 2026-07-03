@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/stores';
+	import { goto } from '$app/navigation';
 	import { untrack, tick } from 'svelte';
 	import { apiUrl } from '$lib/graphql/client';
 	import { fetchChapterPages, getMangaChapters, updateChapterProgress } from '$lib/graphql/api';
@@ -211,6 +212,13 @@
 	});
 
 	function toggleChrome() {
+		// While auto-scrolling, a tap should stop the scroll (expected reflex) rather
+		// than toggle the chrome — reveal controls so the user can restart/adjust.
+		if (autoScroll) {
+			autoScroll = false;
+			chromeVisible = true;
+			return;
+		}
 		chromeVisible = !chromeVisible;
 	}
 
@@ -375,10 +383,15 @@
 				{pages}
 				bind:current={currentPage}
 				double={readerSettings.mode === 'double'}
+				doubleOffset={readerSettings.doubleOffset}
 				fit={readerSettings.fit}
 				zoom={readerSettings.zoom}
+				direction={readerSettings.direction}
 				onpage={reportPage}
 				ontoggle={toggleChrome}
+				onnext={() => nextChapter && goto(`/read/${nextChapter.id}`)}
+				onprev={() => prevChapter && goto(`/read/${prevChapter.id}`)}
+				onzoom={(z) => readerSettings.set('zoom', z)}
 			/>
 		{:else}
 			<button type="button" class="block w-full cursor-default text-left" onclick={toggleChrome}>

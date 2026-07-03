@@ -9,6 +9,7 @@
 	import X from '@lucide/svelte/icons/x';
 	import Play from '@lucide/svelte/icons/play';
 	import Pause from '@lucide/svelte/icons/pause';
+	import Search from '@lucide/svelte/icons/search';
 	import type { Chapter } from '$lib/graphql/types';
 
 	interface Props {
@@ -58,7 +59,18 @@
 	}: Props = $props();
 
 	let pickerOpen = $state(false);
+	let pickerQuery = $state('');
 	const hasChapters = $derived(chapters.length > 0);
+
+	// Filtered chapter list for the picker/dock — matches name or chapter number so
+	// long series (100s of chapters) stay navigable.
+	const filteredChapters = $derived.by(() => {
+		const q = pickerQuery.trim().toLowerCase();
+		if (!q) return chapters;
+		return chapters.filter(
+			(c) => c.name.toLowerCase().includes(q) || String(c.chapterNumber).includes(q)
+		);
+	});
 
 	function scrollActiveTo(node: HTMLElement, isActive: boolean) {
 		if (isActive) {
@@ -233,8 +245,18 @@
 				<X size={16} />
 			</button>
 		</div>
+		<div class="shrink-0 border-b border-white/10 px-3 py-2">
+			<div class="relative">
+				<Search size={14} class="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" />
+				<input
+					bind:value={pickerQuery}
+					placeholder="Cari chapter…"
+					class="w-full rounded-lg border border-white/10 bg-white/5 py-2 pl-8 pr-3 text-sm text-white placeholder:text-white/40 focus:border-accent focus:outline-none"
+				/>
+			</div>
+		</div>
 		<div class="overflow-y-auto">
-			{#each chapters as ch (ch.id)}
+			{#each filteredChapters as ch (ch.id)}
 				{@const isActive = ch.id === currentChapterId}
 				<a
 					href="/read/{ch.id}"
@@ -264,8 +286,18 @@
 			<List size={16} class="shrink-0 opacity-70" />
 			<span class="text-sm font-semibold">Daftar Chapter</span>
 		</div>
+		<div class="shrink-0 border-b border-white/10 px-3 py-2">
+			<div class="relative">
+				<Search size={14} class="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" />
+				<input
+					bind:value={pickerQuery}
+					placeholder="Cari chapter…"
+					class="w-full rounded-lg border border-white/10 bg-white/5 py-2 pl-8 pr-3 text-sm text-white placeholder:text-white/40 focus:border-accent focus:outline-none"
+				/>
+			</div>
+		</div>
 		<div class="flex-1 overflow-y-auto">
-			{#each chapters as ch (ch.id)}
+			{#each filteredChapters as ch (ch.id)}
 				{@const isActive = ch.id === currentChapterId}
 				<a
 					href="/read/{ch.id}"
