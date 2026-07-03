@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { Chapter } from '$lib/graphql/types';
+	import Spinner from '$lib/components/ui/Spinner.svelte';
 
 	type Section = { chapter: Chapter; pages: string[] };
 
@@ -26,6 +27,11 @@
 	const pageEls = new Map<string, HTMLElement>();
 	let activeChapterId = 0;
 	let activePi = 0;
+
+	let loadedPages = $state<Record<string, boolean>>({});
+	function markLoaded(key: string) {
+		loadedPages[key] = true;
+	}
 
 	function reportCurrentProgress() {
 		const el = pageEls.get(`${activeChapterId}-${activePi}`);
@@ -144,18 +150,28 @@
 			</div>
 		{/if}
 		{#each section.pages as pageUrl, pi (pi)}
+			{@const key = `${section.chapter.id}-${pi}`}
 			<div
-				class="overflow-hidden"
-				data-page-key="{section.chapter.id}-{pi}"
+				class="relative overflow-hidden"
+				data-page-key={key}
 				use:observePage={{ chapterId: section.chapter.id, pi }}
 			>
+				{#if !loadedPages[key]}
+					<div class="absolute inset-0 flex items-center justify-center bg-white/[0.03]">
+						<Spinner size={24} class="text-white/40" />
+					</div>
+				{/if}
 				<img
 					src={pageUrl}
 					alt="Halaman {pi + 1}"
-					class="mx-auto block w-full"
+					class="mx-auto block w-full transition-opacity duration-300 {loadedPages[key]
+						? 'opacity-100'
+						: 'opacity-0'}"
 					style="aspect-ratio: auto 2 / 3"
 					loading={si === 0 && pi <= initialPage ? 'eager' : 'lazy'}
 					decoding="async"
+					onload={() => markLoaded(key)}
+					onerror={() => markLoaded(key)}
 				/>
 			</div>
 		{/each}

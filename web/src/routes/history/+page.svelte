@@ -57,6 +57,7 @@
 			const readNums = rows
 				.filter((r) => r.isRead && r.chapterNumber != null)
 				.map((r) => r.chapterNumber as number);
+			const furthest = readNums.length ? Math.max(...readNums) : null;
 			out.push({
 				mangaId,
 				mangaTitle: recent.mangaTitle,
@@ -65,7 +66,9 @@
 				lastChapterId: recent.chapterId,
 				lastChapterName: recent.chapterName,
 				lastReadAt: recent.updatedAt,
-				furthestRead: readNums.length ? Math.max(...readNums) : null,
+				// Only surface this when it actually differs from the continue point above —
+				// otherwise it just repeats the same chapter number twice.
+				furthestRead: furthest != null && furthest !== recent.chapterNumber ? furthest : null,
 				count: rows.length
 			});
 		}

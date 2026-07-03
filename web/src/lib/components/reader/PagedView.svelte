@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { ReaderFit, ReaderDirection } from '$lib/reader-settings.svelte';
+	import Spinner from '$lib/components/ui/Spinner.svelte';
 
 	interface Props {
 		pages: string[];
@@ -32,6 +33,11 @@
 	}: Props = $props();
 
 	const lastIndex = $derived(pages.length - 1);
+
+	let loadedPages = $state<Record<number, boolean>>({});
+	function markLoaded(i: number) {
+		loadedPages[i] = true;
+	}
 
 	// Left page index of the pair that contains `i`. In offset double mode the
 	// very first page stands alone so subsequent spreads line up.
@@ -156,13 +162,28 @@
 >
 	<div class="flex items-center justify-center gap-1">
 		{#each visible as i (i)}
-			<img
-				src={pages[i]}
-				alt="Halaman {i + 1}"
-				class="block object-contain"
-				style={imgStyle()}
-				decoding="async"
-			/>
+			<div
+				class="relative flex items-center justify-center {loadedPages[i]
+					? ''
+					: 'min-h-[50vh] min-w-[40vw]'}"
+			>
+				{#if !loadedPages[i]}
+					<div class="absolute inset-0 flex items-center justify-center">
+						<Spinner size={28} class="text-white/40" />
+					</div>
+				{/if}
+				<img
+					src={pages[i]}
+					alt="Halaman {i + 1}"
+					class="block object-contain transition-opacity duration-300 {loadedPages[i]
+						? 'opacity-100'
+						: 'opacity-0'}"
+					style={imgStyle()}
+					decoding="async"
+					onload={() => markLoaded(i)}
+					onerror={() => markLoaded(i)}
+				/>
+			</div>
 		{/each}
 	</div>
 
