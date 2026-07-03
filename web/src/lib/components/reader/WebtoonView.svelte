@@ -144,12 +144,18 @@
 			</div>
 		{/if}
 		{#each section.pages as pageUrl, pi (pi)}
-			<div class="overflow-hidden" use:observePage={{ chapterId: section.chapter.id, pi }}>
+			<div
+				class="overflow-hidden"
+				data-page-key="{section.chapter.id}-{pi}"
+				use:observePage={{ chapterId: section.chapter.id, pi }}
+			>
 				<img
 					src={pageUrl}
 					alt="Halaman {pi + 1}"
 					class="mx-auto block w-full"
+					style="aspect-ratio: auto 2 / 3"
 					loading={si === 0 && pi <= initialPage ? 'eager' : 'lazy'}
+					decoding="async"
 				/>
 			</div>
 		{/each}

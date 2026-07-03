@@ -203,11 +203,19 @@
 		const idx = sections.findIndex((s) => s.chapter.id === currentChapterId);
 		if (idx <= 1) return;
 		const dropCount = idx - 1;
-		const heightBefore = document.documentElement.scrollHeight;
+		// Anchor on the first page of the section that survives the prune (not
+		// document.scrollHeight) — the whole-page height is unreliable here since
+		// a newly-appended next chapter is likely still loading images below,
+		// which would pollute a scrollHeight diff and cause a bogus scroll jump.
+		const anchorSelector = `[data-page-key="${sections[dropCount].chapter.id}-0"]`;
+		const topBefore = document.querySelector(anchorSelector)?.getBoundingClientRect().top;
 		sections = sections.slice(dropCount);
 		tick().then(() => {
-			const delta = heightBefore - document.documentElement.scrollHeight;
-			if (delta > 0) window.scrollBy(0, -delta);
+			if (topBefore === undefined) return;
+			const topAfter = document.querySelector(anchorSelector)?.getBoundingClientRect().top;
+			if (topAfter === undefined) return;
+			const delta = topAfter - topBefore;
+			if (delta !== 0) window.scrollBy(0, delta);
 		});
 	});
 

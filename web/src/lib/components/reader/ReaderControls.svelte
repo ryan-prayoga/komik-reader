@@ -62,12 +62,17 @@
 	let pickerQuery = $state('');
 	const hasChapters = $derived(chapters.length > 0);
 
+	// Picker/dock reads oldest-to-newest (reading order) — `chapters` prop itself
+	// comes in newest-first (used for prev/next index math elsewhere), so flip it
+	// just for display.
+	const orderedChapters = $derived([...chapters].reverse());
+
 	// Filtered chapter list for the picker/dock — matches name or chapter number so
 	// long series (100s of chapters) stay navigable.
 	const filteredChapters = $derived.by(() => {
 		const q = pickerQuery.trim().toLowerCase();
-		if (!q) return chapters;
-		return chapters.filter(
+		if (!q) return orderedChapters;
+		return orderedChapters.filter(
 			(c) => c.name.toLowerCase().includes(q) || String(c.chapterNumber).includes(q)
 		);
 	});

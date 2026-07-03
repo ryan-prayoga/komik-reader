@@ -156,7 +156,13 @@
 >
 	<div class="flex items-center justify-center gap-1">
 		{#each visible as i (i)}
-			<img src={pages[i]} alt="Halaman {i + 1}" class="block object-contain" style={imgStyle()} />
+			<img
+				src={pages[i]}
+				alt="Halaman {i + 1}"
+				class="block object-contain"
+				style={imgStyle()}
+				decoding="async"
+			/>
 		{/each}
 	</div>
 
