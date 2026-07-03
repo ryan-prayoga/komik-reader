@@ -79,7 +79,7 @@
 <svelte:window {onkeydown} />
 
 <div
-	class="relative flex min-h-screen w-full select-none items-center justify-center overflow-auto"
+	class="relative flex min-h-dvh w-full select-none items-center justify-center overflow-auto"
 	role="group"
 	aria-label="Area baca"
 	ontouchstart={onTouchStart}

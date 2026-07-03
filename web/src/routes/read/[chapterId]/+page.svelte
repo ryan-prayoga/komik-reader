@@ -334,9 +334,9 @@
 	}
 </script>
 
-<section class="relative min-h-screen w-full {bgClass} {chapters.length > 0 ? 'lg:pr-72' : ''}">
+<section class="relative min-h-dvh w-full {bgClass} {chapters.length > 0 ? 'lg:pr-72' : ''}">
 	{#if loading}
-		<div class="flex min-h-screen flex-col">
+		<div class="flex min-h-dvh flex-col">
 			<!-- shimmer strips — full width, no border-radius, mimic page panels -->
 			<div class="flex flex-col gap-[3px] pt-[3px]">
 				{#each [42, 58, 48, 62, 50, 55, 44] as pct}
