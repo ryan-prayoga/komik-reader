@@ -35,9 +35,12 @@
 		const seen = new Set<number>();
 		const out: RecentChapter[] = [];
 		for (const h of localData.history) {
-			if (h.isRead) continue;
+			// history is sorted by updatedAt desc, so the first row per manga is
+			// always the last-touched one — mark it seen before the read check,
+			// else a stale older unread row for the same manga leaks through.
 			if (seen.has(h.mangaId)) continue;
 			seen.add(h.mangaId);
+			if (h.isRead) continue;
 			out.push({
 				id: h.chapterId,
 				name: h.chapterName,

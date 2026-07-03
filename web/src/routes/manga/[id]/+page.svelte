@@ -53,10 +53,19 @@
 
 	const unreadCount = $derived(merged.filter((c) => !c.read).length);
 	const hasAnyRead = $derived(merged.some((c) => c.read));
-	// Oldest unread (list is newest-first), else oldest chapter to re-read.
-	const readTarget = $derived(
-		[...merged].reverse().find((c) => !c.read) ?? merged[merged.length - 1] ?? null
-	);
+	// Resume at the most recently touched chapter (matches home + history
+	// pages) if it's still unread; otherwise oldest unread, else re-read.
+	const lastTouched = $derived.by(() => {
+		const rows = localData.history.filter((h) => h.mangaId === mangaId);
+		return rows.length ? rows.reduce((a, b) => (b.updatedAt > a.updatedAt ? b : a)) : null;
+	});
+	const readTarget = $derived.by(() => {
+		if (lastTouched && !lastTouched.isRead) {
+			const c = merged.find((m) => m.id === lastTouched.chapterId);
+			if (c) return c;
+		}
+		return [...merged].reverse().find((c) => !c.read) ?? merged[merged.length - 1] ?? null;
+	});
 	const startLabel = $derived(
 		!hasAnyRead ? 'Mulai baca' : unreadCount > 0 ? 'Lanjutkan baca' : 'Baca ulang'
 	);
