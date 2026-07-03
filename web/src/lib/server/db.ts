@@ -94,6 +94,22 @@ function migrate(database: Database.Database) {
 	}
 }
 
+// One-shot housekeeping on boot: drop rows that only ever accumulate. Cheap
+// (indexed / small tables) and bounds unbounded growth over the app's lifetime.
+function cleanup(database: Database.Database) {
+	database.prepare("DELETE FROM sessions WHERE expires_at <= datetime('now')").run();
+	database
+		.prepare("DELETE FROM password_resets WHERE used_at IS NOT NULL OR expires_at <= datetime('now')")
+		.run();
+	// Tombstoned sync rows are only needed until every device has pulled them.
+	// 30 days is well past any realistic offline gap between a user's devices.
+	database
+		.prepare(
+			"DELETE FROM user_sync WHERE deleted = 1 AND updated_at < (strftime('%s','now') - 2592000) * 1000"
+		)
+		.run();
+}
+
 function seedAdmin(database: Database.Database) {
 	const count = database.prepare('SELECT COUNT(*) AS c FROM users').get() as { c: number };
 	if (count.c > 0) return;
@@ -116,6 +132,7 @@ export function getDb(): Database.Database {
 	db.pragma('journal_mode = WAL');
 	db.pragma('foreign_keys = ON');
 	migrate(db);
+	cleanup(db);
 	seedAdmin(db);
 	return db;
 }

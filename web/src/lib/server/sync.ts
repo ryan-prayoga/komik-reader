@@ -15,6 +15,11 @@ export type SyncResult = {
 
 const VALID_ENTITIES = new Set(['history', 'library', 'categories']);
 
+// Per-row payload ceiling. A history/library/category row is small metadata; a
+// legit one is well under 1KB. Cap protects auth.db from a malformed or hostile
+// client bloating the sync table.
+const MAX_DATA_BYTES = 32 * 1024;
+
 /**
  * Apply a batch of client changes (last-write-wins by updatedAt) and return the
  * changefeed of all the user's rows newer than `since` (per-user seq cursor).
@@ -44,6 +49,8 @@ export function syncChanges(
 		let seq = (getMaxSeq.get(userId) as { m: number }).m;
 		for (const c of changes) {
 			if (!VALID_ENTITIES.has(c.entity) || typeof c.itemKey !== 'string') continue;
+			const serialized = JSON.stringify(c.data ?? null);
+			if (serialized.length > MAX_DATA_BYTES) continue;
 			const ex = getExisting.get(userId, c.entity, c.itemKey) as
 				| { updated_at: number }
 				| undefined;
@@ -54,7 +61,7 @@ export function syncChanges(
 				user_id: userId,
 				entity: c.entity,
 				item_key: c.itemKey,
-				data: JSON.stringify(c.data ?? null),
+				data: serialized,
 				updated_at: c.updatedAt,
 				deleted: c.deleted ? 1 : 0,
 				seq

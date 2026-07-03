@@ -18,11 +18,14 @@ ENV HOST=0.0.0.0
 ENV PORT=3000
 ENV AUTH_DB_PATH=/app/data/auth.db
 
-RUN mkdir -p /app/data
-
 COPY --from=builder /app/build ./build
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/node_modules ./node_modules
+
+# Drop root: run as the built-in unprivileged `node` user and give it ownership
+# of the data volume mount point so SQLite can write there.
+RUN mkdir -p /app/data && chown -R node:node /app/data
+USER node
 
 VOLUME ["/app/data"]
 EXPOSE 3000
