@@ -155,10 +155,10 @@
 	class="fixed inset-x-0 bottom-0 z-30 transition-transform duration-200 {hasChapters ? 'lg:right-72' : ''} {show
 		? 'translate-y-0'
 		: 'translate-y-full'}"
-	style="padding-bottom: env(safe-area-inset-bottom)"
 >
 	<div
-		class="flex items-center gap-3 bg-gradient-to-t from-black/80 to-transparent px-3 pb-3 pt-6 text-white"
+		class="flex items-center gap-3 bg-gradient-to-t from-black/80 to-transparent px-3 pt-6 text-white"
+		style="padding-bottom: calc(0.75rem + env(safe-area-inset-bottom))"
 	>
 		{#if prevHref}
 			<a
