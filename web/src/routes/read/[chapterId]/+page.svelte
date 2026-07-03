@@ -126,9 +126,20 @@
 			: `${viewedSection?.pages.length ?? pages.length} halaman`
 	);
 
+	// `chapters`/`current` are fetched once per chapter load and otherwise never
+	// touched again, so the picker/dock kept showing a chapter as unread until a
+	// full reload even after its last page had been marked read server-side.
+	// Patch the local copy the moment we know it's read so the UI reflects it live.
+	function markChapterReadLocally(id: number) {
+		chapters = chapters.map((c) => (c.id === id ? { ...c, isRead: true } : c));
+		if (current?.id === id) current = { ...current, isRead: true };
+	}
+
 	function reportPage(index: number) {
 		currentPage = index;
-		updateChapterProgress(chapterId, index, index >= pages.length - 1).catch(() => {});
+		const isRead = index >= pages.length - 1;
+		updateChapterProgress(chapterId, index, isRead).catch(() => {});
+		if (isRead) markChapterReadLocally(chapterId);
 		if (mangaId) {
 			localData.recordHistory({
 				chapterId,
@@ -137,7 +148,7 @@
 				thumbnailUrl: mangaThumb,
 				chapterName: current?.name ?? 'Chapter',
 				lastPage: index,
-				isRead: index >= pages.length - 1,
+				isRead,
 				sourceId: mangaSourceId,
 				chapterNumber: current?.chapterNumber,
 				totalPages: pages.length
@@ -167,6 +178,7 @@
 		lastReportedPageKey = pageKey;
 		const isRead = pageIdx >= section.pages.length - 1;
 		updateChapterProgress(section.chapter.id, pageIdx, isRead).catch(() => {});
+		if (isRead) markChapterReadLocally(section.chapter.id);
 		localData.recordHistory({
 			chapterId: section.chapter.id,
 			mangaId,
