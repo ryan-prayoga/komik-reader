@@ -2,6 +2,7 @@ import type { RequestHandler } from './$types';
 import { env } from '$env/dynamic/private';
 import { json } from '@sveltejs/kit';
 import { getDb } from '$lib/server/db';
+import { rateLimit } from '$lib/server/ratelimit';
 
 const SUWAYOMI_URL = env.SUWAYOMI_URL || 'http://localhost:4567';
 
@@ -16,7 +17,14 @@ async function graphql(query: string, variables?: Record<string, unknown>) {
 
 // Guests may trigger extension installs (server-wide, one-way only).
 // Uninstall and update are not exposed here — those require a session.
-export const POST: RequestHandler = async ({ request }) => {
+export const POST: RequestHandler = async ({ request, getClientAddress }) => {
+	// Extension install is a server-wide state change reachable by guests — throttle
+	// hard so it can't be spammed to churn the extension list or fill disk.
+	const limit = rateLimit(`ext-activate:${getClientAddress()}`, 20, 60 * 60_000);
+	if (!limit.ok) {
+		return json({ error: 'Terlalu banyak permintaan install' }, { status: 429 });
+	}
+
 	let body: unknown;
 	try {
 		body = await request.json();

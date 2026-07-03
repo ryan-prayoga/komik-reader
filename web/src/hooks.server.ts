@@ -4,13 +4,26 @@ import { env } from '$env/dynamic/private';
 import { authEnabled, allowGuest } from '$lib/server/env';
 import { isPublicPath, isSuwayomiApiPath, isGuestAllowedGraphql } from '$lib/server/guard';
 import { getUserFromSession, readSessionToken } from '$lib/server/session';
+import { rateLimit } from '$lib/server/ratelimit';
 
 const SUWAYOMI_URL = env.SUWAYOMI_URL || 'http://localhost:4567';
+
+// Each browse page fans out into many upstream scrape calls (enrichment), so the
+// per-IP ceiling is high — it's a runaway/abuse backstop, not a UX throttle.
+const PROXY_LIMIT = 600;
+const PROXY_WINDOW_MS = 60_000;
 
 function unauthorized(message: string): Response {
 	return new Response(JSON.stringify({ errors: [{ message }] }), {
 		status: 401,
 		headers: { 'content-type': 'application/json' }
+	});
+}
+
+function tooManyRequests(retryAfter: number): Response {
+	return new Response(JSON.stringify({ errors: [{ message: 'Terlalu banyak permintaan' }] }), {
+		status: 429,
+		headers: { 'content-type': 'application/json', 'retry-after': String(retryAfter) }
 	});
 }
 
@@ -32,6 +45,12 @@ export const handle: Handle = async ({ event, resolve }) => {
 	// Local SvelteKit API routes under /api/ext/ are NOT proxied to Suwayomi.
 	if (pathname.startsWith('/api/') && !pathname.startsWith('/api/ext/') && isSuwayomiApiPath(pathname)) {
 		const guest = authEnabled() && !event.locals.user;
+
+		// Per-IP throttle on the upstream scrape proxy so a single client (esp. an
+		// anonymous guest) can't hammer sources into an IP ban or exhaust the box.
+		const proxyLimit = rateLimit(`proxy:${event.getClientAddress()}`, PROXY_LIMIT, PROXY_WINDOW_MS);
+		if (!proxyLimit.ok) return tooManyRequests(proxyLimit.retryAfter);
+
 		let bodyText: string | undefined;
 
 		if (guest) {
