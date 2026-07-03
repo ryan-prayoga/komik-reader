@@ -7,10 +7,30 @@ import {
 	type OfflineChapter
 } from './db';
 
-const CACHE_NAME = 'komik-pages-v1';
+// Dedicated cache for user-initiated offline downloads. MUST NOT be the same
+// cache Workbox uses for transient page caching (`komik-pages-v1`) — Workbox's
+// expiration plugin does LRU eviction there, which would silently purge chapters
+// the user explicitly saved for offline.
+const CACHE_NAME = 'komik-offline-v1';
+
+// How many page requests to run at once during a download. Parallel enough to
+// be fast, bounded so a big chapter doesn't open hundreds of sockets at once.
+const DOWNLOAD_CONCURRENCY = 5;
 
 async function openCache(): Promise<Cache> {
 	return caches.open(CACHE_NAME);
+}
+
+/** Run `worker` over `items` with a bounded concurrency pool. */
+async function pool<T>(items: T[], limit: number, worker: (item: T) => Promise<void>): Promise<void> {
+	let cursor = 0;
+	const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+		while (cursor < items.length) {
+			const i = cursor++;
+			await worker(items[i]);
+		}
+	});
+	await Promise.all(runners);
 }
 
 export async function cacheChapterToDevice(
@@ -26,18 +46,26 @@ export async function cacheChapterToDevice(
 	if (pageUrls.length === 0) throw new Error('Chapter tidak punya halaman');
 
 	const cache = await openCache();
+	const urls = pageUrls.map((p) => apiUrl(p));
 	let done = 0;
 
-	for (const pageUrl of pageUrls) {
-		const url = apiUrl(pageUrl);
-		const existing = await cache.match(url);
-		if (!existing) {
-			const res = await fetch(url);
-			if (!res.ok) throw new Error(`Gagal cache halaman: HTTP ${res.status}`);
-			await cache.put(url, res.clone());
-		}
-		done += 1;
-		onProgress?.(done, pageUrls.length);
+	try {
+		await pool(urls, DOWNLOAD_CONCURRENCY, async (url) => {
+			const existing = await cache.match(url);
+			if (!existing) {
+				const res = await fetch(url);
+				if (!res.ok) throw new Error(`Gagal cache halaman: HTTP ${res.status}`);
+				await cache.put(url, res.clone());
+			}
+			done += 1;
+			onProgress?.(done, urls.length);
+		});
+	} catch (e) {
+		// Partial download is worthless (getCachedPageUrls is all-or-nothing) and
+		// leaves orphaned cache entries — roll back everything we just wrote.
+		await Promise.all(urls.map((url) => cache.delete(url).catch(() => {})));
+		await removeOfflineChapter(chapterId).catch(() => {});
+		throw e;
 	}
 
 	const record: OfflineChapter = {

@@ -33,6 +33,7 @@
 	let chapters = $state<Chapter[]>([]);
 	let loading = $state(true);
 	let downloadingAll = $state(false);
+	let downloadProgress = $state('');
 	let error = $state('');
 	let notice = $state('');
 	let offlineIds = $state<Set<number>>(new Set());
@@ -128,6 +129,7 @@
 
 	async function downloadBatch(filter: 'all' | 'unread') {
 		downloadingAll = true;
+		downloadProgress = '';
 		notice = '';
 		error = '';
 		try {
@@ -138,15 +140,28 @@
 				notice = filter === 'unread' ? 'Semua chapter belum dibaca sudah offline.' : 'Semua chapter sudah offline.';
 				return;
 			}
+			let done = 0;
+			let failed = 0;
 			for (const c of targets) {
-				await cacheChapterToDevice(c.id, mangaId, manga!.title, c.name, undefined, manga!.thumbnailUrl, manga!.sourceId);
-				offlineIds = new Set([...offlineIds, c.id]);
+				downloadProgress = `Mengunduh ${done + 1}/${targets.length}…`;
+				try {
+					await cacheChapterToDevice(c.id, mangaId, manga!.title, c.name, undefined, manga!.thumbnailUrl, manga!.sourceId);
+					offlineIds = new Set([...offlineIds, c.id]);
+				} catch {
+					// Skip a failed chapter (already rolled back in cache.ts) and keep going.
+					failed += 1;
+				}
+				done += 1;
 			}
-			notice = `${targets.length} chapter tersimpan di perangkat.`;
+			notice =
+				failed > 0
+					? `${targets.length - failed} chapter tersimpan, ${failed} gagal.`
+					: `${targets.length} chapter tersimpan di perangkat.`;
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Gagal download';
 		} finally {
 			downloadingAll = false;
+			downloadProgress = '';
 		}
 	}
 
@@ -247,6 +262,9 @@
 										</button>
 									{/snippet}
 								</Dropdown>
+							{/if}
+							{#if downloadProgress}
+								<span class="inline-flex items-center text-xs text-muted">{downloadProgress}</span>
 							{/if}
 						</div>
 					</div>
