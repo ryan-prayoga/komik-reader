@@ -59,7 +59,6 @@
 				}).catch(() => {});
 			}
 			preferences.activateExtension(extension.pkgName);
-			onchange?.();
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Gagal';
 		} finally {
@@ -69,7 +68,6 @@
 
 	function deactivate() {
 		preferences.deactivateExtension(extension.pkgName);
-		onchange?.();
 	}
 </script>
 
