@@ -524,7 +524,12 @@
 							aria-checked={filter.state}
 							tabindex="0"
 							onclick={() => toggleCheckbox(fi)}
-							onkeydown={(e) => e.key === 'Enter' && toggleCheckbox(fi)}
+							onkeydown={(e) => {
+								if (e.key === 'Enter' || e.key === ' ') {
+									e.preventDefault();
+									toggleCheckbox(fi);
+								}
+							}}
 						>
 							{#if filter.state}<Check size={10} />{/if}
 						</div>
@@ -563,7 +568,12 @@
 											aria-checked={child.state}
 											tabindex="0"
 											onclick={() => toggleGroupCheckbox(fi, ci)}
-											onkeydown={(e) => e.key === 'Enter' && toggleGroupCheckbox(fi, ci)}
+											onkeydown={(e) => {
+												if (e.key === 'Enter' || e.key === ' ') {
+													e.preventDefault();
+													toggleGroupCheckbox(fi, ci);
+												}
+											}}
 										>
 											{#if child.state}<Check size={10} />{/if}
 										</div>

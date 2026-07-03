@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import Download from '@lucide/svelte/icons/download';
+	import Share from '@lucide/svelte/icons/share';
 	import Button from '$lib/components/ui/Button.svelte';
 
 	interface BeforeInstallPromptEvent extends Event {
@@ -8,19 +9,42 @@
 		userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 	}
 
+	const DISMISS_KEY = 'komik-install-dismissed';
+
 	let deferred = $state<BeforeInstallPromptEvent | null>(null);
 	let visible = $state(false);
-	let dismissed = $state(false);
+	let isIos = $state(false);
+
+	function alreadyDismissed(): boolean {
+		try {
+			return localStorage.getItem(DISMISS_KEY) === '1';
+		} catch {
+			return false;
+		}
+	}
 
 	onMount(() => {
 		if (window.matchMedia('(display-mode: standalone)').matches) return;
+		// @ts-expect-error — iOS-only standalone flag
+		if (window.navigator.standalone) return;
+		if (alreadyDismissed()) return;
+
+		// iOS Safari never fires beforeinstallprompt; detect it so we can show the
+		// manual "Share → Add to Home Screen" hint instead of nothing.
+		const ua = window.navigator.userAgent;
+		const iosDevice = /iP(hone|ad|od)/.test(ua);
+		const webkit = /WebKit/.test(ua) && !/CriOS|FxiOS|EdgiOS/.test(ua);
+		if (iosDevice && webkit) {
+			isIos = true;
+			visible = true;
+			return;
+		}
 
 		const onPrompt = (e: Event) => {
 			e.preventDefault();
 			deferred = e as BeforeInstallPromptEvent;
 			visible = true;
 		};
-
 		window.addEventListener('beforeinstallprompt', onPrompt);
 		return () => window.removeEventListener('beforeinstallprompt', onPrompt);
 	});
@@ -35,11 +59,15 @@
 
 	function dismiss() {
 		visible = false;
-		dismissed = true;
+		try {
+			localStorage.setItem(DISMISS_KEY, '1');
+		} catch {
+			/* ignore */
+		}
 	}
 </script>
 
-{#if visible && !dismissed}
+{#if visible}
 	<div
 		class="fixed bottom-20 left-4 right-4 z-[60] mx-auto flex max-w-lg items-center justify-between gap-4 rounded-[var(--radius)] border border-border bg-surface px-4 py-3 shadow-(--shadow-float) sm:bottom-4 sm:left-auto"
 	>
@@ -49,12 +77,20 @@
 			</div>
 			<div>
 				<p class="text-sm font-medium text-text">Install Komik Reader</p>
-				<p class="text-xs text-muted">Akses cepat dari home screen, seperti app native.</p>
+				{#if isIos}
+					<p class="flex items-center gap-1 text-xs text-muted">
+						Tap <Share size={12} class="inline shrink-0" /> lalu "Add to Home Screen".
+					</p>
+				{:else}
+					<p class="text-xs text-muted">Akses cepat dari home screen, seperti app native.</p>
+				{/if}
 			</div>
 		</div>
 		<div class="flex shrink-0 gap-2">
-			<Button variant="ghost" size="sm" onclick={dismiss}>Nanti</Button>
-			<Button variant="primary" size="sm" onclick={install}>Install</Button>
+			<Button variant="ghost" size="sm" onclick={dismiss}>{isIos ? 'Tutup' : 'Nanti'}</Button>
+			{#if !isIos}
+				<Button variant="primary" size="sm" onclick={install}>Install</Button>
+			{/if}
 		</div>
 	</div>
 {/if}

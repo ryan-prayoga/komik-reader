@@ -31,6 +31,9 @@
 	let manageOpen = $state(false);
 	let newCategoryName = $state('');
 
+	let confirmCatOpen = $state(false);
+	let pendingCat = $state<{ id: number; name: string } | null>(null);
+
 	async function createCategory() {
 		const name = newCategoryName.trim();
 		if (!name) return;
@@ -38,9 +41,14 @@
 		newCategoryName = '';
 	}
 
-	async function removeCategory(id: number, name: string) {
-		if (!confirm(`Hapus kategori "${name}"?`)) return;
-		await localData.deleteCategory(id);
+	function askRemoveCategory(id: number, name: string) {
+		pendingCat = { id, name };
+		confirmCatOpen = true;
+	}
+	async function confirmRemoveCategory() {
+		if (pendingCat) await localData.deleteCategory(pendingCat.id);
+		confirmCatOpen = false;
+		pendingCat = null;
 	}
 </script>
 
@@ -124,11 +132,21 @@
 						<p class="text-sm font-medium text-text">{category.name}</p>
 						<p class="text-xs text-muted">{localData.mangaInCategory(category.id).length} manga</p>
 					</div>
-					<Button variant="ghost" size="sm" onclick={() => removeCategory(category.id, category.name)}>
+					<Button variant="ghost" size="sm" onclick={() => askRemoveCategory(category.id, category.name)}>
 						<Trash2 size={14} /> Hapus
 					</Button>
 				</div>
 			{/each}
 		</div>
 	{/if}
+</Modal>
+
+<Modal bind:open={confirmCatOpen} title="Hapus kategori?">
+	<p class="text-sm text-muted">
+		Kategori "{pendingCat?.name ?? ''}" akan dihapus. Komik di dalamnya tetap ada di library.
+	</p>
+	{#snippet footer()}
+		<Button variant="ghost" onclick={() => (confirmCatOpen = false)}>Batal</Button>
+		<Button onclick={confirmRemoveCategory}>Hapus</Button>
+	{/snippet}
 </Modal>

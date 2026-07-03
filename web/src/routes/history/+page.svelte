@@ -6,7 +6,7 @@
 	import { getInstalledSources } from '$lib/graphql/api';
 	import { relativeTime as formatDate } from '$lib/utils/format';
 	import PageHeader from '$lib/components/PageHeader.svelte';
-	import { Button, Card, Badge, EmptyState } from '$lib/components/ui';
+	import { Button, Card, Badge, EmptyState, Modal } from '$lib/components/ui';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import Cloud from '@lucide/svelte/icons/cloud';
 	import BookOpen from '@lucide/svelte/icons/book-open';
@@ -77,6 +77,24 @@
 		return sourceNames[g.sourceId] ?? null;
 	}
 
+	// Confirm before wiping a manga's whole history — a single misplaced tap
+	// otherwise deletes every row for that series.
+	let confirmOpen = $state(false);
+	let pendingDelete = $state<Group | null>(null);
+
+	function askDelete(g: Group) {
+		pendingDelete = g;
+		confirmOpen = true;
+	}
+	function confirmDelete() {
+		if (pendingDelete) localData.removeHistoryByManga(pendingDelete.mangaId);
+		confirmOpen = false;
+		pendingDelete = null;
+	}
+
+	function openGroup(g: Group) {
+		goto(`/read/${g.lastChapterId}`);
+	}
 </script>
 
 <section>
@@ -101,8 +119,13 @@
 						class="flex cursor-pointer items-center gap-4 px-4 py-3 transition hover:bg-bg/60"
 						role="button"
 						tabindex="0"
-						onclick={() => goto(`/read/${g.lastChapterId}`)}
-						onkeydown={(e) => e.key === 'Enter' && goto(`/read/${g.lastChapterId}`)}
+						onclick={() => openGroup(g)}
+						onkeydown={(e) => {
+							if (e.key === 'Enter' || e.key === ' ') {
+								e.preventDefault();
+								openGroup(g);
+							}
+						}}
 					>
 						<div class="h-16 w-11 shrink-0 overflow-hidden rounded-[var(--radius-sm)] bg-bg">
 							{#if g.thumbnailUrl}
@@ -130,7 +153,7 @@
 							size="sm"
 							onclick={(e: MouseEvent) => {
 								e.stopPropagation();
-								localData.removeHistoryByManga(g.mangaId);
+								askDelete(g);
 							}}
 						>
 							<Trash2 size={14} />
@@ -141,3 +164,13 @@
 		</Card>
 	{/if}
 </section>
+
+<Modal bind:open={confirmOpen} title="Hapus riwayat?">
+	<p class="text-sm text-muted">
+		Semua riwayat baca untuk "{pendingDelete?.mangaTitle ?? ''}" akan dihapus dari perangkat ini.
+	</p>
+	{#snippet footer()}
+		<Button variant="ghost" onclick={() => (confirmOpen = false)}>Batal</Button>
+		<Button onclick={confirmDelete}>Hapus</Button>
+	{/snippet}
+</Modal>
