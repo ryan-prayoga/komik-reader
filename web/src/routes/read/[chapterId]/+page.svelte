@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/stores';
-	import { untrack } from 'svelte';
+	import { untrack, tick } from 'svelte';
 	import { apiUrl } from '$lib/graphql/client';
 	import { fetchChapterPages, getMangaChapters, updateChapterProgress } from '$lib/graphql/api';
 	import { isOnline } from '$lib/offline/connection.svelte';
@@ -24,7 +24,9 @@
 	// Webtoon sections (each section = one chapter's pages)
 	type Section = { chapter: Chapter; pages: string[] };
 	let sections = $state<Section[]>([]);
-	let currentSectionIdx = $state(0);
+	// Chapter id of the section currently in view (not an array index — sections
+	// gets pruned from the front as the reader advances, see the prune effect below).
+	let currentChapterId = $state(0);
 	let currentPageIdx = $state(0);
 	let currentPageProgress = $state(0); // 0–1 scroll progress within the current page
 	let currentChapterProgress = $state(0); // 0–1 true scroll progress across the whole chapter
@@ -80,9 +82,8 @@
 	// webtoon uses currently-viewed section to update nav when infinite-scrolling.
 	const navChapterIndex = $derived.by(() => {
 		if (isPaged) return chapters.findIndex((c) => c.id === chapterId);
-		const secChapter = sections[currentSectionIdx]?.chapter;
-		if (!secChapter) return chapters.findIndex((c) => c.id === chapterId);
-		return chapters.findIndex((c) => c.id === secChapter.id);
+		if (!currentChapterId) return chapters.findIndex((c) => c.id === chapterId);
+		return chapters.findIndex((c) => c.id === currentChapterId);
 	});
 	// chapters sorted descending (newest first): index-1 = newer, index+1 = older
 	const prevChapter = $derived(
@@ -104,10 +105,9 @@
 	);
 
 	// Chapter displayed in header and picker
-	const viewedChapterId = $derived(sections[currentSectionIdx]?.chapter.id ?? chapterId);
-	const viewedChapterName = $derived(
-		sections[currentSectionIdx]?.chapter.name ?? current?.name ?? ''
-	);
+	const viewedChapterId = $derived(currentChapterId || chapterId);
+	const viewedSection = $derived(sections.find((s) => s.chapter.id === currentChapterId));
+	const viewedChapterName = $derived(viewedSection?.chapter.name ?? current?.name ?? '');
 
 	// Reading progress (0–1) for the thin top bar.
 	// Webtoon: true scroll-extent progress (currentChapterProgress) so it hits exactly
@@ -122,7 +122,7 @@
 	const pageLabel = $derived(
 		isPaged
 			? `${currentPage + 1} / ${pages.length}`
-			: `${sections[currentSectionIdx]?.pages.length ?? pages.length} halaman`
+			: `${viewedSection?.pages.length ?? pages.length} halaman`
 	);
 
 	function reportPage(index: number) {
@@ -147,16 +147,16 @@
 	let lastReportedPageKey = '';
 
 	function reportWebtoonPage(
-		sectionIdx: number,
+		sectionChapterId: number,
 		pageIdx: number,
 		pageProgress: number,
 		chapterProgress: number
 	) {
-		currentSectionIdx = sectionIdx;
+		currentChapterId = sectionChapterId;
 		currentPageIdx = pageIdx;
 		currentPageProgress = pageProgress;
 		currentChapterProgress = chapterProgress;
-		const section = sections[sectionIdx];
+		const section = sections.find((s) => s.chapter.id === sectionChapterId);
 		if (!section || !mangaId) return;
 		// Persisting (GraphQL mutation + IndexedDB write) is only needed once per page,
 		// not on every scroll-driven progress tick — guard so autoscroll doesn't fire
@@ -192,6 +192,23 @@
 			loadingNextChapter = false;
 		}
 	}
+
+	// Keep at most one chapter of scrollback loaded behind the one the reader is
+	// currently on — otherwise `sections` (and the DOM/images under it) grows
+	// without bound the longer someone keeps scrolling through a series.
+	// Dropping content that's above the viewport shrinks scrollHeight, so we
+	// compensate scrollTop by the removed amount to avoid a visible jump.
+	$effect(() => {
+		const idx = sections.findIndex((s) => s.chapter.id === currentChapterId);
+		if (idx <= 1) return;
+		const dropCount = idx - 1;
+		const heightBefore = document.documentElement.scrollHeight;
+		sections = sections.slice(dropCount);
+		tick().then(() => {
+			const delta = heightBefore - document.documentElement.scrollHeight;
+			if (delta > 0) window.scrollBy(0, -delta);
+		});
+	});
 
 	function toggleChrome() {
 		chromeVisible = !chromeVisible;
@@ -229,7 +246,7 @@
 		offlineMode = false;
 		currentPage = 0;
 		initialPage = untrack(() => localData.history.find((h) => h.chapterId === id)?.lastPage ?? 0);
-		currentSectionIdx = 0;
+		currentChapterId = id;
 		currentPageIdx = 0;
 		currentPageProgress = 0;
 		currentChapterProgress = 0;

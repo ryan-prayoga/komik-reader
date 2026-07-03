@@ -7,7 +7,7 @@
 	interface Props {
 		sections: Section[];
 		onpage: (
-			sectionIdx: number,
+			chapterId: number,
 			pageIdx: number,
 			pageProgress: number,
 			chapterProgress: number
@@ -20,31 +20,34 @@
 
 	let { sections, onpage, onnearend, zoom = 1, gap = true, initialPage = 0 }: Props = $props();
 
-	// Track current page element for scroll-based progress
+	// Keyed by chapter id (not array index) so entries stay valid when `sections`
+	// is pruned from the front — an index-based key would silently go stale and
+	// point at the wrong chapter once earlier sections are dropped.
 	const pageEls = new Map<string, HTMLElement>();
-	let activeSi = 0;
+	let activeChapterId = 0;
 	let activePi = 0;
 
 	function reportCurrentProgress() {
-		const el = pageEls.get(`${activeSi}-${activePi}`);
+		const el = pageEls.get(`${activeChapterId}-${activePi}`);
 		if (!el) {
-			onpage(activeSi, activePi, 0, 0);
+			onpage(activeChapterId, activePi, 0, 0);
 			return;
 		}
 		const { top, height } = el.getBoundingClientRect();
 		// progress 0 = top of page at viewport top, 1 = bottom of page at viewport top
 		const progress = height > 0 ? Math.max(0, Math.min(1, -top / height)) : 0;
-		onpage(activeSi, activePi, progress, chapterScrollProgress(activeSi));
+		onpage(activeChapterId, activePi, progress, chapterScrollProgress(activeChapterId));
 	}
 
 	// True scroll-extent progress for the active chapter: 0 at the chapter's first
 	// page top, 1 once scrolled all the way to its last page bottom. Unlike per-page
 	// progress, this isn't bounded by individual page heights, so it actually reaches
 	// 0/1 at the real start/end instead of stalling short on short pages.
-	function chapterScrollProgress(si: number): number {
-		const lastIdx = (sections[si]?.pages.length ?? 1) - 1;
-		const firstEl = pageEls.get(`${si}-0`);
-		const lastEl = pageEls.get(`${si}-${lastIdx}`);
+	function chapterScrollProgress(chapterId: number): number {
+		const section = sections.find((s) => s.chapter.id === chapterId);
+		const lastIdx = (section?.pages.length ?? 1) - 1;
+		const firstEl = pageEls.get(`${chapterId}-0`);
+		const lastEl = pageEls.get(`${chapterId}-${lastIdx}`);
 		if (!firstEl || !lastEl) return 0;
 		const firstTop = firstEl.getBoundingClientRect().top;
 		const lastBottom = lastEl.getBoundingClientRect().bottom;
@@ -53,14 +56,14 @@
 		return Math.max(0, Math.min(1, -firstTop / scrollable));
 	}
 
-	function observePage(node: HTMLElement, param: { si: number; pi: number }) {
-		const key = `${param.si}-${param.pi}`;
+	function observePage(node: HTMLElement, param: { chapterId: number; pi: number }) {
+		const key = `${param.chapterId}-${param.pi}`;
 		pageEls.set(key, node);
 
 		const observer = new IntersectionObserver(
 			(entries) => {
 				if (entries[0]?.isIntersecting) {
-					activeSi = param.si;
+					activeChapterId = param.chapterId;
 					activePi = param.pi;
 					reportCurrentProgress();
 				}
@@ -78,11 +81,14 @@
 	}
 
 	function observeSentinel(node: HTMLElement) {
+		// Trigger a full viewport height before the true bottom so slow chapter
+		// fetches finish before the user actually scrolls past the last page.
+		const margin = Math.max(800, typeof window !== 'undefined' ? window.innerHeight : 0);
 		const observer = new IntersectionObserver(
 			(entries) => {
 				if (entries[0]?.isIntersecting) onnearend?.();
 			},
-			{ rootMargin: '0px 0px 400px 0px', threshold: 0 }
+			{ rootMargin: `0px 0px ${margin}px 0px`, threshold: 0 }
 		);
 		observer.observe(node);
 		return { destroy: () => observer.disconnect() };
@@ -94,7 +100,10 @@
 
 		if (initialPage > 0) {
 			function scrollToTarget() {
-				pageEls.get(`0-${initialPage}`)?.scrollIntoView({ block: 'start', behavior: 'instant' });
+				const firstChapterId = sections[0]?.chapter.id;
+				pageEls
+					.get(`${firstChapterId}-${initialPage}`)
+					?.scrollIntoView({ block: 'start', behavior: 'instant' });
 			}
 			// Retry a few times as images above the target finish loading and establish height.
 			scrollRafId = requestAnimationFrame(scrollToTarget);
@@ -120,7 +129,10 @@
 	const maxWidth = $derived(`${48 * zoom}rem`);
 </script>
 
-<div class="mx-auto {gap ? 'space-y-1' : ''}" style="max-width: {maxWidth}">
+<div
+	class="mx-auto {gap ? 'space-y-1' : ''}"
+	style="max-width: {maxWidth}; overflow-anchor: none;"
+>
 	{#each sections as section, si (section.chapter.id)}
 		{#if si > 0}
 			<div class="flex items-center gap-3 px-4 py-8">
@@ -132,7 +144,7 @@
 			</div>
 		{/if}
 		{#each section.pages as pageUrl, pi (pi)}
-			<div class="overflow-hidden" use:observePage={{ si, pi }}>
+			<div class="overflow-hidden" use:observePage={{ chapterId: section.chapter.id, pi }}>
 				<img
 					src={pageUrl}
 					alt="Halaman {pi + 1}"
