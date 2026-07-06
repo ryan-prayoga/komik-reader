@@ -35,8 +35,25 @@
 	const lastIndex = $derived(pages.length - 1);
 
 	let loadedPages = $state<Record<number, boolean>>({});
+	let errorPages = $state<Record<number, boolean>>({});
+	let retryCounts = $state<Record<number, number>>({});
 	function markLoaded(i: number) {
 		loadedPages[i] = true;
+		errorPages[i] = false;
+	}
+	function markError(i: number) {
+		errorPages[i] = true;
+	}
+	function retryPage(i: number) {
+		errorPages[i] = false;
+		loadedPages[i] = false;
+		retryCounts[i] = (retryCounts[i] ?? 0) + 1;
+	}
+	function pageSrc(i: number): string {
+		const url = pages[i];
+		const n = retryCounts[i];
+		if (!n) return url;
+		return `${url}${url.includes('?') ? '&' : '?'}_retry=${n}`;
 	}
 
 	// Left page index of the pair that contains `i`. In offset double mode the
@@ -167,13 +184,23 @@
 					? ''
 					: 'min-h-[50vh] min-w-[40vw]'}"
 			>
-				{#if !loadedPages[i]}
+				{#if errorPages[i]}
+					<div class="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2">
+						<button
+							type="button"
+							class="rounded-full bg-white/10 px-4 py-2 text-sm text-white/80 hover:bg-white/20"
+							onclick={() => retryPage(i)}
+						>
+							Muat ulang
+						</button>
+					</div>
+				{:else if !loadedPages[i]}
 					<div class="absolute inset-0 flex items-center justify-center">
 						<Spinner size={28} class="text-white/40" />
 					</div>
 				{/if}
 				<img
-					src={pages[i]}
+					src={pageSrc(i)}
 					alt="Halaman {i + 1}"
 					class="block object-contain transition-opacity duration-300 {loadedPages[i]
 						? 'opacity-100'
@@ -181,7 +208,7 @@
 					style={imgStyle()}
 					decoding="async"
 					onload={() => markLoaded(i)}
-					onerror={() => markLoaded(i)}
+					onerror={() => markError(i)}
 				/>
 			</div>
 		{/each}

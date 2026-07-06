@@ -29,8 +29,24 @@
 	let activePi = 0;
 
 	let loadedPages = $state<Record<string, boolean>>({});
+	let errorPages = $state<Record<string, boolean>>({});
+	let retryCounts = $state<Record<string, number>>({});
 	function markLoaded(key: string) {
 		loadedPages[key] = true;
+		errorPages[key] = false;
+	}
+	function markError(key: string) {
+		errorPages[key] = true;
+	}
+	function retryPage(key: string) {
+		errorPages[key] = false;
+		loadedPages[key] = false;
+		retryCounts[key] = (retryCounts[key] ?? 0) + 1;
+	}
+	function pageSrc(url: string, key: string): string {
+		const n = retryCounts[key];
+		if (!n) return url;
+		return `${url}${url.includes('?') ? '&' : '?'}_retry=${n}`;
 	}
 
 	function reportCurrentProgress() {
@@ -156,13 +172,25 @@
 				data-page-key={key}
 				use:observePage={{ chapterId: section.chapter.id, pi }}
 			>
-				{#if !loadedPages[key]}
+				{#if errorPages[key]}
+					<div
+						class="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-white/[0.03]"
+					>
+						<button
+							type="button"
+							class="rounded-full bg-white/10 px-4 py-2 text-sm text-white/80 hover:bg-white/20"
+							onclick={() => retryPage(key)}
+						>
+							Muat ulang
+						</button>
+					</div>
+				{:else if !loadedPages[key]}
 					<div class="absolute inset-0 flex items-center justify-center bg-white/[0.03]">
 						<Spinner size={24} class="text-white/40" />
 					</div>
 				{/if}
 				<img
-					src={pageUrl}
+					src={pageSrc(pageUrl, key)}
 					alt="Halaman {pi + 1}"
 					class="mx-auto block w-full transition-opacity duration-300 {loadedPages[key]
 						? 'opacity-100'
@@ -171,7 +199,7 @@
 					loading={si === 0 && pi <= initialPage ? 'eager' : 'lazy'}
 					decoding="async"
 					onload={() => markLoaded(key)}
-					onerror={() => markLoaded(key)}
+					onerror={() => markError(key)}
 				/>
 			</div>
 		{/each}
