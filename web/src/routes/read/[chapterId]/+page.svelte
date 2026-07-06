@@ -75,6 +75,17 @@
 		readerSettings.set('autoScrollSpeed', autoScrollSpeed);
 	});
 
+	// Webtoon mode advances through chapters via infinite scroll without ever
+	// navigating, so the URL stays pinned to whichever chapter was first opened —
+	// reloading the page (or reopening the tab) would jump back there instead of
+	// wherever the user actually scrolled to. Keep the address bar in sync with
+	// a silent history.replaceState (native, not SvelteKit's goto/replaceState)
+	// so it doesn't re-run this component's load effect on every chapter change.
+	$effect(() => {
+		if (isPaged || !currentChapterId || currentChapterId === chapterId) return;
+		history.replaceState(history.state, '', `/read/${currentChapterId}`);
+	});
+
 	const bgClass = $derived(BG_CLASS[readerSettings.bg]);
 	const isPaged = $derived(readerSettings.mode !== 'webtoon');
 	const backHref = $derived(mangaId ? `/manga/${mangaId}` : '/history');
@@ -157,6 +168,38 @@
 	}
 
 	let lastReportedPageKey = '';
+	let lastBackfilledChapterId = 0;
+
+	// Fast/momentum scroll can carry the viewport past a chapter's last page
+	// before the IntersectionObserver ever reports it as active, so that page's
+	// own isRead write never fires. Once we're confirmed inside a later chapter,
+	// every earlier chapter in `sections` has necessarily been scrolled past —
+	// backfill isRead for those instead of relying solely on the per-page check.
+	function backfillPassedChapters(sectionChapterId: number) {
+		if (sectionChapterId === lastBackfilledChapterId) return;
+		lastBackfilledChapterId = sectionChapterId;
+		const idx = sections.findIndex((s) => s.chapter.id === sectionChapterId);
+		if (idx <= 0) return;
+		for (const s of sections.slice(0, idx)) {
+			if (chapters.find((c) => c.id === s.chapter.id)?.isRead) continue;
+			updateChapterProgress(s.chapter.id, s.pages.length - 1, true).catch(() => {});
+			markChapterReadLocally(s.chapter.id);
+			if (mangaId) {
+				localData.recordHistory({
+					chapterId: s.chapter.id,
+					mangaId,
+					mangaTitle,
+					thumbnailUrl: mangaThumb,
+					chapterName: s.chapter.name,
+					lastPage: s.pages.length - 1,
+					isRead: true,
+					sourceId: mangaSourceId,
+					chapterNumber: s.chapter.chapterNumber,
+					totalPages: s.pages.length
+				});
+			}
+		}
+	}
 
 	function reportWebtoonPage(
 		sectionChapterId: number,
@@ -168,6 +211,7 @@
 		currentPageIdx = pageIdx;
 		currentPageProgress = pageProgress;
 		currentChapterProgress = chapterProgress;
+		backfillPassedChapters(sectionChapterId);
 		const section = sections.find((s) => s.chapter.id === sectionChapterId);
 		if (!section || !mangaId) return;
 		// Persisting (GraphQL mutation + IndexedDB write) is only needed once per page,
