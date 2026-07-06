@@ -11,7 +11,6 @@
 	import Cloud from '@lucide/svelte/icons/cloud';
 	import BookOpen from '@lucide/svelte/icons/book-open';
 	import Clock from '@lucide/svelte/icons/clock';
-	import Flag from '@lucide/svelte/icons/flag';
 	import type { LocalHistory } from '$lib/local/types';
 
 	type Group = {
@@ -22,7 +21,7 @@
 		lastChapterId: number;
 		lastChapterName: string;
 		lastReadAt: number;
-		furthestRead: number | null;
+		progressPercent: number | null;
 		count: number;
 	};
 
@@ -54,10 +53,11 @@
 		for (const [mangaId, rows] of byManga) {
 			// Most recently touched row = where the user left off (continue point).
 			const recent = rows.reduce((a, b) => (b.updatedAt > a.updatedAt ? b : a));
-			const readNums = rows
-				.filter((r) => r.isRead && r.chapterNumber != null)
-				.map((r) => r.chapterNumber as number);
-			const furthest = readNums.length ? Math.max(...readNums) : null;
+			const progressPercent = recent.isRead
+				? 100
+				: recent.totalPages
+					? Math.min(100, Math.round(((recent.lastPage + 1) / recent.totalPages) * 100))
+					: null;
 			out.push({
 				mangaId,
 				mangaTitle: recent.mangaTitle,
@@ -66,9 +66,7 @@
 				lastChapterId: recent.chapterId,
 				lastChapterName: recent.chapterName,
 				lastReadAt: recent.updatedAt,
-				// Only surface this when it actually differs from the continue point above —
-				// otherwise it just repeats the same chapter number twice.
-				furthestRead: furthest != null && furthest !== recent.chapterNumber ? furthest : null,
+				progressPercent,
 				count: rows.length
 			});
 		}
@@ -140,15 +138,16 @@
 							<p class="flex items-center gap-1 text-xs text-muted">
 								{#if sourceLabel(g)}<span class="shrink-0">{sourceLabel(g)} ·</span>{/if}
 								<BookOpen size={12} class="shrink-0" />
-								<span class="min-w-0 flex-1 truncate">{g.lastChapterName}</span>
+								<span class="flex min-w-0 flex-1 items-center gap-1">
+									<span class="truncate">{g.lastChapterName}</span>
+									{#if g.progressPercent != null}
+										<span class="shrink-0">· {g.progressPercent}%</span>
+									{/if}
+								</span>
 							</p>
 							<p class="flex items-center gap-1 text-[11px] text-muted">
 								<Clock size={11} class="shrink-0" />
 								<span>{formatDate(g.lastReadAt)}</span>
-								{#if g.furthestRead != null}
-									<Flag size={11} class="shrink-0" />
-									<span>Ch {g.furthestRead}</span>
-								{/if}
 							</p>
 						</div>
 						<Button
