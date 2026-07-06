@@ -43,8 +43,6 @@ class ReadingTimer {
 	// only runs in the browser (guarded via `typeof window`) so the union is fine
 	// for tsc — at runtime only `number` ever lands here.
 	#intervalId: number | ReturnType<typeof setInterval> | null = null;
-	/** Live counter — updated each tick so UI can show "X menit chapter ini" without IndexedDB reads. */
-	liveMs = $state(0);
 
 	startChapter(chapterId: number) {
 		if (typeof document === 'undefined') return;
@@ -57,7 +55,6 @@ class ReadingTimer {
 		this.flush();
 		this.#activeChapterId = chapterId;
 		this.#bufferedMs = 0;
-		this.liveMs = 0;
 		const now = Date.now();
 		this.#lastTickAt = now;
 		this.#lastActivityAt = now;
@@ -91,7 +88,6 @@ class ReadingTimer {
 		await this.flush();
 		this.#activeChapterId = null;
 		this.#bufferedMs = 0;
-		this.liveMs = 0;
 		this.#stopTicking();
 	}
 
@@ -117,7 +113,6 @@ class ReadingTimer {
 			return;
 		}
 		this.#bufferedMs += delta;
-		this.liveMs += delta;
 		this.#lastTickAt = now;
 	}
 
