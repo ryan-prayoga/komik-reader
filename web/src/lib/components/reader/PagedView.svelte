@@ -49,6 +49,24 @@
 		loadedPages[i] = false;
 		retryCounts[i] = (retryCounts[i] ?? 0) + 1;
 	}
+
+	// `pages` is index-keyed and this component never unmounts across a chapter
+	// change, so without a reset here the new chapter's page 0 briefly renders
+	// with the OLD page 0's loaded/opacity state (a flash of the wrong or blank
+	// image) before its own onload fires — the reported flicker.
+	$effect(() => {
+		pages;
+		loadedPages = {};
+		errorPages = {};
+		retryCounts = {};
+		navigatingAway = false;
+	});
+
+	// Guards against next()/prev() firing twice past the boundary before the
+	// chapter-change navigation actually lands (e.g. a fast double-tap on the
+	// last page) — a second goto() to the same target mid-navigation could
+	// race SvelteKit's router and knock the whole reader out to an error page.
+	let navigatingAway = $state(false);
 	function pageSrc(i: number): string {
 		const url = pages[i];
 		const n = retryCounts[i];
@@ -77,6 +95,8 @@
 	function next() {
 		const n = nextIndex(current);
 		if (n > lastIndex) {
+			if (navigatingAway) return; // already handing off — don't double-navigate
+			navigatingAway = true;
 			onnext?.(); // past the end — hand off to chapter navigation
 			return;
 		}
@@ -85,6 +105,8 @@
 	}
 	function prev() {
 		if (current <= 0) {
+			if (navigatingAway) return;
+			navigatingAway = true;
 			onprev?.();
 			return;
 		}

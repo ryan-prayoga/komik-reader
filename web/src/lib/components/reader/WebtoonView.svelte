@@ -17,9 +17,21 @@
 		zoom?: number;
 		gap?: boolean;
 		initialPage?: number;
+		// Bumped by the parent on every hard chapter navigation (URL change), as
+		// opposed to infinite-scroll appends which leave this untouched. Lets us
+		// tell "user jumped chapters" apart from "next chapter streamed in".
+		resetToken?: number | string;
 	}
 
-	let { sections, onpage, onnearend, zoom = 1, gap = true, initialPage = 0 }: Props = $props();
+	let {
+		sections,
+		onpage,
+		onnearend,
+		zoom = 1,
+		gap = true,
+		initialPage = 0,
+		resetToken
+	}: Props = $props();
 
 	// Keyed by chapter id (not array index) so entries stay valid when `sections`
 	// is pruned from the front — an index-based key would silently go stale and
@@ -43,6 +55,23 @@
 		loadedPages[key] = false;
 		retryCounts[key] = (retryCounts[key] ?? 0) + 1;
 	}
+
+	// Hard chapter nav (URL change) reuses this same component instance — it
+	// never unmounts, so without this the old chapter's IntersectionObserver
+	// state (activeChapterId/pageEls) survives into the new chapter. The
+	// scrollTop clamp that follows `sections` collapsing to the new chapter
+	// then fires a stale onScroll → reportCurrentProgress → onpage(oldChapterId,
+	// ...), which snaps `currentChapterId` (and the header/URL synced to it)
+	// back to the chapter just left — the visible flicker/crash-out-of-reader.
+	$effect(() => {
+		resetToken;
+		pageEls.clear();
+		activeChapterId = 0;
+		activePi = 0;
+		loadedPages = {};
+		errorPages = {};
+		retryCounts = {};
+	});
 	function pageSrc(url: string, key: string): string {
 		const n = retryCounts[key];
 		if (!n) return url;

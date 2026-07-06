@@ -514,6 +514,7 @@
 					onpage={reportWebtoonPage}
 					onnearend={handleNearEnd}
 					{initialPage}
+					resetToken={chapterId}
 				/>
 			</button>
 			{#if loadingNextChapter}
