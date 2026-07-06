@@ -16,6 +16,11 @@ export type LocalHistory = {
 	chapterNumber?: number;
 	totalPages?: number;
 	deleted?: boolean;
+	/**
+	 * Wall-clock ms spent actively reading this chapter on THIS device.
+	 * Device-local — intentionally NOT synced (see `web/src/lib/local/sync.svelte.ts`).
+	 */
+	timeSpentMs?: number;
 };
 
 export type LocalLibrary = {

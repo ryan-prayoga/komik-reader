@@ -113,7 +113,8 @@ class LocalData {
 			lastPage: existing?.lastPage ?? 0,
 			isRead,
 			updatedAt: nowMs(),
-			deleted: false
+			deleted: false,
+			timeSpentMs: existing?.timeSpentMs
 		};
 		await putItem('history', row);
 		this.history = [row, ...this.history.filter((h) => h.chapterId !== row.chapterId)].sort(
@@ -155,7 +156,8 @@ class LocalData {
 				lastPage: existing?.lastPage ?? 0,
 				isRead,
 				updatedAt: base + i,
-				deleted: false
+				deleted: false,
+				timeSpentMs: existing?.timeSpentMs
 			};
 		});
 		await putMany('history', rows);
@@ -173,6 +175,25 @@ class LocalData {
 		await putItem('history', { ...row, deleted: true, updatedAt: nowMs() });
 		this.history = this.history.filter((h) => h.chapterId !== chapterId);
 		this.#changed();
+	}
+
+	/**
+	 * Add `deltaMs` to a chapter's accumulated `timeSpentMs`. Bumps `updatedAt`
+	 * so the sync engine sees a new row version (and so per-row LWW works on
+	 * other fields too). Does NOT call `#changed()` because the change is
+	 * device-local — we don't want to push this field to the server.
+	 */
+	async addTimeSpent(chapterId: number, deltaMs: number) {
+		if (deltaMs <= 0) return;
+		const row = this.history.find((h) => h.chapterId === chapterId);
+		if (!row) return; // no history yet — wait for first recordHistory
+		const next = {
+			...row,
+			timeSpentMs: (row.timeSpentMs ?? 0) + deltaMs,
+			updatedAt: nowMs()
+		};
+		await putItem('history', next);
+		this.history = this.history.map((h) => (h.chapterId === chapterId ? next : h));
 	}
 
 	/** Tombstone every history row for a manga (per-manga delete in Riwayat). */

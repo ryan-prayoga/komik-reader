@@ -7,6 +7,7 @@ import Puzzle from '@lucide/svelte/icons/puzzle';
 import Download from '@lucide/svelte/icons/download';
 import Settings from '@lucide/svelte/icons/settings';
 import Shield from '@lucide/svelte/icons/shield';
+import BarChart3 from '@lucide/svelte/icons/bar-chart-3';
 
 export interface NavItem {
 	href: string;
@@ -24,6 +25,7 @@ export const primaryNav: NavItem[] = [
 
 /** Secondary destinations — sidebar lower section + mobile "More" sheet. */
 export const manageNav: NavItem[] = [
+	{ href: '/stats', label: 'Statistik', icon: BarChart3 },
 	{ href: '/extensions', label: 'Extensions', icon: Puzzle },
 	{ href: '/downloads', label: 'Downloads', icon: Download },
 	{ href: '/settings', label: 'Settings', icon: Settings }

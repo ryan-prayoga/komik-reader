@@ -74,10 +74,13 @@ class SyncEngine {
 		) => {
 			for (const r of rows) {
 				if (r.updatedAt > pushCursor) {
+					// Strip `timeSpentMs` before pushing: it's device-local (privacy
+					// + LWW would clobber another device's accumulated time).
+					const { timeSpentMs: _omit, ...payload } = r as Record<string, unknown>;
 					local.push({
 						entity,
 						itemKey: key(r as never),
-						data: r,
+						data: payload,
 						updatedAt: r.updatedAt,
 						deleted: !!r.deleted
 					});
@@ -107,7 +110,14 @@ class SyncEngine {
 			const store = ch.entity as SyncEntity;
 			const existing = await getItem<{ updatedAt: number }>(store, Number(ch.itemKey));
 			if (!existing || ch.updatedAt > existing.updatedAt) {
-				await putItem(store, ch.data);
+				// Preserve the device-local `timeSpentMs` — never let a remote
+				// change overwrite it (and a remote change shouldn't carry it
+				// anyway because we strip it on push).
+				const merged =
+					store === 'history' && existing && 'timeSpentMs' in (existing as Record<string, unknown>)
+						? { ...(ch.data as Record<string, unknown>), timeSpentMs: (existing as { timeSpentMs?: number }).timeSpentMs }
+						: ch.data;
+				await putItem(store, merged);
 				applied = true;
 				if (ch.updatedAt > maxCursor) maxCursor = ch.updatedAt;
 			}

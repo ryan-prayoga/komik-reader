@@ -8,6 +8,7 @@
 	import { getCachedPageUrls } from '$lib/offline/cache';
 	import { readerSettings, BG_CLASS } from '$lib/reader-settings.svelte';
 	import { localData } from '$lib/local/data.svelte';
+	import { readingTimer } from '$lib/reading-time';
 	import WebtoonView from '$lib/components/reader/WebtoonView.svelte';
 	import PagedView from '$lib/components/reader/PagedView.svelte';
 	import ReaderControls from '$lib/components/reader/ReaderControls.svelte';
@@ -165,6 +166,11 @@
 				totalPages: pages.length
 			});
 		}
+		// Flush accumulated time at each page boundary — worst-case loss on a
+		// crash is bounded to "time on the in-flight page" rather than the whole
+		// session.
+		readingTimer.pingActivity();
+		void readingTimer.flush();
 	}
 
 	let lastReportedPageKey = '';
@@ -235,6 +241,8 @@
 			chapterNumber: section.chapter.chapterNumber,
 			totalPages: section.pages.length
 		});
+		readingTimer.pingActivity();
+		void readingTimer.flush();
 	}
 
 	async function handleNearEnd() {
@@ -299,10 +307,49 @@
 		};
 	}
 
+	// Webtoon mode doesn't remount on chapter change — the same component instance
+	// streams new chapters into `sections`. Track the section the user is
+	// actually viewing so `readingTimer` attributes time correctly without the
+	// paged-mode chapterId-driven $effect firing.
+	$effect(() => {
+		const id = isPaged ? 0 : currentChapterId;
+		if (!id) return;
+		readingTimer.startChapter(id);
+		return () => {
+			if (!isPaged) void readingTimer.flush();
+		};
+	});
+
+	// Idle heuristic in webtoon: any scroll/touch/keypress counts as activity so
+	// autoscroll doesn't trip the 5-min idle cutoff mid-stream.
+	$effect(() => {
+		if (typeof window === 'undefined') return;
+		const onActivity = () => readingTimer.pingActivity();
+		window.addEventListener('scroll', onActivity, { passive: true });
+		window.addEventListener('keydown', onActivity);
+		window.addEventListener('touchstart', onActivity, { passive: true });
+		window.addEventListener('pointerdown', onActivity);
+		return () => {
+			window.removeEventListener('scroll', onActivity);
+			window.removeEventListener('keydown', onActivity);
+			window.removeEventListener('touchstart', onActivity);
+			window.removeEventListener('pointerdown', onActivity);
+		};
+	});
+
 	// $effect reruns whenever chapterId changes (client-side nav between chapters).
 	$effect(() => {
 		const id = chapterId;
 		let cancelled = false;
+
+		// Start the reading timer for paged mode. The cleanup function runs when
+		// the user navigates to another chapter (SvelteKit `goto`), flushing the
+		// accumulated time so it lands in IndexedDB before the next chapter.
+		readingTimer.startChapter(id);
+		const stopTimer = () => {
+			void readingTimer.flush();
+			readingTimer.stop();
+		};
 
 		// Reset all per-chapter state
 		pages = [];
@@ -383,6 +430,7 @@
 
 		return () => {
 			cancelled = true;
+			stopTimer();
 		};
 	});
 

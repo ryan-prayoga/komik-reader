@@ -5,6 +5,7 @@
 	import { syncEngine } from '$lib/local/sync.svelte';
 	import { getInstalledSources } from '$lib/graphql/api';
 	import { relativeTime as formatDate } from '$lib/utils/format';
+	import { formatDuration } from '$lib/reading-time';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import { Button, Card, Badge, EmptyState, Modal } from '$lib/components/ui';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
@@ -23,6 +24,7 @@
 		lastReadAt: number;
 		progressPercent: number | null;
 		count: number;
+		totalMs: number;
 	};
 
 	// sourceId → human-readable source name (best-effort; needs Suwayomi online).
@@ -58,6 +60,7 @@
 				: recent.totalPages
 					? Math.min(100, Math.round(((recent.lastPage + 1) / recent.totalPages) * 100))
 					: null;
+			const totalMs = rows.reduce((acc, r) => acc + (r.timeSpentMs ?? 0), 0);
 			out.push({
 				mangaId,
 				mangaTitle: recent.mangaTitle,
@@ -67,7 +70,8 @@
 				lastChapterName: recent.chapterName,
 				lastReadAt: recent.updatedAt,
 				progressPercent,
-				count: rows.length
+				count: rows.length,
+				totalMs
 			});
 		}
 		return out.sort((a, b) => b.lastReadAt - a.lastReadAt);
@@ -149,6 +153,12 @@
 								<Clock size={11} class="shrink-0" />
 								<span>{formatDate(g.lastReadAt)}</span>
 							</p>
+							{#if g.totalMs > 0}
+								<p class="mt-0.5 flex items-center gap-1 text-[11px] text-muted">
+									<span class="inline-block h-1 w-1 rounded-full bg-muted/60"></span>
+									<span>Total {formatDuration(g.totalMs)}</span>
+								</p>
+							{/if}
 						</div>
 						<Button
 							variant="ghost"

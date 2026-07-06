@@ -7,6 +7,7 @@
 	import CategoryPicker from '$lib/components/CategoryPicker.svelte';
 	import LibraryButton from '$lib/components/LibraryButton.svelte';
 	import { localData } from '$lib/local/data.svelte';
+	import { formatDuration, getMangaStats } from '$lib/reading-time';
 	import { listOfflineChapters } from '$lib/offline/db';
 	import { cacheChapterToDevice } from '$lib/offline/cache';
 	import { Button, Badge, Card, EmptyState, Spinner, Input, Dropdown, IconButton } from '$lib/components/ui';
@@ -25,6 +26,7 @@
 	import ArrowUp from '@lucide/svelte/icons/arrow-up';
 	import HardDriveDownload from '@lucide/svelte/icons/hard-drive-download';
 	import CloudOff from '@lucide/svelte/icons/cloud-off';
+	import Clock from '@lucide/svelte/icons/clock';
 	import type { Chapter, MangaDetail } from '$lib/graphql/types';
 
 	const mangaId = $derived(Number($page.params.id));
@@ -53,6 +55,7 @@
 
 	const unreadCount = $derived(merged.filter((c) => !c.read).length);
 	const hasAnyRead = $derived(merged.some((c) => c.read));
+	const mangaStats = $derived(getMangaStats(mangaId, localData.history));
 	// Resume at the most recently touched chapter (matches home + history
 	// pages) if it's still unread; otherwise oldest unread, else re-read.
 	const lastTouched = $derived.by(() => {
@@ -223,6 +226,12 @@
 						{#if manga.author}<p>Author: {manga.author}</p>{/if}
 						{#if manga.artist && manga.artist !== manga.author}<p>Artist: {manga.artist}</p>{/if}
 						<p>{chapters.length} chapter · {unreadCount} belum dibaca</p>
+						{#if mangaStats && mangaStats.totalMs > 0}
+							<p class="flex items-center gap-1.5">
+								<Clock size={13} class="shrink-0" />
+								<span>Total {formatDuration(mangaStats.totalMs)} dibaca di perangkat ini</span>
+							</p>
+						{/if}
 					</div>
 
 					{#if manga.genre?.length}
