@@ -2,6 +2,7 @@
 	import '../app.css';
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
+	import { goto } from '$app/navigation';
 	import { panelSnap } from '$lib/utils/motion';
 	import { preferences } from '$lib/preferences.svelte';
 	import { localData } from '$lib/local/data.svelte';
@@ -36,6 +37,17 @@
 		preferences.init();
 		await localData.init();
 		syncEngine.start(!!data.user);
+
+		// iOS/Android standalone PWAs reopen at whatever path the OS last saw
+		// (not the manifest start_url) — this fires once per real cold launch
+		// (layout only mounts on a fresh document load, never on in-app client
+		// navigation), so redirect that specific case back to Home.
+		const standalone =
+			window.matchMedia('(display-mode: standalone)').matches ||
+			(navigator as unknown as { standalone?: boolean }).standalone === true;
+		if (standalone && $page.url.pathname !== '/') {
+			goto('/', { replaceState: true });
+		}
 	});
 </script>
 
