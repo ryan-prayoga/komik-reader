@@ -23,7 +23,9 @@ export default defineConfig({
 				description: 'Baca komik via Keiyoushi extensions',
 				theme_color: '#0b0a09',
 				background_color: '#0b0a09',
-				display: 'standalone',
+				// browser (not standalone): standalone mode on iOS produces a domain-bar
+				// black band above the reader that we couldn't suppress reliably.
+				display: 'browser',
 				start_url: '/',
 				icons: [
 					{
