@@ -1,16 +1,23 @@
 <script lang="ts">
+	import { browser } from '$app/environment';
 	import { useRegisterSW } from 'virtual:pwa-register/svelte';
+	import { readable } from 'svelte/store';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import Button from '$lib/components/ui/Button.svelte';
 
-	const { needRefresh, updateServiceWorker } = useRegisterSW({
-		onRegisteredSW(_url, registration) {
-			// Long-lived tabs (e.g. mid-chapter) never revisit the network layer that
-			// would otherwise surface an update, so poll for a new worker hourly.
-			if (!registration) return;
-			setInterval(() => registration.update(), 60 * 60 * 1000);
-		}
-	});
+	const { needRefresh, updateServiceWorker } = browser
+		? useRegisterSW({
+				onRegisteredSW(_url, registration) {
+					// Long-lived tabs (e.g. mid-chapter) never revisit the network layer that
+					// would otherwise surface an update, so poll for a new worker hourly.
+					if (!registration) return;
+					setInterval(() => registration.update(), 60 * 60 * 1000);
+				}
+			})
+		: {
+				needRefresh: readable(false),
+				updateServiceWorker: async () => {}
+			};
 
 	let reloading = $state(false);
 
