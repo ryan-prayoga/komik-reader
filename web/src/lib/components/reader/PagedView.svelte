@@ -192,14 +192,14 @@
 <svelte:window {onkeydown} />
 
 <div
-	class="relative flex min-h-dvh w-full select-none items-center justify-center overflow-auto"
+	class="relative flex min-h-dvh w-full select-none items-start justify-center overflow-auto sm:items-center"
 	role="group"
 	aria-label="Area baca"
 	ontouchstart={onTouchStart}
 	ontouchmove={onTouchMove}
 	ontouchend={onTouchEnd}
 >
-	<div class="flex items-center justify-center gap-1">
+	<div class="flex items-start justify-center gap-1 sm:items-center">
 		{#each visible as i (i)}
 			<div
 				class="relative flex items-center justify-center {loadedPages[i]
