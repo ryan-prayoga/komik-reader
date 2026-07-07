@@ -77,6 +77,7 @@ jobs:
           set -Eeuo pipefail
 
           echo "[DEPLOY] Pull latest"
+          git remote set-url origin "https://github.com/${{ github.repository }}.git"
           git fetch --prune origin
           git checkout main
           git pull --ff-only origin main
