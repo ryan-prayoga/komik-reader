@@ -2,14 +2,17 @@
 // Separate DB from the offline-chapter cache so versioning stays independent.
 
 const DB_NAME = 'komik-reader-data';
-const DB_VERSION = 1;
+// v2: added `readtime` store (per-device reading time pulled from account sync).
+const DB_VERSION = 2;
 
-export type LocalStore = 'history' | 'library' | 'categories' | 'meta';
+export type LocalStore = 'history' | 'library' | 'categories' | 'readtime' | 'meta';
 
 const STORES: Record<LocalStore, string> = {
 	history: 'chapterId',
 	library: 'mangaId',
 	categories: 'id',
+	// Composite key `${chapterId}:${deviceId}` — one row per (chapter, device).
+	readtime: 'key',
 	meta: 'key'
 };
 

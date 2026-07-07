@@ -1,16 +1,41 @@
 import { browser } from '$app/environment';
-import { getAll, putItem, putMany } from './db';
-import type { LocalHistory, LocalLibrary, LocalCategory } from './types';
+import { getAll, getMeta, putItem, putMany, setMeta } from './db';
+import type { LocalHistory, LocalLibrary, LocalCategory, LocalReadtime } from './types';
 
 const nowMs = () => Date.now();
+
+const DEVICE_ID_KEY = 'deviceId';
+
+function makeDeviceId(): string {
+	if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID();
+	return `dev-${nowMs()}-${Math.random().toString(36).slice(2, 10)}`;
+}
 
 class LocalData {
 	history = $state<LocalHistory[]>([]);
 	library = $state<LocalLibrary[]>([]);
 	categories = $state<LocalCategory[]>([]);
+	/** Per-device reading time pulled from the account (includes this device's echo). */
+	readtime = $state<LocalReadtime[]>([]);
 	ready = $state(false);
+	/** Stable id for this browser/device, minted on first run. */
+	deviceId = $state('');
 
 	librarySet = $derived(new Set(this.library.map((l) => l.mangaId)));
+
+	/**
+	 * Reading ms contributed by OTHER devices, summed per chapter. Own-device time
+	 * lives in `history[].timeSpentMs` (freshest, unflushed included), so we drop
+	 * our own echoed rows here to avoid double-counting.
+	 */
+	otherMsByChapter = $derived.by(() => {
+		const map = new Map<number, number>();
+		for (const r of this.readtime) {
+			if (r.deleted || r.deviceId === this.deviceId) continue;
+			map.set(r.chapterId, (map.get(r.chapterId) ?? 0) + (r.ms ?? 0));
+		}
+		return map;
+	});
 
 	#readyPromise: Promise<void> | null = null;
 	#syncTrigger: (() => void) | null = null;
@@ -29,24 +54,35 @@ class LocalData {
 	init(): Promise<void> {
 		if (!browser) return Promise.resolve();
 		if (!this.#readyPromise) {
-			this.#readyPromise = this.reload().then(() => {
+			this.#readyPromise = Promise.all([this.#loadDeviceId(), this.reload()]).then(() => {
 				this.ready = true;
 			});
 		}
 		return this.#readyPromise;
 	}
 
+	async #loadDeviceId() {
+		let id = await getMeta<string>(DEVICE_ID_KEY);
+		if (!id) {
+			id = makeDeviceId();
+			await setMeta(DEVICE_ID_KEY, id);
+		}
+		this.deviceId = id;
+	}
+
 	/** Rebuild reactive caches from IndexedDB (used after local + remote writes). */
 	async reload() {
 		if (!browser) return;
-		const [h, l, c] = await Promise.all([
+		const [h, l, c, rt] = await Promise.all([
 			getAll<LocalHistory>('history'),
 			getAll<LocalLibrary>('library'),
-			getAll<LocalCategory>('categories')
+			getAll<LocalCategory>('categories'),
+			getAll<LocalReadtime>('readtime')
 		]);
 		this.history = h.filter((x) => !x.deleted).sort((a, b) => b.updatedAt - a.updatedAt);
 		this.library = l.filter((x) => !x.deleted).sort((a, b) => b.addedAt - a.addedAt);
 		this.categories = c.filter((x) => !x.deleted).sort((a, b) => a.order - b.order);
+		this.readtime = rt;
 	}
 
 	// ── History ──────────────────────────────────────────────────────────────
@@ -186,8 +222,8 @@ class LocalData {
 	/**
 	 * Add `deltaMs` to a chapter's accumulated `timeSpentMs`. Bumps `updatedAt`
 	 * so the sync engine sees a new row version (and so per-row LWW works on
-	 * other fields too). Does NOT call `#changed()` because the change is
-	 * device-local — we don't want to push this field to the server.
+	 * other fields too). Schedules a sync: the raw field stays device-local but
+	 * the engine mirrors it into a per-device `readtime` row (see sync.svelte.ts).
 	 */
 	async addTimeSpent(chapterId: number, deltaMs: number) {
 		if (deltaMs <= 0) return;
@@ -200,6 +236,7 @@ class LocalData {
 		};
 		await putItem('history', next);
 		this.history = this.history.map((h) => (h.chapterId === chapterId ? next : h));
+		this.#changed();
 	}
 
 	/** Tombstone every history row for a manga (per-manga delete in Riwayat). */

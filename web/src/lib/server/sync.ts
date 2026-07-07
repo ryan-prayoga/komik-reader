@@ -13,7 +13,7 @@ export type SyncResult = {
 	cursor: number;
 };
 
-const VALID_ENTITIES = new Set(['history', 'library', 'categories']);
+const VALID_ENTITIES = new Set(['history', 'library', 'categories', 'readtime']);
 
 // Per-row payload ceiling. A history/library/category row is small metadata; a
 // legit one is well under 1KB. Cap protects auth.db from a malformed or hostile

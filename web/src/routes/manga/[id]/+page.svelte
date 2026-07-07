@@ -7,6 +7,7 @@
 	import CategoryPicker from '$lib/components/CategoryPicker.svelte';
 	import LibraryButton from '$lib/components/LibraryButton.svelte';
 	import { localData } from '$lib/local/data.svelte';
+	import { syncEngine } from '$lib/local/sync.svelte';
 	import { formatDuration, getMangaStats } from '$lib/reading-time';
 	import { listOfflineChapters } from '$lib/offline/db';
 	import { cacheChapterToDevice } from '$lib/offline/cache';
@@ -55,7 +56,13 @@
 
 	const unreadCount = $derived(merged.filter((c) => !c.read).length);
 	const hasAnyRead = $derived(merged.some((c) => c.read));
-	const mangaStats = $derived(getMangaStats(mangaId, localData.history));
+	const mangaStats = $derived(
+		getMangaStats(
+			mangaId,
+			localData.history,
+			syncEngine.loggedIn ? localData.otherMsByChapter : undefined
+		)
+	);
 	// Resume at the most recently touched chapter (matches home + history
 	// pages) if it's still unread; otherwise oldest unread, else re-read.
 	const lastTouched = $derived.by(() => {

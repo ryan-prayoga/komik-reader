@@ -18,9 +18,27 @@ export type LocalHistory = {
 	deleted?: boolean;
 	/**
 	 * Wall-clock ms spent actively reading this chapter on THIS device.
-	 * Device-local — intentionally NOT synced (see `web/src/lib/local/sync.svelte.ts`).
+	 * The raw field stays device-local (LWW would clobber another device's
+	 * accumulated time). Instead the sync engine mirrors it into a per-device
+	 * `readtime` row keyed by `${chapterId}:${deviceId}`, so stats can sum every
+	 * device's contribution without any device overwriting another's total.
 	 */
 	timeSpentMs?: number;
+};
+
+/**
+ * Per-device reading time, synced to the account so the Stats page can add up
+ * time from every device. Keyed by `${chapterId}:${deviceId}`; each device only
+ * ever writes its own key, whose `ms` is monotonically increasing — so plain
+ * last-write-wins by `updatedAt` never loses time.
+ */
+export type LocalReadtime = {
+	key: string; // `${chapterId}:${deviceId}`
+	chapterId: number;
+	deviceId: string;
+	ms: number;
+	updatedAt: number;
+	deleted?: boolean;
 };
 
 export type LocalLibrary = {
@@ -43,7 +61,7 @@ export type LocalCategory = {
 	deleted?: boolean;
 };
 
-export type SyncEntity = 'history' | 'library' | 'categories';
+export type SyncEntity = 'history' | 'library' | 'categories' | 'readtime';
 
 /** Wire shape exchanged with the server sync endpoint. */
 export type SyncChange = {

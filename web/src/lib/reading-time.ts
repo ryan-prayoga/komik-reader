@@ -1,9 +1,9 @@
 // Reading-time tracker.
 //
-// Per-device reading duration. We deliberately do NOT sync `timeSpentMs` to the
-// server (see `web/src/lib/local/sync.svelte.ts`): reading time is more sensitive
-// than read progress, and last-write-wins sync would clobber long sessions from
-// another device.
+// Accumulates per-device reading duration in `timeSpentMs`. That raw field stays
+// device-local, but the sync engine mirrors it into per-device `readtime` rows so
+// the Stats page can sum time across a user's devices without any device's
+// last-write clobbering another's total (see `web/src/lib/local/sync.svelte.ts`).
 //
 // The module exposes:
 //   • `readingTimer`  — singleton timer with idle + visibility guards.
@@ -176,10 +176,20 @@ export type GlobalStats = {
 	completedMs: number;
 };
 
-export function getMangaStats(mangaId: number, rows: LocalHistory[]): MangaStats | null {
+// `extraMsByChapter` adds reading time contributed by OTHER devices (from the
+// account-synced `readtime` rows). Pass it to include cross-device totals; omit
+// it (guests / logged out) for this-device-only stats.
+export function getMangaStats(
+	mangaId: number,
+	rows: LocalHistory[],
+	extraMsByChapter?: Map<number, number>
+): MangaStats | null {
 	const filtered = rows.filter((h) => h.mangaId === mangaId && !h.deleted);
 	if (!filtered.length) return null;
-	const totalMs = filtered.reduce((acc, h) => acc + (h.timeSpentMs ?? 0), 0);
+	const totalMs = filtered.reduce(
+		(acc, h) => acc + (h.timeSpentMs ?? 0) + (extraMsByChapter?.get(h.chapterId) ?? 0),
+		0
+	);
 	const recent = filtered.reduce((a, b) => (b.updatedAt > a.updatedAt ? b : a));
 	return {
 		mangaId,
@@ -191,7 +201,10 @@ export function getMangaStats(mangaId: number, rows: LocalHistory[]): MangaStats
 	};
 }
 
-export function getAllMangaStats(rows: LocalHistory[]): MangaStats[] {
+export function getAllMangaStats(
+	rows: LocalHistory[],
+	extraMsByChapter?: Map<number, number>
+): MangaStats[] {
 	const byManga = new Map<number, LocalHistory[]>();
 	for (const h of rows) {
 		if (h.deleted) continue;
@@ -201,7 +214,10 @@ export function getAllMangaStats(rows: LocalHistory[]): MangaStats[] {
 	}
 	const out: MangaStats[] = [];
 	for (const [mangaId, list] of byManga) {
-		const totalMs = list.reduce((acc, h) => acc + (h.timeSpentMs ?? 0), 0);
+		const totalMs = list.reduce(
+			(acc, h) => acc + (h.timeSpentMs ?? 0) + (extraMsByChapter?.get(h.chapterId) ?? 0),
+			0
+		);
 		const recent = list.reduce((a, b) => (b.updatedAt > a.updatedAt ? b : a));
 		out.push({
 			mangaId,
@@ -215,14 +231,17 @@ export function getAllMangaStats(rows: LocalHistory[]): MangaStats[] {
 	return out.sort((a, b) => b.totalMs - a.totalMs);
 }
 
-export function getGlobalStats(rows: LocalHistory[]): GlobalStats {
+export function getGlobalStats(
+	rows: LocalHistory[],
+	extraMsByChapter?: Map<number, number>
+): GlobalStats {
 	let totalMs = 0;
 	let completedMs = 0;
 	let chapterCount = 0;
 	const mangaIds = new Set<number>();
 	for (const h of rows) {
 		if (h.deleted) continue;
-		const ms = h.timeSpentMs ?? 0;
+		const ms = (h.timeSpentMs ?? 0) + (extraMsByChapter?.get(h.chapterId) ?? 0);
 		totalMs += ms;
 		if (h.isRead) completedMs += ms;
 		chapterCount += 1;

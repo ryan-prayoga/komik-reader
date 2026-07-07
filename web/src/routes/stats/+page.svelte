@@ -14,8 +14,10 @@
 	import CheckCircle from '@lucide/svelte/icons/check-circle';
 	import { syncEngine } from '$lib/local/sync.svelte';
 
-	const global = $derived(getGlobalStats(localData.history));
-	const mangaList = $derived(getAllMangaStats(localData.history));
+	// When logged in, fold in reading time from the user's other devices.
+	const extra = $derived(syncEngine.loggedIn ? localData.otherMsByChapter : undefined);
+	const global = $derived(getGlobalStats(localData.history, extra));
+	const mangaList = $derived(getAllMangaStats(localData.history, extra));
 	const hasAny = $derived(mangaList.length > 0);
 	const completedShare = $derived(
 		global.totalMs > 0 ? Math.round((global.completedMs / global.totalMs) * 100) : 0
@@ -25,14 +27,16 @@
 <section class="max-w-3xl">
 	<PageHeader
 		title="Statistik Baca"
-		subtitle="Berapa lama kamu sudah membaca komik di perangkat ini."
+		subtitle={syncEngine.loggedIn
+			? 'Total waktu bacamu dari semua perangkat yang login ke akun ini.'
+			: 'Berapa lama kamu sudah membaca komik di perangkat ini.'}
 	>
 		{#if syncEngine.loggedIn}
 			<span class="inline-flex items-center gap-1 text-xs text-muted">
-				<BookOpen size={13} /> Per perangkat — tidak disinkronkan ke akun.
+				<BookOpen size={13} /> Disinkronkan ke akun — gabungan semua perangkat.
 			</span>
 		{:else}
-			<span class="text-xs text-muted">Perangkat ini saja — login untuk pengalaman yang lebih baik.</span>
+			<span class="text-xs text-muted">Perangkat ini saja — login untuk sinkronkan lintas perangkat.</span>
 		{/if}
 	</PageHeader>
 

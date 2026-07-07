@@ -74,8 +74,9 @@ class SyncEngine {
 		) => {
 			for (const r of rows) {
 				if (r.updatedAt > pushCursor) {
-					// Strip `timeSpentMs` before pushing: it's device-local (privacy
-					// + LWW would clobber another device's accumulated time).
+					// Strip `timeSpentMs` from the shared history row: LWW would clobber
+					// another device's total. Reading time is synced separately as
+					// per-device `readtime` rows (emitted below) instead.
 					const { timeSpentMs: _omit, ...payload } = r as Record<string, unknown>;
 					local.push({
 						entity,
@@ -91,6 +92,26 @@ class SyncEngine {
 		collect('history', h, (r: LocalHistory) => String(r.chapterId));
 		collect('library', l, (r: LocalLibrary) => String(r.mangaId));
 		collect('categories', c, (r: LocalCategory) => String(r.id));
+
+		// Mirror this device's reading time into per-device `readtime` rows so the
+		// server can add up every device's contribution. A device only ever writes
+		// its own `${chapterId}:${deviceId}` key and its `ms` only grows, so plain
+		// LWW by updatedAt is safe here (unlike LWW on a shared timeSpentMs field).
+		const deviceId = localData.deviceId;
+		if (deviceId) {
+			for (const r of h) {
+				const ms = r.timeSpentMs ?? 0;
+				if (r.updatedAt > pushCursor && ms > 0) {
+					local.push({
+						entity: 'readtime',
+						itemKey: `${r.chapterId}:${deviceId}`,
+						data: { chapterId: r.chapterId, deviceId, ms },
+						updatedAt: r.updatedAt,
+						deleted: false
+					});
+				}
+			}
+		}
 
 		const res = await fetch('/api/sync', {
 			method: 'POST',
@@ -108,6 +129,23 @@ class SyncEngine {
 		let applied = false;
 		for (const ch of result.changes) {
 			const store = ch.entity as SyncEntity;
+
+			if (store === 'readtime') {
+				// String composite key `${chapterId}:${deviceId}`; not our push cursor
+				// to advance (remote clocks), so don't touch maxCursor here.
+				const existing = await getItem<{ updatedAt: number }>('readtime', ch.itemKey);
+				if (!existing || ch.updatedAt > existing.updatedAt) {
+					await putItem('readtime', {
+						...(ch.data as Record<string, unknown>),
+						key: ch.itemKey,
+						updatedAt: ch.updatedAt,
+						deleted: ch.deleted
+					});
+					applied = true;
+				}
+				continue;
+			}
+
 			const existing = await getItem<{ updatedAt: number }>(store, Number(ch.itemKey));
 			if (!existing || ch.updatedAt > existing.updatedAt) {
 				// Preserve the device-local `timeSpentMs` — never let a remote
