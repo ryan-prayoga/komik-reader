@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import { browser } from '$app/environment';
 	import { untrack, tick } from 'svelte';
 	import { apiUrl } from '$lib/graphql/client';
 	import { fetchChapterPages, getMangaChapters, updateChapterProgress } from '$lib/graphql/api';
@@ -50,25 +49,6 @@
 	let autoScroll = $state(false);
 	let autoScrollSpeed = $state(readerSettings.autoScrollSpeed);
 
-	// iOS standalone PWAs rubber-band the document on the slightest top overscroll,
-	// which reveals the native domain bar and leaves it stuck as a black band above
-	// the reader. Browsers need document scroll (their URL-bar auto-hide depends on
-	// it), but standalone has no URL bar to hide — so there we scroll an inner
-	// fixed container with overscroll-behavior:none instead, and the document never
-	// bounces. Computed once; display-mode doesn't change within a session.
-	// Computed synchronously (the webtoon branch only renders after client-side load,
-	// so there is no SSR markup to mismatch on hydration) to avoid a document→inner
-	// scroller swap that would remount WebtoonView on every open.
-	const standalone =
-		browser &&
-		(window.matchMedia('(display-mode: standalone)').matches ||
-			(navigator as unknown as { standalone?: boolean }).standalone === true);
-	// Bound to the inner scroll container when it exists (standalone webtoon only);
-	// scroll math falls back to `window` everywhere it's still null.
-	let scrollEl = $state<HTMLElement | null>(null);
-	// The active scroll surface — inner container in standalone, else the document.
-	const scroller = $derived<HTMLElement | Window>(scrollEl ?? (browser ? window : (null as never)));
-
 	$effect(() => {
 		if (!autoScroll) return;
 		let rafId: number;
@@ -83,7 +63,7 @@
 				const delta = ((autoScrollSpeed * 60) / 1000) * (time - lastTime) + remainder;
 				const whole = Math.trunc(delta);
 				remainder = delta - whole;
-				if (whole !== 0) scroller.scrollBy(0, whole);
+				if (whole !== 0) window.scrollBy(0, whole);
 			}
 			lastTime = time;
 			rafId = requestAnimationFrame(step);
@@ -306,7 +286,7 @@
 			const topAfter = document.querySelector(anchorSelector)?.getBoundingClientRect().top;
 			if (topAfter === undefined) return;
 			const delta = topAfter - topBefore;
-			if (delta !== 0) scroller.scrollBy(0, delta);
+			if (delta !== 0) window.scrollBy(0, delta);
 		});
 	});
 
@@ -351,16 +331,13 @@
 	// autoscroll doesn't trip the 5-min idle cutoff mid-stream.
 	$effect(() => {
 		if (typeof window === 'undefined') return;
-		// Scroll fires on the inner container in standalone, on window otherwise —
-		// bind to `scroller` (reactive) so the idle timer sees it either way.
-		const scrollTarget = scroller;
 		const onActivity = () => readingTimer.pingActivity();
-		scrollTarget.addEventListener('scroll', onActivity, { passive: true });
+		window.addEventListener('scroll', onActivity, { passive: true });
 		window.addEventListener('keydown', onActivity);
 		window.addEventListener('touchstart', onActivity, { passive: true });
 		window.addEventListener('pointerdown', onActivity);
 		return () => {
-			scrollTarget.removeEventListener('scroll', onActivity);
+			window.removeEventListener('scroll', onActivity);
 			window.removeEventListener('keydown', onActivity);
 			window.removeEventListener('touchstart', onActivity);
 			window.removeEventListener('pointerdown', onActivity);
@@ -402,10 +379,7 @@
 		// top rubber-band that reveals the standalone-PWA domain bar, which then
 		// sticks as a black band above the reader. Zeroing synchronously here
 		// means there is never anything to clamp.
-		if (typeof document !== 'undefined') {
-			document.documentElement.scrollTop = 0;
-			if (scrollEl) scrollEl.scrollTop = 0;
-		}
+		if (typeof document !== 'undefined') document.documentElement.scrollTop = 0;
 		currentPageIdx = 0;
 		currentPageProgress = 0;
 		currentChapterProgress = 0;
@@ -561,32 +535,6 @@
 				onprev={() => prevChapter && goto(`/read/${prevChapter.id}`)}
 				onzoom={(z) => readerSettings.set('zoom', z)}
 			/>
-		{:else if standalone}
-			<!-- iOS standalone: scroll an inner fixed container so the document never
-			     rubber-bands and reveals the stuck domain bar (black band). -->
-			<div
-				bind:this={scrollEl}
-				data-reader-scroll
-				class="fixed inset-0 overflow-y-auto {chapters.length > 0 ? 'lg:right-72' : ''}"
-				style="overscroll-behavior: none"
-			>
-				<button type="button" class="block w-full cursor-default text-left" onclick={toggleChrome}>
-					<WebtoonView
-						{sections}
-						zoom={readerSettings.zoom}
-						gap={readerSettings.gap}
-						onpage={reportWebtoonPage}
-						onnearend={handleNearEnd}
-						{initialPage}
-						resetToken={chapterId}
-					/>
-				</button>
-				{#if loadingNextChapter}
-					<div class="flex items-center justify-center py-8 text-white/50">
-						<Spinner size={20} />
-					</div>
-				{/if}
-			</div>
 		{:else}
 			<button type="button" class="block w-full cursor-default text-left" onclick={toggleChrome}>
 				<WebtoonView
