@@ -213,6 +213,10 @@
 		pageProgress: number,
 		chapterProgress: number
 	) {
+		// 0 is WebtoonView's "not tracking anything yet" sentinel (right after a
+		// hard chapter switch, before any page has intersected) — never let it
+		// overwrite the chapter id the URL/nav effect just set.
+		if (!sectionChapterId) return;
 		currentChapterId = sectionChapterId;
 		currentPageIdx = pageIdx;
 		currentPageProgress = pageProgress;

@@ -79,6 +79,11 @@
 	}
 
 	function reportCurrentProgress() {
+		// 0 is the "not tracking anything yet" sentinel (see the resetToken
+		// effect) — right after a hard chapter switch, before the new chapter's
+		// first page has intersected, a stray scroll tick must not report this
+		// up as real progress or it clobbers the parent's just-set chapter id.
+		if (!activeChapterId) return;
 		const el = pageEls.get(`${activeChapterId}-${activePi}`);
 		if (!el) {
 			onpage(activeChapterId, activePi, 0, 0);
