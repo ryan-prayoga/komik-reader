@@ -256,7 +256,10 @@
 						<button
 							type="button"
 							class="rounded-full bg-white/10 px-4 py-2 text-sm text-white/80 hover:bg-white/20"
-							onclick={() => retryPage(key)}
+							onclick={(e) => {
+								e.stopPropagation();
+								retryPage(key);
+							}}
 						>
 							Muat ulang
 						</button>

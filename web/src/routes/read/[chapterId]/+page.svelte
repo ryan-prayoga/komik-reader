@@ -291,13 +291,6 @@
 	});
 
 	function toggleChrome() {
-		// While auto-scrolling, a tap should stop the scroll (expected reflex) rather
-		// than toggle the chrome — reveal controls so the user can restart/adjust.
-		if (autoScroll) {
-			autoScroll = false;
-			chromeVisible = true;
-			return;
-		}
 		chromeVisible = !chromeVisible;
 	}
 
@@ -536,7 +529,14 @@
 				onzoom={(z) => readerSettings.set('zoom', z)}
 			/>
 		{:else}
-			<button type="button" class="block w-full cursor-default text-left" onclick={toggleChrome}>
+			<!-- eslint-disable-next-line svelte/valid-compile -->
+			<div
+				class="w-full cursor-default"
+				role="button"
+				tabindex="0"
+				onclick={toggleChrome}
+				onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && toggleChrome()}
+			>
 				<WebtoonView
 					{sections}
 					zoom={readerSettings.zoom}
@@ -546,7 +546,7 @@
 					{initialPage}
 					resetToken={chapterId}
 				/>
-			</button>
+			</div>
 			{#if loadingNextChapter}
 				<div class="flex items-center justify-center py-8 text-white/50">
 					<Spinner size={20} />
