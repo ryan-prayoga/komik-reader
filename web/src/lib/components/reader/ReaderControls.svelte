@@ -85,7 +85,10 @@
 </script>
 
 <!-- Thin progress bar — always visible, z above chrome -->
-<div class="pointer-events-none fixed inset-x-0 top-0 z-50 h-0.5 bg-white/10 {hasChapters ? 'lg:right-72' : ''}">
+<div
+	class="pointer-events-none fixed inset-x-0 z-[60] h-0.5 {hasChapters ? 'lg:right-72' : ''}"
+	style="top: max(0.125rem, env(safe-area-inset-top))"
+>
 	<div
 		class="h-full bg-accent transition-[width] duration-150 ease-out"
 		style="width: {scrollProgress * 100}%"
