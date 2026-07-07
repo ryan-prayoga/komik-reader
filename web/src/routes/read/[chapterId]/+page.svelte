@@ -44,7 +44,7 @@
 	let loading = $state(true);
 	let error = $state('');
 	let offlineMode = $state(false);
-	let chromeVisible = $state(true);
+	let chromeVisible = $state(readerSettings.mode !== 'webtoon');
 	let settingsOpen = $state(false);
 	let autoScroll = $state(false);
 	let autoScrollSpeed = $state(readerSettings.autoScrollSpeed);
