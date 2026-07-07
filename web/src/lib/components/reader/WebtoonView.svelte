@@ -43,6 +43,10 @@
 	let loadedPages = $state<Record<string, boolean>>({});
 	let errorPages = $state<Record<string, boolean>>({});
 	let retryCounts = $state<Record<string, number>>({});
+	// Pages the preload observer has pulled into range — flipped to eager fetch a
+	// few screens before they scroll into view so the reader never shows a black
+	// placeholder void mid-scroll (native lazy loads too late on slow mobile links).
+	let eagerPages = $state<Record<string, boolean>>({});
 	function markLoaded(key: string) {
 		loadedPages[key] = true;
 		errorPages[key] = false;
@@ -78,6 +82,7 @@
 		loadedPages = {};
 		errorPages = {};
 		retryCounts = {};
+		eagerPages = {};
 	});
 	function pageSrc(url: string, key: string): string {
 		const n = retryCounts[key];
@@ -123,6 +128,7 @@
 		const key = `${param.chapterId}-${param.pi}`;
 		pageEls.set(key, node);
 
+		const root = node.closest('[data-reader-scroll]');
 		const observer = new IntersectionObserver(
 			(entries) => {
 				if (entries[0]?.isIntersecting) {
@@ -134,13 +140,28 @@
 			// root must be the reader's own scroll container when there is one:
 			// with the implicit viewport root, content clipped by that container
 			// never counts as intersecting and rootMargin stops working.
-			{ threshold: 0, rootMargin: '0px 0px -60% 0px', root: node.closest('[data-reader-scroll]') }
+			{ threshold: 0, rootMargin: '0px 0px -60% 0px', root }
 		);
 		observer.observe(node);
+
+		// Preload observer: a much taller margin (both directions) flips the page to
+		// an eager fetch well before it reaches the viewport, so scrolling never
+		// lands on an unloaded black placeholder. One-shot — disconnects once armed.
+		const preloader = new IntersectionObserver(
+			(entries) => {
+				if (entries[0]?.isIntersecting) {
+					eagerPages[key] = true;
+					preloader.disconnect();
+				}
+			},
+			{ threshold: 0, rootMargin: '2500px 0px 2500px 0px', root }
+		);
+		preloader.observe(node);
 
 		return {
 			destroy() {
 				observer.disconnect();
+				preloader.disconnect();
 				pageEls.delete(key);
 			}
 		};
@@ -252,7 +273,7 @@
 						? 'opacity-100'
 						: 'opacity-0'}"
 					style="aspect-ratio: auto 2 / 3"
-					loading={si === 0 && pi <= initialPage ? 'eager' : 'lazy'}
+					loading={eagerPages[key] || (si === 0 && pi <= initialPage) ? 'eager' : 'lazy'}
 					decoding="async"
 					onload={() => markLoaded(key)}
 					onerror={() => markError(key)}
