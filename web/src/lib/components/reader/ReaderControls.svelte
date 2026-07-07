@@ -103,7 +103,7 @@
 >
 	<div
 		class="flex items-center gap-2 bg-gradient-to-b from-black/45 via-black/15 to-transparent px-3 pb-6 text-white [&_button]:[text-shadow:none]"
-		style="padding-top: max(0.5rem, env(safe-area-inset-top))"
+		style="padding-top: calc(env(safe-area-inset-top) + 0.75rem)"
 	>
 		<a
 			href={backHref}
