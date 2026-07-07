@@ -8,7 +8,15 @@ export default defineConfig({
 		tailwindcss(),
 		sveltekit(),
 		SvelteKitPWA({
-			registerType: 'prompt',
+			// autoUpdate (not prompt): the SW precaches an SSR shell ('/') and serves
+			// it for every navigation. Under 'prompt' a new SW waits for a user click,
+			// so after a deploy the OLD shell keeps being served while the server has
+			// already swapped chunk hashes — the stale shell references dead chunks
+			// that 404, hydration crashes, and the reader sticks on the SSR shimmer
+			// with no way to click the update prompt. autoUpdate skipWaiting +
+			// clientsClaim keeps the precache in lockstep with the live deploy and
+			// self-heals already-stuck clients on their next load.
+			registerType: 'autoUpdate',
 			manifest: {
 				name: 'Komik Reader',
 				short_name: 'Komik',
