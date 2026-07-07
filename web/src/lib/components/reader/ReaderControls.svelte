@@ -99,13 +99,13 @@
 		: '-translate-y-full'}"
 >
 	<div
-		class="flex items-center gap-3 bg-gradient-to-b from-black/80 to-transparent px-3 pb-6 text-white"
-		style="padding-top: max(1rem, env(safe-area-inset-top))"
+		class="flex items-center gap-2 bg-gradient-to-b from-black/70 to-transparent px-3 pb-3 text-white"
+		style="padding-top: max(0.5rem, env(safe-area-inset-top))"
 	>
 		<a
 			href={backHref}
 			aria-label="Kembali"
-			class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-black/40 transition hover:bg-black/60"
+			class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black/40 transition hover:bg-black/60"
 		>
 			<ArrowLeft size={20} />
 		</a>
@@ -134,7 +134,7 @@
 				type="button"
 				onclick={onautoscroll}
 				aria-label={autoScroll ? 'Stop auto-scroll' : 'Auto-scroll'}
-				class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition
+				class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition
 					{autoScroll ? 'bg-accent text-white' : 'bg-black/40 hover:bg-black/60'}"
 			>
 				{#if autoScroll}<Pause size={16} />{:else}<Play size={16} />{/if}
@@ -144,7 +144,7 @@
 			type="button"
 			onclick={onsettings}
 			aria-label="Pengaturan reader"
-			class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-black/40 transition hover:bg-black/60"
+			class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black/40 transition hover:bg-black/60"
 		>
 			<SlidersHorizontal size={18} />
 		</button>
