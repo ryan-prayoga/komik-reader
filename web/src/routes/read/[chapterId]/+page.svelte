@@ -49,6 +49,20 @@
 	let autoScroll = $state(false);
 	let autoScrollSpeed = $state(readerSettings.autoScrollSpeed);
 
+	// Webtoon scrolls inside this fixed container instead of the document. On
+	// iOS the root scroller's rubber-band bounce can't be disabled
+	// (overscroll-behavior on html/body is ignored there), and that top bounce
+	// is what reveals the standalone-PWA domain bar — which then sticks as a
+	// black band above the reader. An inner scroller with overscroll-behavior
+	// contained never moves the root, so the bounce (and the bar) never happens.
+	let scrollEl = $state<HTMLElement | null>(null);
+
+	// The document no longer scrolls in webtoon mode, so arrow/space scrolling
+	// needs the container focused — refocus it each time it (re)mounts.
+	$effect(() => {
+		scrollEl?.focus({ preventScroll: true });
+	});
+
 	$effect(() => {
 		if (!autoScroll) return;
 		let rafId: number;
@@ -63,7 +77,7 @@
 				const delta = ((autoScrollSpeed * 60) / 1000) * (time - lastTime) + remainder;
 				const whole = Math.trunc(delta);
 				remainder = delta - whole;
-				if (whole !== 0) window.scrollBy(0, whole);
+				if (whole !== 0) (scrollEl ?? window).scrollBy(0, whole);
 			}
 			lastTime = time;
 			rafId = requestAnimationFrame(step);
@@ -79,13 +93,15 @@
 	// Webtoon mode advances through chapters via infinite scroll without ever
 	// navigating, so the URL stays pinned to whichever chapter was first opened —
 	// reloading the page (or reopening the tab) would jump back there instead of
-	// wherever the user actually scrolled to. Keep the address bar in sync with
-	// a silent history.replaceState (native, not SvelteKit's goto/replaceState)
-	// so it doesn't re-run this component's load effect on every chapter change.
-	$effect(() => {
-		if (isPaged || !currentChapterId || currentChapterId === chapterId) return;
-		history.replaceState(history.state, '', `/read/${currentChapterId}`);
-	});
+	// wherever the user actually scrolled to. Sync the address bar with a silent
+	// native history.replaceState (not SvelteKit's goto/replaceState, which would
+	// re-run this component's load effect). Done inside reportWebtoonPage — as an
+	// $effect this raced hard navs: it re-ran on the chapterId change while
+	// currentChapterId was still the OLD chapter, replaceState-ing the fresh URL
+	// straight back to the chapter just left.
+	function syncUrlToChapter(id: number) {
+		history.replaceState(history.state, '', `/read/${id}`);
+	}
 
 	const bgClass = $derived(BG_CLASS[readerSettings.bg]);
 	const isPaged = $derived(readerSettings.mode !== 'webtoon');
@@ -217,6 +233,7 @@
 		// hard chapter switch, before any page has intersected) — never let it
 		// overwrite the chapter id the URL/nav effect just set.
 		if (!sectionChapterId) return;
+		if (currentChapterId !== sectionChapterId) syncUrlToChapter(sectionChapterId);
 		currentChapterId = sectionChapterId;
 		currentPageIdx = pageIdx;
 		currentPageProgress = pageProgress;
@@ -283,7 +300,7 @@
 			const topAfter = document.querySelector(anchorSelector)?.getBoundingClientRect().top;
 			if (topAfter === undefined) return;
 			const delta = topAfter - topBefore;
-			if (delta !== 0) window.scrollBy(0, delta);
+			if (delta !== 0) (scrollEl ?? window).scrollBy(0, delta);
 		});
 	});
 
@@ -329,12 +346,14 @@
 	$effect(() => {
 		if (typeof window === 'undefined') return;
 		const onActivity = () => readingTimer.pingActivity();
-		window.addEventListener('scroll', onActivity, { passive: true });
+		// capture: scroll now happens on the inner reader container and element
+		// scroll events don't bubble — the capture phase still passes window.
+		window.addEventListener('scroll', onActivity, { passive: true, capture: true });
 		window.addEventListener('keydown', onActivity);
 		window.addEventListener('touchstart', onActivity, { passive: true });
 		window.addEventListener('pointerdown', onActivity);
 		return () => {
-			window.removeEventListener('scroll', onActivity);
+			window.removeEventListener('scroll', onActivity, { capture: true });
 			window.removeEventListener('keydown', onActivity);
 			window.removeEventListener('touchstart', onActivity);
 			window.removeEventListener('pointerdown', onActivity);
@@ -368,7 +387,7 @@
 		error = '';
 		offlineMode = false;
 		currentPage = 0;
-		initialPage = untrack(() => localData.history.find((h) => h.chapterId === id)?.lastPage ?? 0);
+		initialPage = 0;
 		currentChapterId = id;
 		currentPageIdx = 0;
 		currentPageProgress = 0;
@@ -377,6 +396,16 @@
 
 		async function load() {
 			try {
+				// On a cold start (PWA launch, hard reload) the reader used to read
+				// localData.history before IndexedDB hydration finished — always
+				// empty, so the resume position silently reset to page 0. Await
+				// hydration first; init() is a no-op once already hydrated.
+				await localData.init();
+				if (cancelled) return;
+				initialPage = untrack(
+					() => localData.history.find((h) => h.chapterId === id)?.lastPage ?? 0
+				);
+
 				if (!isOnline()) {
 					const cached = await getCachedPageUrls(id);
 					if (cancelled) return;
@@ -402,6 +431,12 @@
 					if (cancelled) return;
 					chapters = fetchedChapters;
 					current = chapters.find((c) => c.id === id) ?? null;
+					// This device may have no local history for the chapter (new
+					// device, cleared storage) — fall back to the server-side
+					// position other devices reported.
+					if (!initialPage && (current?.lastPageRead ?? 0) > 0) {
+						initialPage = current!.lastPageRead;
+					}
 				}
 
 				sections = [{ chapter: current ?? makeStubChapter(id), pages }];
@@ -510,22 +545,32 @@
 				onzoom={(z) => readerSettings.set('zoom', z)}
 			/>
 		{:else}
-			<button type="button" class="block w-full cursor-default text-left" onclick={toggleChrome}>
-				<WebtoonView
-					{sections}
-					zoom={readerSettings.zoom}
-					gap={readerSettings.gap}
-					onpage={reportWebtoonPage}
-					onnearend={handleNearEnd}
-					{initialPage}
-					resetToken={chapterId}
-				/>
-			</button>
-			{#if loadingNextChapter}
-				<div class="flex items-center justify-center py-8 text-white/50">
-					<Spinner size={20} />
-				</div>
-			{/if}
+			<!-- Inner scroller (see scrollEl above): keeps the root document from ever
+			     scrolling/bouncing on iOS. tabindex so keyboard scrolling still targets it. -->
+			<div
+				bind:this={scrollEl}
+				data-reader-scroll
+				tabindex="-1"
+				class="fixed inset-0 overflow-y-auto outline-none {chapters.length > 0 ? 'lg:right-72' : ''}"
+				style="overscroll-behavior: none"
+			>
+				<button type="button" class="block w-full cursor-default text-left" onclick={toggleChrome}>
+					<WebtoonView
+						{sections}
+						zoom={readerSettings.zoom}
+						gap={readerSettings.gap}
+						onpage={reportWebtoonPage}
+						onnearend={handleNearEnd}
+						{initialPage}
+						resetToken={chapterId}
+					/>
+				</button>
+				{#if loadingNextChapter}
+					<div class="flex items-center justify-center py-8 text-white/50">
+						<Spinner size={20} />
+					</div>
+				{/if}
+			</div>
 		{/if}
 
 		<ReaderControls

@@ -56,16 +56,23 @@
 		retryCounts[key] = (retryCounts[key] ?? 0) + 1;
 	}
 
-	// Hard chapter nav (URL change) reuses this same component instance — it
-	// never unmounts, so without this the old chapter's IntersectionObserver
-	// state (activeChapterId/pageEls) survives into the new chapter. The
-	// scrollTop clamp that follows `sections` collapsing to the new chapter
-	// then fires a stale onScroll → reportCurrentProgress → onpage(oldChapterId,
-	// ...), which snaps `currentChapterId` (and the header/URL synced to it)
-	// back to the chapter just left — the visible flicker/crash-out-of-reader.
+	// Hard chapter nav (URL change) must drop the old chapter's tracking state
+	// (activeChapterId/activePi), or a stale scroll tick reports the chapter
+	// just left and snaps the parent's currentChapterId/header/URL back to it —
+	// the flicker/crash-out-of-reader bug. But this reset must ONLY run on an
+	// actual token change: on first mount this $effect fires AFTER the
+	// use:observePage actions have already registered every page, so an
+	// unconditional pageEls.clear() here wiped the map right after it was
+	// built — progress/resume were dead for the whole first chapter (entries
+	// only ever re-register when NEW pages mount). pageEls is intentionally
+	// left alone even on a real change: observePage's destroy() already
+	// removes exactly the entries whose pages unmount, and clearing here
+	// races the new chapter's actions registering into the same map.
+	// svelte-ignore state_referenced_locally -- capturing the initial value is the point
+	let appliedResetToken = resetToken;
 	$effect(() => {
-		resetToken;
-		pageEls.clear();
+		if (resetToken === appliedResetToken) return;
+		appliedResetToken = resetToken;
 		activeChapterId = 0;
 		activePi = 0;
 		loadedPages = {};
@@ -124,7 +131,10 @@
 					reportCurrentProgress();
 				}
 			},
-			{ threshold: 0, rootMargin: '0px 0px -60% 0px' }
+			// root must be the reader's own scroll container when there is one:
+			// with the implicit viewport root, content clipped by that container
+			// never counts as intersecting and rootMargin stops working.
+			{ threshold: 0, rootMargin: '0px 0px -60% 0px', root: node.closest('[data-reader-scroll]') }
 		);
 		observer.observe(node);
 
@@ -144,11 +154,19 @@
 			(entries) => {
 				if (entries[0]?.isIntersecting) onnearend?.();
 			},
-			{ rootMargin: `0px 0px ${margin}px 0px`, threshold: 0 }
+			// Same as observePage: rootMargin below the fold only works if root is
+			// the actual scroll container, not the implicit viewport.
+			{
+				rootMargin: `0px 0px ${margin}px 0px`,
+				threshold: 0,
+				root: node.closest('[data-reader-scroll]')
+			}
 		);
 		observer.observe(node);
 		return { destroy: () => observer.disconnect() };
 	}
+
+	let rootEl: HTMLElement;
 
 	onMount(() => {
 		let scrollRafId: number;
@@ -173,9 +191,12 @@
 			rafId = requestAnimationFrame(reportCurrentProgress);
 		}
 
-		window.addEventListener('scroll', onScroll, { passive: true });
+		// Scroll happens on the reader's own container when one wraps us (element
+		// scroll events don't bubble to window), otherwise on the document.
+		const scroller: HTMLElement | Window = rootEl?.closest('[data-reader-scroll]') ?? window;
+		scroller.addEventListener('scroll', onScroll, { passive: true });
 		return () => {
-			window.removeEventListener('scroll', onScroll);
+			scroller.removeEventListener('scroll', onScroll);
 			cancelAnimationFrame(rafId);
 			cancelAnimationFrame(scrollRafId);
 			retryTimers.forEach(clearTimeout);
@@ -186,6 +207,7 @@
 </script>
 
 <div
+	bind:this={rootEl}
 	class="mx-auto {gap ? 'space-y-1' : ''}"
 	style="max-width: {maxWidth}; overflow-anchor: none;"
 >

@@ -12,7 +12,7 @@ class LocalData {
 
 	librarySet = $derived(new Set(this.library.map((l) => l.mangaId)));
 
-	#initialized = false;
+	#readyPromise: Promise<void> | null = null;
 	#syncTrigger: (() => void) | null = null;
 
 	/** The sync engine registers itself here; mutations schedule a sync. */
@@ -23,11 +23,17 @@ class LocalData {
 		this.#syncTrigger?.();
 	}
 
-	async init() {
-		if (!browser || this.#initialized) return;
-		this.#initialized = true;
-		await this.reload();
-		this.ready = true;
+	// Callers that need hydrated data (e.g. the reader resolving a resume
+	// position on a cold start) await this — a second call must wait for the
+	// FIRST hydration to finish, not return early while it's still in flight.
+	init(): Promise<void> {
+		if (!browser) return Promise.resolve();
+		if (!this.#readyPromise) {
+			this.#readyPromise = this.reload().then(() => {
+				this.ready = true;
+			});
+		}
+		return this.#readyPromise;
 	}
 
 	/** Rebuild reactive caches from IndexedDB (used after local + remote writes). */

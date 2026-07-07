@@ -99,7 +99,8 @@
 		: '-translate-y-full'}"
 >
 	<div
-		class="flex items-center gap-3 bg-gradient-to-b from-black/80 to-transparent px-3 pb-6 pt-4 text-white"
+		class="flex items-center gap-3 bg-gradient-to-b from-black/80 to-transparent px-3 pb-6 text-white"
+		style="padding-top: max(1rem, env(safe-area-inset-top))"
 	>
 		<a
 			href={backHref}
