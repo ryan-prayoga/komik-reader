@@ -4,7 +4,8 @@
 </script>
 
 <header
-	class="sticky top-0 z-30 flex items-center justify-between border-b border-border bg-bg/95 px-4 py-2 backdrop-blur lg:hidden"
+	class="sticky top-0 z-30 flex items-center justify-between border-b border-border bg-bg/95 px-4 pb-2 backdrop-blur lg:hidden"
+	style="padding-top: calc(env(safe-area-inset-top) + 0.5rem)"
 >
 	<a href="/" class="flex items-center gap-2">
 		<span class="panel-cut [--panel-cut:5px] flex h-7 w-7 items-center justify-center bg-accent text-xs font-bold text-white"
