@@ -102,7 +102,7 @@
 		: '-translate-y-full'}"
 >
 	<div
-		class="flex items-center gap-2 bg-gradient-to-b from-black/70 to-transparent px-3 pb-3 text-white"
+		class="flex items-center gap-2 bg-gradient-to-b from-black/45 via-black/15 to-transparent px-3 pb-6 text-white [&_button]:[text-shadow:none]"
 		style="padding-top: max(0.5rem, env(safe-area-inset-top))"
 	>
 		<a
@@ -112,7 +112,7 @@
 		>
 			<ArrowLeft size={20} />
 		</a>
-		<div class="min-w-0 flex-1">
+		<div class="min-w-0 flex-1 [text-shadow:0_1px_3px_rgb(0_0_0/0.9)]">
 			<p class="truncate text-sm font-semibold leading-tight">{title}</p>
 			<p class="truncate text-xs text-white/70">
 				{chapterName}{#if offlineMode} · <span class="text-accent">Offline</span>{/if}
@@ -161,7 +161,7 @@
 		: 'translate-y-full'}"
 >
 	<div
-		class="flex items-center gap-3 bg-gradient-to-t from-black/80 to-transparent px-3 pt-6 text-white"
+		class="flex items-center gap-3 bg-gradient-to-t from-black/50 via-black/15 to-transparent px-3 pt-8 text-white"
 		style="padding-bottom: calc(0.75rem + env(safe-area-inset-bottom))"
 	>
 		{#if prevHref}
