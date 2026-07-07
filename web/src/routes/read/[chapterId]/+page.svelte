@@ -49,20 +49,6 @@
 	let autoScroll = $state(false);
 	let autoScrollSpeed = $state(readerSettings.autoScrollSpeed);
 
-	// Webtoon scrolls inside this fixed container instead of the document. On
-	// iOS the root scroller's rubber-band bounce can't be disabled
-	// (overscroll-behavior on html/body is ignored there), and that top bounce
-	// is what reveals the standalone-PWA domain bar — which then sticks as a
-	// black band above the reader. An inner scroller with overscroll-behavior
-	// contained never moves the root, so the bounce (and the bar) never happens.
-	let scrollEl = $state<HTMLElement | null>(null);
-
-	// The document no longer scrolls in webtoon mode, so arrow/space scrolling
-	// needs the container focused — refocus it each time it (re)mounts.
-	$effect(() => {
-		scrollEl?.focus({ preventScroll: true });
-	});
-
 	$effect(() => {
 		if (!autoScroll) return;
 		let rafId: number;
@@ -77,7 +63,7 @@
 				const delta = ((autoScrollSpeed * 60) / 1000) * (time - lastTime) + remainder;
 				const whole = Math.trunc(delta);
 				remainder = delta - whole;
-				if (whole !== 0) (scrollEl ?? window).scrollBy(0, whole);
+				if (whole !== 0) window.scrollBy(0, whole);
 			}
 			lastTime = time;
 			rafId = requestAnimationFrame(step);
@@ -300,7 +286,7 @@
 			const topAfter = document.querySelector(anchorSelector)?.getBoundingClientRect().top;
 			if (topAfter === undefined) return;
 			const delta = topAfter - topBefore;
-			if (delta !== 0) (scrollEl ?? window).scrollBy(0, delta);
+			if (delta !== 0) window.scrollBy(0, delta);
 		});
 	});
 
@@ -346,14 +332,12 @@
 	$effect(() => {
 		if (typeof window === 'undefined') return;
 		const onActivity = () => readingTimer.pingActivity();
-		// capture: scroll now happens on the inner reader container and element
-		// scroll events don't bubble — the capture phase still passes window.
-		window.addEventListener('scroll', onActivity, { passive: true, capture: true });
+		window.addEventListener('scroll', onActivity, { passive: true });
 		window.addEventListener('keydown', onActivity);
 		window.addEventListener('touchstart', onActivity, { passive: true });
 		window.addEventListener('pointerdown', onActivity);
 		return () => {
-			window.removeEventListener('scroll', onActivity, { capture: true });
+			window.removeEventListener('scroll', onActivity);
 			window.removeEventListener('keydown', onActivity);
 			window.removeEventListener('touchstart', onActivity);
 			window.removeEventListener('pointerdown', onActivity);
@@ -389,6 +373,13 @@
 		currentPage = 0;
 		initialPage = 0;
 		currentChapterId = id;
+		// Zero the scroll BEFORE the DOM collapses to the loading shimmer. If the
+		// user was deep in a long chapter, swapping to the (much shorter) shimmer
+		// while scrollTop is huge makes iOS clamp the position mid-momentum — a
+		// top rubber-band that reveals the standalone-PWA domain bar, which then
+		// sticks as a black band above the reader. Zeroing synchronously here
+		// means there is never anything to clamp.
+		if (typeof document !== 'undefined') document.documentElement.scrollTop = 0;
 		currentPageIdx = 0;
 		currentPageProgress = 0;
 		currentChapterProgress = 0;
@@ -545,32 +536,22 @@
 				onzoom={(z) => readerSettings.set('zoom', z)}
 			/>
 		{:else}
-			<!-- Inner scroller (see scrollEl above): keeps the root document from ever
-			     scrolling/bouncing on iOS. tabindex so keyboard scrolling still targets it. -->
-			<div
-				bind:this={scrollEl}
-				data-reader-scroll
-				tabindex="-1"
-				class="fixed inset-0 overflow-y-auto outline-none {chapters.length > 0 ? 'lg:right-72' : ''}"
-				style="overscroll-behavior: none"
-			>
-				<button type="button" class="block w-full cursor-default text-left" onclick={toggleChrome}>
-					<WebtoonView
-						{sections}
-						zoom={readerSettings.zoom}
-						gap={readerSettings.gap}
-						onpage={reportWebtoonPage}
-						onnearend={handleNearEnd}
-						{initialPage}
-						resetToken={chapterId}
-					/>
-				</button>
-				{#if loadingNextChapter}
-					<div class="flex items-center justify-center py-8 text-white/50">
-						<Spinner size={20} />
-					</div>
-				{/if}
-			</div>
+			<button type="button" class="block w-full cursor-default text-left" onclick={toggleChrome}>
+				<WebtoonView
+					{sections}
+					zoom={readerSettings.zoom}
+					gap={readerSettings.gap}
+					onpage={reportWebtoonPage}
+					onnearend={handleNearEnd}
+					{initialPage}
+					resetToken={chapterId}
+				/>
+			</button>
+			{#if loadingNextChapter}
+				<div class="flex items-center justify-center py-8 text-white/50">
+					<Spinner size={20} />
+				</div>
+			{/if}
 		{/if}
 
 		<ReaderControls
