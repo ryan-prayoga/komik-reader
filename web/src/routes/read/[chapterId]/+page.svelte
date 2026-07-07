@@ -48,6 +48,11 @@
 	let settingsOpen = $state(false);
 	let autoScroll = $state(false);
 	let autoScrollSpeed = $state(readerSettings.autoScrollSpeed);
+	let scrollEl = $state<HTMLElement | null>(null);
+
+	$effect(() => {
+		scrollEl?.focus({ preventScroll: true });
+	});
 
 	$effect(() => {
 		if (!autoScroll) return;
@@ -63,7 +68,7 @@
 				const delta = ((autoScrollSpeed * 60) / 1000) * (time - lastTime) + remainder;
 				const whole = Math.trunc(delta);
 				remainder = delta - whole;
-				if (whole !== 0) window.scrollBy(0, whole);
+				if (whole !== 0) (scrollEl ?? window).scrollBy(0, whole);
 			}
 			lastTime = time;
 			rafId = requestAnimationFrame(step);
@@ -286,7 +291,7 @@
 			const topAfter = document.querySelector(anchorSelector)?.getBoundingClientRect().top;
 			if (topAfter === undefined) return;
 			const delta = topAfter - topBefore;
-			if (delta !== 0) window.scrollBy(0, delta);
+			if (delta !== 0) (scrollEl ?? window).scrollBy(0, delta);
 		});
 	});
 
@@ -332,12 +337,12 @@
 	$effect(() => {
 		if (typeof window === 'undefined') return;
 		const onActivity = () => readingTimer.pingActivity();
-		window.addEventListener('scroll', onActivity, { passive: true });
+		window.addEventListener('scroll', onActivity, { passive: true, capture: true });
 		window.addEventListener('keydown', onActivity);
 		window.addEventListener('touchstart', onActivity, { passive: true });
 		window.addEventListener('pointerdown', onActivity);
 		return () => {
-			window.removeEventListener('scroll', onActivity);
+			window.removeEventListener('scroll', onActivity, { capture: true });
 			window.removeEventListener('keydown', onActivity);
 			window.removeEventListener('touchstart', onActivity);
 			window.removeEventListener('pointerdown', onActivity);
@@ -536,22 +541,30 @@
 				onzoom={(z) => readerSettings.set('zoom', z)}
 			/>
 		{:else}
-			<button type="button" class="block w-full cursor-default text-left" onclick={toggleChrome}>
-				<WebtoonView
-					{sections}
-					zoom={readerSettings.zoom}
-					gap={readerSettings.gap}
-					onpage={reportWebtoonPage}
-					onnearend={handleNearEnd}
-					{initialPage}
-					resetToken={chapterId}
-				/>
-			</button>
-			{#if loadingNextChapter}
-				<div class="flex items-center justify-center py-8 text-white/50">
-					<Spinner size={20} />
-				</div>
-			{/if}
+			<div
+				bind:this={scrollEl}
+				data-reader-scroll
+				tabindex="-1"
+				class="fixed inset-0 overflow-y-auto outline-none {chapters.length > 0 ? 'lg:right-72' : ''}"
+				style="overscroll-behavior: none"
+			>
+				<button type="button" class="block w-full cursor-default text-left" onclick={toggleChrome}>
+					<WebtoonView
+						{sections}
+						zoom={readerSettings.zoom}
+						gap={readerSettings.gap}
+						onpage={reportWebtoonPage}
+						onnearend={handleNearEnd}
+						{initialPage}
+						resetToken={chapterId}
+					/>
+				</button>
+				{#if loadingNextChapter}
+					<div class="flex items-center justify-center py-8 text-white/50">
+						<Spinner size={20} />
+					</div>
+				{/if}
+			</div>
 		{/if}
 
 		<ReaderControls
