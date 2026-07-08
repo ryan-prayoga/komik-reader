@@ -86,6 +86,33 @@
 		return out.sort((a, b) => b.lastReadAt - a.lastReadAt);
 	});
 
+	// Bucket groups into human date sections (Hari ini / Kemarin / Minggu ini / Lama).
+	function dateBucket(ts: number): string {
+		const now = new Date();
+		const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+		const d = ts;
+		if (d >= startToday) return 'Hari ini';
+		if (d >= startToday - 86400000) return 'Kemarin';
+		if (d >= startToday - 6 * 86400000) return 'Minggu ini';
+		return 'Lebih lama';
+	}
+
+	const sections = $derived.by(() => {
+		const out: { label: string; items: Group[] }[] = [];
+		for (const g of groups) {
+			const label = dateBucket(g.lastReadAt);
+			let sec = out.find((s) => s.label === label);
+			if (!sec) {
+				sec = { label, items: [] };
+				out.push(sec);
+			}
+			sec.items.push(g);
+		}
+		return out;
+	});
+
+	let confirmClearAll = $state(false);
+
 	function sourceLabel(g: Group): string | null {
 		if (!g.sourceId) return null;
 		return sourceNames[g.sourceId] ?? null;
@@ -106,6 +133,11 @@
 		pendingDelete = null;
 	}
 
+	function doClearAll() {
+		localData.clearAllHistory();
+		confirmClearAll = false;
+	}
+
 	function openGroup(g: Group) {
 		goto(`/read/${g.lastChapterId}`);
 	}
@@ -113,6 +145,11 @@
 
 <section>
 	<PageHeader title="Riwayat" subtitle="Tersimpan di perangkat ini. Login untuk sync antar device.">
+		{#if groups.length > 0}
+			<Button variant="ghost" size="sm" onclick={() => (confirmClearAll = true)}>
+				<Trash2 size={14} /> Hapus semua
+			</Button>
+		{/if}
 		{#if syncEngine.loggedIn}
 			<Badge tone="success"><Cloud size={13} /> Tersync</Badge>
 		{:else}
@@ -126,27 +163,26 @@
 			description="Buka chapter di reader untuk mencatat riwayat baca otomatis."
 		/>
 	{:else}
-		<Card padding="none">
-			<div class="divide-y divide-border">
-				{#each groups as g (g.mangaId)}
+		{#each sections as section (section.label)}
+			<h2 class="mb-2 mt-6 text-xs font-semibold uppercase tracking-wide text-muted first:mt-0">
+				{section.label}
+			</h2>
+			<Card padding="none" class="mb-2">
+				<div class="divide-y divide-border">
+					{#each section.items as g (g.mangaId)}
 					<div
-						class="flex cursor-pointer items-center gap-4 px-4 py-3 transition hover:bg-bg/60"
-						role="button"
-						tabindex="0"
-						onclick={() => openGroup(g)}
-						onkeydown={(e) => {
-							if (e.key === 'Enter' || e.key === ' ') {
-								e.preventDefault();
-								openGroup(g);
-							}
-						}}
+						class="flex items-center gap-4 px-4 py-3 transition hover:bg-bg/60"
 					>
-						<div class="h-16 w-11 shrink-0 overflow-hidden rounded-[var(--radius-sm)] bg-bg">
+						<a
+							href="/manga/{g.mangaId}"
+							class="h-16 w-11 shrink-0 overflow-hidden rounded-[var(--radius-sm)] bg-bg"
+							aria-label="Buka detail {g.mangaTitle}"
+						>
 							{#if g.thumbnailUrl}
 								<img src={g.thumbnailUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
 							{/if}
-						</div>
-						<div class="min-w-0 flex-1">
+						</a>
+						<button type="button" onclick={() => openGroup(g)} class="min-w-0 flex-1 cursor-pointer text-left">
 							<p class="truncate text-sm font-medium text-text">{g.mangaTitle}</p>
 							<p class="flex items-center gap-1 text-xs text-muted">
 								{#if sourceLabel(g)}<span class="shrink-0">{sourceLabel(g)} ·</span>{/if}
@@ -168,7 +204,7 @@
 									<span>Total {formatDuration(g.totalMs)}</span>
 								</p>
 							{/if}
-						</div>
+						</button>
 						<Button
 							variant="ghost"
 							size="sm"
@@ -183,6 +219,7 @@
 				{/each}
 			</div>
 		</Card>
+		{/each}
 	{/if}
 </section>
 
@@ -193,5 +230,15 @@
 	{#snippet footer()}
 		<Button variant="ghost" onclick={() => (confirmOpen = false)}>Batal</Button>
 		<Button onclick={confirmDelete}>Hapus</Button>
+	{/snippet}
+</Modal>
+
+<Modal bind:open={confirmClearAll} title="Hapus semua riwayat?">
+	<p class="text-sm text-muted">
+		Seluruh riwayat baca di perangkat ini akan dihapus. Tindakan ini tidak bisa dibatalkan.
+	</p>
+	{#snippet footer()}
+		<Button variant="ghost" onclick={() => (confirmClearAll = false)}>Batal</Button>
+		<Button onclick={doClearAll}>Hapus semua</Button>
 	{/snippet}
 </Modal>
