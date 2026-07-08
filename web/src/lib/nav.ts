@@ -17,18 +17,18 @@ export interface NavItem {
 
 /** Top-level destinations — also the mobile bottom-nav slots. */
 export const primaryNav: NavItem[] = [
-	{ href: '/', label: 'Home', icon: House },
+	{ href: '/', label: 'Beranda', icon: House },
 	{ href: '/library', label: 'Library', icon: LibraryBig },
-	{ href: '/search', label: 'Search', icon: Search },
-	{ href: '/history', label: 'History', icon: History }
+	{ href: '/search', label: 'Cari', icon: Search },
+	{ href: '/history', label: 'Riwayat', icon: History }
 ];
 
 /** Secondary destinations — sidebar lower section + mobile "More" sheet. */
 export const manageNav: NavItem[] = [
 	{ href: '/stats', label: 'Statistik', icon: BarChart3 },
 	{ href: '/extensions', label: 'Extensions', icon: Puzzle },
-	{ href: '/downloads', label: 'Downloads', icon: Download },
-	{ href: '/settings', label: 'Settings', icon: Settings }
+	{ href: '/downloads', label: 'Unduhan', icon: Download },
+	{ href: '/settings', label: 'Pengaturan', icon: Settings }
 ];
 
 export const adminNav: NavItem = { href: '/admin', label: 'Admin', icon: Shield };

@@ -26,7 +26,7 @@
 			{@const active = isActive($page.url.pathname, item.href)}
 			<a
 				href={item.href}
-				class="flex flex-col items-center gap-1 py-2 text-[0.65rem] font-medium transition active:scale-95 {active
+				class="flex flex-col items-center gap-1 py-2 text-[0.7rem] font-medium transition active:scale-95 {active
 					? 'text-accent'
 					: 'text-muted'}"
 			>
@@ -37,12 +37,12 @@
 		<button
 			type="button"
 			onclick={onmore}
-			class="flex flex-col items-center gap-1 py-2 text-[0.65rem] font-medium transition active:scale-95 {moreActive
+			class="flex flex-col items-center gap-1 py-2 text-[0.7rem] font-medium transition active:scale-95 {moreActive
 				? 'text-accent'
 				: 'text-muted'}"
 		>
 			<Menu size={20} />
-			<span>More</span>
+			<span>Lainnya</span>
 		</button>
 	</div>
 </nav>
