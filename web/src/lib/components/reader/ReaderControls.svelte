@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { fade, fly } from 'svelte/transition';
+	import { motionDuration } from '$lib/utils/motion';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import ChevronLeft from '@lucide/svelte/icons/chevron-left';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
@@ -186,7 +187,7 @@
 					min="0"
 					max={max}
 					bind:value={current}
-					oninput={() => onseek?.(current)}
+					onchange={() => onseek?.(current)}
 					class="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-white/25 accent-accent"
 					aria-label="Posisi halaman"
 				/>
@@ -204,6 +205,7 @@
 			>
 				<BookOpen size={14} class="shrink-0" />
 				<span class="truncate">{chapterName || pageLabel}</span>
+				{#if chapterName}<span class="shrink-0 tabular-nums text-white/50">· {pageLabel}</span>{/if}
 				{#if chapters.length > 0}
 					<List size={12} class="shrink-0 opacity-50" />
 				{/if}
@@ -230,7 +232,7 @@
 <!-- Chapter picker -->
 {#if pickerOpen}
 	<div
-		transition:fade={{ duration: 200 }}
+		transition:fade={{ duration: motionDuration(200) }}
 		class="fixed inset-0 z-40 bg-black/60"
 		role="button"
 		tabindex="-1"
@@ -239,8 +241,9 @@
 		onkeydown={(e) => e.key === 'Escape' && (pickerOpen = false)}
 	></div>
 	<div
-		transition:fly={{ y: 320, duration: 260, opacity: 1 }}
-		class="fixed inset-x-0 bottom-0 z-50 flex max-h-[65vh] flex-col rounded-t-2xl bg-[var(--color-surface)] shadow-(--shadow-float)"
+		transition:fly={{ y: 320, duration: motionDuration(260), opacity: 1 }}
+		class="fixed inset-x-0 bottom-0 z-50 flex max-h-[65vh] flex-col rounded-t-2xl bg-neutral-900 shadow-(--shadow-float)"
+		style="padding-bottom: env(safe-area-inset-bottom)"
 	>
 		<div
 			class="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3"

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { fly } from 'svelte/transition';
+	import { motionDuration } from '$lib/utils/motion';
 	import { toasts, dismissToast } from '$lib/stores/toast.svelte';
 	import X from '@lucide/svelte/icons/x';
 	import CheckCircle from '@lucide/svelte/icons/check-circle';
@@ -14,11 +15,11 @@
 	};
 </script>
 
-<div class="fixed bottom-20 right-4 z-[200] flex flex-col gap-2 lg:bottom-6">
+<div class="fixed bottom-36 right-4 z-[200] flex flex-col gap-2 sm:bottom-20 lg:bottom-6">
 	{#each toasts as toast (toast.id)}
 		<div
 			role="alert"
-			transition:fly={{ y: 12, duration: 200 }}
+			transition:fly={{ y: 12, duration: motionDuration(200) }}
 			class="flex min-w-56 max-w-xs items-start gap-3 rounded-[var(--radius)] border px-4 py-3 shadow-(--shadow-float) {colors[toast.type]}"
 		>
 			<svelte:component this={icons[toast.type]} size={16} class="mt-0.5 shrink-0" />
