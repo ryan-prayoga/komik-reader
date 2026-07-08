@@ -45,6 +45,27 @@
 
 	let offlineChapters = $state<OfflineChapter[]>([]);
 	let loading = $state(true);
+	let storageLabel = $state('');
+
+	const totalChapters = $derived(offlineChapters.length);
+	const totalPages = $derived(offlineChapters.reduce((n, c) => n + c.pageCount, 0));
+
+	function formatBytes(bytes: number): string {
+		if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+		if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+		return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+	}
+
+	async function refreshStorage() {
+		try {
+			if (navigator.storage?.estimate) {
+				const est = await navigator.storage.estimate();
+				if (est.usage) storageLabel = formatBytes(est.usage);
+			}
+		} catch {
+			/* estimate unsupported */
+		}
+	}
 
 	// sourceId → human-readable source name (best-effort; needs Suwayomi online).
 	let sourceNames = $state<Record<string, string>>({});
@@ -111,6 +132,7 @@
 	onMount(async () => {
 		await refresh();
 		loading = false;
+		refreshStorage();
 		try {
 			const sources = await getInstalledSources(null);
 			sourceNames = Object.fromEntries(sources.map((s) => [s.id, s.name]));
@@ -121,7 +143,12 @@
 </script>
 
 <section>
-	<PageHeader title="Downloads" subtitle="Chapter tersimpan di perangkat." />
+	<PageHeader
+		title="Unduhan"
+		subtitle={totalChapters > 0
+			? `${totalChapters} chapter · ${totalPages} halaman${storageLabel ? ` · ~${storageLabel} terpakai` : ''}`
+			: 'Chapter tersimpan di perangkat.'}
+	/>
 
 	{#if loading}
 		<div class="flex justify-center py-16 text-muted"><Spinner size={26} /></div>
@@ -138,20 +165,20 @@
 				{@const key = String(group.mangaId)}
 				{@const open = openGroups.has(key)}
 				<Card padding="none">
-					<button
-						class="flex w-full items-center gap-3 px-3 py-3 text-left"
-						onclick={() => toggleGroup(key)}
-					>
-						<div class="h-14 w-10 shrink-0 overflow-hidden rounded-[var(--radius-sm)] bg-surface-hover">
+					<div class="flex items-center gap-3 px-3 py-3">
+						<a
+							href="/manga/{group.mangaId}"
+							class="h-14 w-10 shrink-0 overflow-hidden rounded-[var(--radius-sm)] bg-surface-hover"
+							aria-label="Buka detail {group.mangaTitle}"
+						>
 							{#if group.thumbnailUrl}
 								<img src={apiUrl(group.thumbnailUrl)} alt="" class="h-full w-full object-cover" />
 							{/if}
-						</div>
+						</a>
 						<div class="min-w-0 flex-1">
 							<a
 								href="/manga/{group.mangaId}"
 								class="block truncate font-semibold text-text hover:text-accent"
-								onclick={(e) => e.stopPropagation()}
 							>{group.mangaTitle}</a>
 							<div class="mt-0.5 flex items-center gap-2">
 								{#if sourceLabel(group.sourceId)}
@@ -160,8 +187,16 @@
 								<span class="text-xs text-muted">{group.chapters.length} chapter</span>
 							</div>
 						</div>
-						<ChevronDown size={16} class="shrink-0 text-muted transition-transform duration-200 {open ? 'rotate-180' : ''}" />
-					</button>
+						<button
+							type="button"
+							onclick={() => toggleGroup(key)}
+							aria-label={open ? 'Tutup daftar chapter' : 'Buka daftar chapter'}
+							aria-expanded={open}
+							class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted transition hover:bg-surface-hover hover:text-text"
+						>
+							<ChevronDown size={16} class="transition-transform duration-200 {open ? 'rotate-180' : ''}" />
+						</button>
+					</div>
 					{#if open}
 						<div class="divide-y divide-border border-t border-border">
 							{#each group.chapters as chapter (chapter.chapterId)}
