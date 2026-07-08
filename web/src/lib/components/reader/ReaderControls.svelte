@@ -112,7 +112,7 @@
 		>
 			<ArrowLeft size={20} />
 		</a>
-		<div class="min-w-0 flex-1 [text-shadow:0_1px_3px_rgb(0_0_0/0.9)]">
+		<div class="min-w-0 flex-1 pl-0.5 [text-shadow:0_1px_3px_rgb(0_0_0/0.9)]">
 			<p class="truncate text-sm font-semibold leading-tight">{title}</p>
 			<p class="truncate text-xs text-white/70">
 				{chapterName}{#if offlineMode} · <span class="text-accent">Offline</span>{/if}
