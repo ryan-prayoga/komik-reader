@@ -5,7 +5,7 @@
 	import MangaGrid from '$lib/components/MangaGrid.svelte';
 	import GridSkeleton from '$lib/components/GridSkeleton.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
-	import { Button, Select, EmptyState } from '$lib/components/ui';
+	import { Button, Select, EmptyState, Spinner } from '$lib/components/ui';
 	import { fetchBrowseManga, getInstalledSources } from '$lib/graphql/api';
 	import { preferences } from '$lib/preferences.svelte';
 	import Search from '@lucide/svelte/icons/search';
@@ -18,8 +18,13 @@
 	let query = $state('');
 	let mangas = $state<BrowseManga[]>([]);
 	let loading = $state(false);
+	let loadingMore = $state(false);
 	let searched = $state(false);
 	let error = $state('');
+	let pageNum = $state(1);
+	let hasNext = $state(false);
+	let activeQuery = $state('');
+	let sentinel = $state<HTMLElement | null>(null);
 
 	const sources = $derived(
 		filterByActive && preferences.activePkgNames.length > 0
@@ -43,15 +48,46 @@
 		loading = true;
 		searched = true;
 		error = '';
+		pageNum = 1;
+		activeQuery = query.trim();
 		try {
-			const result = await fetchBrowseManga(sourceId, 'SEARCH', 1, query.trim());
+			const result = await fetchBrowseManga(sourceId, 'SEARCH', 1, activeQuery);
 			mangas = result.mangas;
+			hasNext = result.hasNextPage;
+			pageNum = 2;
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Gagal mencari';
 		} finally {
 			loading = false;
 		}
 	}
+
+	async function loadMore() {
+		if (loadingMore || !hasNext || loading || !activeQuery) return;
+		loadingMore = true;
+		try {
+			const result = await fetchBrowseManga(sourceId, 'SEARCH', pageNum, activeQuery);
+			mangas = [...mangas, ...result.mangas];
+			hasNext = result.hasNextPage;
+			pageNum += 1;
+		} catch {
+			hasNext = false;
+		} finally {
+			loadingMore = false;
+		}
+	}
+
+	$effect(() => {
+		if (!sentinel) return;
+		const observer = new IntersectionObserver(
+			(entries) => {
+				if (entries[0].isIntersecting) loadMore();
+			},
+			{ rootMargin: '200px' }
+		);
+		observer.observe(sentinel);
+		return () => observer.disconnect();
+	});
 </script>
 
 <section>
@@ -111,5 +147,10 @@
 				<MangaCard {manga} href="/manga/{manga.id}" showLibraryToggle />
 			{/each}
 		</MangaGrid>
+
+		<div bind:this={sentinel} class="h-1"></div>
+		{#if loadingMore}
+			<div class="flex justify-center py-8 text-muted"><Spinner size={22} /></div>
+		{/if}
 	{/if}
 </section>
