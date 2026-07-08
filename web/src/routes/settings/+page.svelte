@@ -2,8 +2,12 @@
 	import { preferences, type Theme } from '$lib/preferences.svelte';
 	import { readerSettings, type ReaderMode } from '$lib/reader-settings.svelte';
 	import { syncEngine } from '$lib/local/sync.svelte';
+	import { localData } from '$lib/local/data.svelte';
+	import { listOfflineChapters, removeOfflineChapter } from '$lib/offline/db';
+	import { removeChapterFromDevice } from '$lib/offline/cache';
+	import { showToast } from '$lib/stores/toast.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
-	import { Card, Switch, Button } from '$lib/components/ui';
+	import { Card, Switch, Button, Modal } from '$lib/components/ui';
 	import Cloud from '@lucide/svelte/icons/cloud';
 	import Sun from '@lucide/svelte/icons/sun';
 	import Moon from '@lucide/svelte/icons/moon';
@@ -11,6 +15,31 @@
 	import ScrollText from '@lucide/svelte/icons/scroll-text';
 	import BookOpen from '@lucide/svelte/icons/book-open';
 	import Columns2 from '@lucide/svelte/icons/columns-2';
+	import Trash2 from '@lucide/svelte/icons/trash-2';
+
+	let confirmHistory = $state(false);
+	let confirmDownloads = $state(false);
+	let clearingDownloads = $state(false);
+
+	async function clearHistory() {
+		await localData.clearAllHistory();
+		confirmHistory = false;
+		showToast('Riwayat baca dihapus.', 'success');
+	}
+
+	async function clearDownloads() {
+		clearingDownloads = true;
+		try {
+			const chapters = await listOfflineChapters();
+			for (const c of chapters) {
+				await removeChapterFromDevice(c.chapterId).catch(() => removeOfflineChapter(c.chapterId));
+			}
+			showToast(`${chapters.length} chapter offline dihapus.`, 'success');
+		} finally {
+			clearingDownloads = false;
+			confirmDownloads = false;
+		}
+	}
 
 	const themes: { value: Theme; label: string; icon: typeof Sun }[] = [
 		{ value: 'light', label: 'Terang', icon: Sun },
@@ -83,12 +112,14 @@
 				{/each}
 			</div>
 
-			<Switch
-				label="Ciutkan sidebar (desktop)"
-				description="Mulai dengan sidebar mode ikon."
-				checked={preferences.sidebarCollapsed}
-				onchange={(v) => preferences.setSidebarCollapsed(v)}
-			/>
+			<div class="hidden lg:block">
+				<Switch
+					label="Ciutkan sidebar (desktop)"
+					description="Mulai dengan sidebar mode ikon."
+					checked={preferences.sidebarCollapsed}
+					onchange={(v) => preferences.setSidebarCollapsed(v)}
+				/>
+			</div>
 		</Card>
 
 		<!-- Reader defaults -->
@@ -139,5 +170,47 @@
 				onchange={(v) => preferences.setShowNsfw(v)}
 			/>
 		</Card>
+
+		<!-- Data management -->
+		<Card padding="lg">
+			<h2 class="mb-1 text-lg font-semibold text-text">Kelola Data</h2>
+			<p class="mb-4 text-sm text-muted">Hapus data yang tersimpan di perangkat ini.</p>
+			<div class="space-y-2">
+				<div class="flex items-center justify-between gap-4">
+					<div class="min-w-0">
+						<p class="text-sm font-medium text-text">Riwayat baca</p>
+						<p class="text-xs text-muted">{localData.history.length} entri riwayat.</p>
+					</div>
+					<Button variant="secondary" size="sm" onclick={() => (confirmHistory = true)} disabled={localData.history.length === 0}>
+						<Trash2 size={14} /> Hapus
+					</Button>
+				</div>
+				<div class="flex items-center justify-between gap-4 border-t border-border pt-2">
+					<div class="min-w-0">
+						<p class="text-sm font-medium text-text">Chapter offline</p>
+						<p class="text-xs text-muted">Hapus semua unduhan dari perangkat.</p>
+					</div>
+					<Button variant="secondary" size="sm" loading={clearingDownloads} onclick={() => (confirmDownloads = true)}>
+						<Trash2 size={14} /> Hapus semua
+					</Button>
+				</div>
+			</div>
+		</Card>
 	</div>
 </section>
+
+<Modal bind:open={confirmHistory} title="Hapus riwayat baca?">
+	<p class="text-sm text-muted">Seluruh riwayat baca di perangkat ini akan dihapus. Tidak bisa dibatalkan.</p>
+	{#snippet footer()}
+		<Button variant="ghost" onclick={() => (confirmHistory = false)}>Batal</Button>
+		<Button onclick={clearHistory}>Hapus</Button>
+	{/snippet}
+</Modal>
+
+<Modal bind:open={confirmDownloads} title="Hapus semua unduhan?">
+	<p class="text-sm text-muted">Semua chapter offline akan dihapus dari perangkat ini.</p>
+	{#snippet footer()}
+		<Button variant="ghost" onclick={() => (confirmDownloads = false)}>Batal</Button>
+		<Button loading={clearingDownloads} onclick={clearDownloads}>Hapus semua</Button>
+	{/snippet}
+</Modal>
