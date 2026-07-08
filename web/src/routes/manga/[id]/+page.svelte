@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
+	import { goto, afterNavigate } from '$app/navigation';
 	import { apiUrl } from '$lib/graphql/client';
 	import { fetchChapters, fetchMangaDetail, markChapterRead, markChaptersRead } from '$lib/graphql/api';
 	import DownloadButton from '$lib/components/DownloadButton.svelte';
@@ -8,10 +9,11 @@
 	import LibraryButton from '$lib/components/LibraryButton.svelte';
 	import { localData } from '$lib/local/data.svelte';
 	import { syncEngine } from '$lib/local/sync.svelte';
+	import { showToast } from '$lib/stores/toast.svelte';
 	import { formatDuration, getMangaStats } from '$lib/reading-time';
 	import { listOfflineChapters } from '$lib/offline/db';
 	import { cacheChapterToDevice } from '$lib/offline/cache';
-	import { Button, Badge, Card, EmptyState, Spinner, Input, Dropdown, IconButton } from '$lib/components/ui';
+	import { Button, Badge, Card, EmptyState, Dropdown, IconButton } from '$lib/components/ui';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import BookOpen from '@lucide/svelte/icons/book-open';
 	import DownloadIcon from '@lucide/svelte/icons/download';
@@ -28,6 +30,7 @@
 	import HardDriveDownload from '@lucide/svelte/icons/hard-drive-download';
 	import CloudOff from '@lucide/svelte/icons/cloud-off';
 	import Clock from '@lucide/svelte/icons/clock';
+	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import type { Chapter, MangaDetail } from '$lib/graphql/types';
 
 	const mangaId = $derived(Number($page.params.id));
@@ -37,9 +40,10 @@
 	let loading = $state(true);
 	let downloadingAll = $state(false);
 	let downloadProgress = $state('');
+	let cancelDownload = $state(false);
 	let error = $state('');
-	let notice = $state('');
 	let offlineIds = $state<Set<number>>(new Set());
+	let descExpanded = $state(false);
 
 	// Chapter list controls
 	let search = $state('');
@@ -101,6 +105,19 @@
 		chapters = await fetchChapters(mangaId);
 	}
 
+	let refreshing = $state(false);
+	async function refreshChapters() {
+		if (refreshing) return;
+		refreshing = true;
+		try {
+			chapters = await fetchChapters(mangaId);
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Gagal memuat chapter';
+		} finally {
+			refreshing = false;
+		}
+	}
+
 	onMount(async () => {
 		try {
 			await load();
@@ -143,25 +160,26 @@
 			targets.map((x) => x.id),
 			true
 		).catch(() => {});
-		notice = `${targets.length} chapter ditandai sudah dibaca.`;
+		showToast(`${targets.length} chapter ditandai sudah dibaca.`, 'success');
 	}
 
 	async function downloadBatch(filter: 'all' | 'unread') {
 		downloadingAll = true;
+		cancelDownload = false;
 		downloadProgress = '';
-		notice = '';
 		error = '';
 		try {
 			const sorted = [...merged].sort((a, b) => a.sourceOrder - b.sourceOrder);
 			const base = filter === 'unread' ? sorted.filter((c) => !c.read) : sorted;
 			const targets = base.filter((c) => !offlineIds.has(c.id));
 			if (targets.length === 0) {
-				notice = filter === 'unread' ? 'Semua chapter belum dibaca sudah offline.' : 'Semua chapter sudah offline.';
+				showToast(filter === 'unread' ? 'Semua chapter belum dibaca sudah offline.' : 'Semua chapter sudah offline.', 'info');
 				return;
 			}
 			let done = 0;
 			let failed = 0;
 			for (const c of targets) {
+				if (cancelDownload) break;
 				downloadProgress = `Mengunduh ${done + 1}/${targets.length}…`;
 				try {
 					await cacheChapterToDevice(c.id, mangaId, manga!.title, c.name, undefined, manga!.thumbnailUrl, manga!.sourceId);
@@ -172,16 +190,34 @@
 				}
 				done += 1;
 			}
-			notice =
-				failed > 0
-					? `${targets.length - failed} chapter tersimpan, ${failed} gagal.`
-					: `${targets.length} chapter tersimpan di perangkat.`;
+			const saved = done - failed;
+			showToast(
+				cancelDownload
+					? `Dibatalkan — ${saved} chapter tersimpan.`
+					: failed > 0
+						? `${saved} chapter tersimpan, ${failed} gagal.`
+						: `${targets.length} chapter tersimpan di perangkat.`,
+				failed > 0 ? 'info' : 'success'
+			);
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Gagal download';
 		} finally {
 			downloadingAll = false;
+			cancelDownload = false;
 			downloadProgress = '';
 		}
+	}
+
+	// Prefer going back to wherever the user came from (library, history, home,
+	// search) instead of always dumping them on the source browse page. Falls
+	// back to the source grid on a cold deep-link with no in-app history.
+	let cameFromApp = $state(false);
+	afterNavigate(({ from }) => {
+		if (from) cameFromApp = true;
+	});
+	function goBack() {
+		if (cameFromApp) history.back();
+		else goto(`/browse/${manga?.sourceId ?? ''}`);
 	}
 
 	function formatDate(ts: string) {
@@ -193,20 +229,38 @@
 
 <section>
 	{#if loading}
-		<div class="flex justify-center py-20 text-muted"><Spinner size={28} /></div>
+		<div class="flex flex-col gap-6 md:flex-row">
+			<div class="mx-auto aspect-[3/4] w-40 shrink-0 animate-pulse rounded-[var(--radius)] bg-surface-hover md:mx-0 md:w-48"></div>
+			<div class="min-w-0 flex-1 space-y-3">
+				<div class="h-7 w-3/4 animate-pulse rounded bg-surface-hover"></div>
+				<div class="h-4 w-1/2 animate-pulse rounded bg-surface-hover"></div>
+				<div class="h-4 w-2/5 animate-pulse rounded bg-surface-hover"></div>
+				<div class="flex gap-2 pt-2">
+					<div class="h-6 w-16 animate-pulse rounded-full bg-surface-hover"></div>
+					<div class="h-6 w-16 animate-pulse rounded-full bg-surface-hover"></div>
+				</div>
+				<div class="h-11 w-full animate-pulse rounded-[var(--radius)] bg-surface-hover"></div>
+			</div>
+		</div>
+		<div class="mt-8 space-y-2">
+			{#each Array(6) as _, i (i)}
+				<div class="h-14 w-full animate-pulse rounded-[var(--radius)] bg-surface-hover"></div>
+			{/each}
+		</div>
 	{:else if error}
 		<div class="rounded-[var(--radius)] border border-danger/30 bg-danger/10 p-4 text-sm text-danger">
 			{error}
 		</div>
 	{:else if manga}
 		<!-- Fixed back button -->
-		<a
-			href="/browse/{manga.sourceId}"
+		<button
+			type="button"
+			onclick={goBack}
 			class="fixed left-4 top-[68px] z-20 inline-flex items-center gap-1 rounded-full bg-bg/85 px-3 py-1.5 text-sm text-muted shadow backdrop-blur transition hover:text-accent lg:left-64 lg:top-4"
 		>
 			<ArrowLeft size={14} />
-			Source
-		</a>
+			Kembali
+		</button>
 
 		<!-- Hero with blurred backdrop -->
 		<div class="relative -mx-4 -mt-4 lg:-mx-8 lg:-mt-8">
@@ -290,6 +344,7 @@
 							{/if}
 							{#if downloadProgress}
 								<span class="inline-flex items-center text-xs text-muted">{downloadProgress}</span>
+								<Button variant="ghost" size="sm" onclick={() => (cancelDownload = true)}>Batal</Button>
 							{/if}
 						</div>
 					</div>
@@ -301,7 +356,16 @@
 			{#if manga.description || localData.isInLibrary(manga.id)}
 				<div class="mt-6 lg:sticky lg:top-8 lg:mt-0 lg:w-72 lg:shrink-0">
 					{#if manga.description}
-						<p class="whitespace-pre-line text-sm leading-relaxed text-muted">{manga.description}</p>
+						<p class="whitespace-pre-line text-sm leading-relaxed text-muted {descExpanded ? '' : 'line-clamp-4'}">{manga.description}</p>
+						{#if (manga.description?.length ?? 0) > 180}
+							<button
+								type="button"
+								onclick={() => (descExpanded = !descExpanded)}
+								class="mt-1 text-xs font-medium text-accent hover:underline"
+							>
+								{descExpanded ? 'Ciutkan' : 'Selengkapnya'}
+							</button>
+						{/if}
 					{/if}
 					{#if localData.isInLibrary(manga.id)}
 						<div class="mt-6"><CategoryPicker mangaId={manga.id} /></div>
@@ -310,16 +374,22 @@
 			{/if}
 
 			<div class="mt-6 min-w-0 flex-1 lg:mt-0">
-				{#if notice}
-					<div class="mb-6 flex items-start justify-between gap-2 rounded-[var(--radius)] border border-success/30 bg-success/10 p-3 text-sm text-success">
-						<span>{notice}</span>
-						<button onclick={() => (notice = '')} class="shrink-0 opacity-60 hover:opacity-100" aria-label="Tutup">✕</button>
-					</div>
-				{/if}
 
-				<h2 class="mb-3 text-lg font-semibold text-text">
-					Chapter ({visible.length}{visible.length !== chapters.length ? `/${chapters.length}` : ''})
-				</h2>
+				<div class="mb-3 flex items-center justify-between gap-2">
+					<h2 class="text-lg font-semibold text-text">
+						Chapter ({visible.length}{visible.length !== chapters.length ? `/${chapters.length}` : ''})
+					</h2>
+					<button
+						type="button"
+						onclick={refreshChapters}
+						disabled={refreshing}
+						aria-label="Muat ulang daftar chapter"
+						title="Cek chapter baru"
+						class="inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius)] text-muted transition hover:bg-surface-hover hover:text-text disabled:opacity-50"
+					>
+						<RefreshCw size={15} class={refreshing ? 'animate-spin' : ''} />
+					</button>
+				</div>
 
 				{#if chapters.length === 0}
 					<EmptyState title="Belum ada chapter" description="Source belum menyediakan chapter." />
@@ -399,7 +469,7 @@
 												sourceId={manga?.sourceId}
 												oncached={() => {
 													offlineIds = new Set([...offlineIds, chapter.id]);
-													notice = 'Chapter tersimpan di perangkat.';
+													showToast('Chapter tersimpan di perangkat.', 'success');
 												}}
 											/>
 											<Dropdown align="right">
