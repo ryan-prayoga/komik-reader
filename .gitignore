@@ -34,3 +34,8 @@ web/data/
 
 # Playwright MCP artifacts
 .playwright-mcp/
+
+.claude/
+.omo/
+.opencode/
+
