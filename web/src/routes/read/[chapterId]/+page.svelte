@@ -15,6 +15,7 @@
 	import ReaderSettings from '$lib/components/reader/ReaderSettings.svelte';
 	import Spinner from '$lib/components/ui/Spinner.svelte';
 	import CheckCircle from '@lucide/svelte/icons/check-circle';
+	import ArrowUp from '@lucide/svelte/icons/arrow-up';
 	import type { Chapter } from '$lib/graphql/types';
 
 	const chapterId = $derived(Number($page.params.chapterId));
@@ -49,6 +50,20 @@
 	let settingsOpen = $state(false);
 	let autoScroll = $state(false);
 	let autoScrollSpeed = $state(readerSettings.autoScrollSpeed);
+	let showBackToTop = $state(false);
+
+	$effect(() => {
+		if (isPaged) return;
+		function onScroll() {
+			showBackToTop = window.scrollY > window.innerHeight * 1.5;
+		}
+		window.addEventListener('scroll', onScroll, { passive: true });
+		return () => window.removeEventListener('scroll', onScroll);
+	});
+
+	function scrollToTop() {
+		window.scrollTo({ top: 0, behavior: 'smooth' });
+	}
 
 	$effect(() => {
 		if (!autoScroll) return;
@@ -563,6 +578,17 @@
 						Kembali ke detail
 					</a>
 				</div>
+			{/if}
+
+			{#if showBackToTop}
+				<button
+					type="button"
+					onclick={scrollToTop}
+					aria-label="Kembali ke atas chapter"
+					class="fixed bottom-24 right-4 z-20 flex h-11 w-11 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm transition hover:bg-black/70 lg:bottom-6"
+				>
+					<ArrowUp size={18} />
+				</button>
 			{/if}
 		{/if}
 

@@ -177,10 +177,16 @@
 		else list = [start, start + 1].filter((i) => i <= lastIndex);
 		return direction === 'rtl' ? [...list].reverse() : list;
 	});
-	// Warm the next pair.
-	const preload = $derived(
-		[nextIndex(current), nextIndex(current) + 1].filter((i) => i <= lastIndex).map((i) => pages[i])
-	);
+	// Warm the next pair and the page just behind — a quick prev-tap (double
+	// checking a panel, backing out of a spoiler-scroll) shouldn't hit a blank
+	// placeholder either.
+	const preload = $derived.by(() => {
+		const prevStart = pairStart(current - 1);
+		const idxs = [prevStart, nextIndex(current), nextIndex(current) + 1].filter(
+			(i) => i >= 0 && i <= lastIndex
+		);
+		return [...new Set(idxs)].map((i) => pages[i]);
+	});
 
 	function imgStyle(): string {
 		if (fit === 'width') return `width: min(100%, ${56 * zoom}rem)`;
