@@ -1,12 +1,14 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
+	import { beforeNavigate } from '$app/navigation';
 	import { page } from '$app/stores';
 	import MangaCard from '$lib/components/MangaCard.svelte';
 	import MangaGrid from '$lib/components/MangaGrid.svelte';
 	import GridSkeleton from '$lib/components/GridSkeleton.svelte';
-	import { Tabs, Button, EmptyState, Select, Badge, Chip, Sheet } from '$lib/components/ui';
+	import { Tabs, Button, EmptyState, Select, Badge, Chip, Sheet, Spinner } from '$lib/components/ui';
 	import { fetchBrowseManga, fetchChapters, fetchMangaDetail, getMangasDetail, getSourceById, getSourceFilters } from '$lib/graphql/api';
 	import { getCached, getMissingIds, setCache } from '$lib/stores/mangaDetailCache';
+	import { getBrowseSnapshot, saveBrowseSnapshot } from '$lib/stores/browseCache';
 	import { apiUrl } from '$lib/graphql/client';
 	import { localData } from '$lib/local/data.svelte';
 	import type {
@@ -330,12 +332,41 @@
 		return () => observer.disconnect();
 	});
 
+	// Persist the scrolled-through grid so returning from a manga detail (which
+	// remounts this route) restores position instead of refetching from page 1.
+	beforeNavigate(() => {
+		saveBrowseSnapshot({
+			sourceId,
+			tab,
+			activeSearch,
+			mangas,
+			pageNum,
+			hasNext,
+			scrollY: window.scrollY,
+			appliedFilters
+		});
+	});
+
 	onMount(() => {
 		getSourceById(sourceId).then((s) => (source = s));
 		getSourceFilters(sourceId).then((f) => {
 			sourceFilters = f;
 			uiFilters = cloneFilters(f);
 		});
+
+		const snap = getBrowseSnapshot(sourceId);
+		if (snap && snap.mangas.length > 0) {
+			tab = snap.tab;
+			activeSearch = snap.activeSearch;
+			searchInput = snap.activeSearch;
+			mangas = applyEnrichment(snap.mangas);
+			pageNum = snap.pageNum;
+			hasNext = snap.hasNext;
+			appliedFilters = snap.appliedFilters;
+			loading = false;
+			tick().then(() => window.scrollTo(0, snap.scrollY));
+			return;
+		}
 		load(true);
 	});
 </script>
@@ -390,7 +421,7 @@
 		</div>
 		{#if activeSearch}
 			<Button variant="secondary" onclick={clearSearch} type="button">
-				<X size={15} /> Clear
+				<X size={15} /> Hapus
 			</Button>
 		{:else}
 			<Button type="submit" disabled={!searchInput.trim()}>Cari</Button>
@@ -464,12 +495,7 @@
 
 		<div bind:this={sentinel} class="h-1"></div>
 		{#if loadingMore}
-			<div class="flex justify-center py-8 text-muted">
-				<svg class="h-6 w-6 animate-spin" viewBox="0 0 24 24" fill="none">
-					<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-					<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 00-8 8h4z"/>
-				</svg>
-			</div>
+			<div class="flex justify-center py-8 text-muted"><Spinner size={24} /></div>
 		{/if}
 	{/if}
 </section>
@@ -517,24 +543,20 @@
 						</div>
 					</div>
 				{:else if filter.__typename === 'CheckBoxFilter'}
-					<label class="flex cursor-pointer items-center gap-3">
-						<div
+					<button
+						type="button"
+						role="checkbox"
+						aria-checked={filter.state}
+						class="flex w-full cursor-pointer items-center gap-3 py-1 text-left"
+						onclick={() => toggleCheckbox(fi)}
+					>
+						<span
 							class="flex h-4 w-4 shrink-0 items-center justify-center rounded border transition {filter.state ? 'border-accent bg-accent text-white' : 'border-border'}"
-							role="checkbox"
-							aria-checked={filter.state}
-							tabindex="0"
-							onclick={() => toggleCheckbox(fi)}
-							onkeydown={(e) => {
-								if (e.key === 'Enter' || e.key === ' ') {
-									e.preventDefault();
-									toggleCheckbox(fi);
-								}
-							}}
 						>
 							{#if filter.state}<Check size={10} />{/if}
-						</div>
+						</span>
 						<span class="text-sm text-text">{filter.name}</span>
-					</label>
+					</button>
 				{:else if filter.__typename === 'TriStateFilter'}
 					<button
 						type="button"
@@ -548,7 +570,7 @@
 					</button>
 				{:else if filter.__typename === 'TextFilter'}
 					<div>
-						<label class="mb-2 block text-sm font-semibold text-text">{filter.name}</label>
+						<span class="mb-2 block text-sm font-semibold text-text">{filter.name}</span>
 						<input
 							type="text"
 							bind:value={filter.state}
@@ -561,24 +583,20 @@
 						<div class="grid grid-cols-2 gap-x-4 gap-y-2">
 							{#each filter.filters as child, ci}
 								{#if child.__typename === 'CheckBoxFilter'}
-									<label class="flex cursor-pointer items-center gap-2">
-										<div
+									<button
+										type="button"
+										role="checkbox"
+										aria-checked={child.state}
+										class="flex w-full cursor-pointer items-center gap-2 py-1 text-left"
+										onclick={() => toggleGroupCheckbox(fi, ci)}
+									>
+										<span
 											class="flex h-4 w-4 shrink-0 items-center justify-center rounded border transition {child.state ? 'border-accent bg-accent text-white' : 'border-border'}"
-											role="checkbox"
-											aria-checked={child.state}
-											tabindex="0"
-											onclick={() => toggleGroupCheckbox(fi, ci)}
-											onkeydown={(e) => {
-												if (e.key === 'Enter' || e.key === ' ') {
-													e.preventDefault();
-													toggleGroupCheckbox(fi, ci);
-												}
-											}}
 										>
 											{#if child.state}<Check size={10} />{/if}
-										</div>
+										</span>
 										<span class="text-sm text-text">{child.name}</span>
-									</label>
+									</button>
 								{:else if child.__typename === 'TriStateFilter'}
 									<button
 										type="button"
