@@ -9,10 +9,14 @@
 	import { fetchBrowseManga, getInstalledSources } from '$lib/graphql/api';
 	import { preferences } from '$lib/preferences.svelte';
 	import Search from '@lucide/svelte/icons/search';
+	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import type { BrowseManga, Source } from '$lib/graphql/types';
 
 	const filterByActive = $derived($page.data.authEnabled && !$page.data.user?.is_admin);
 
+	// sourceId === '' means "Semua source" — fan out the search across every
+	// active source instead of hitting Suwayomi's per-source SEARCH endpoint
+	// (there is no server-side global search to call).
 	let allSources = $state<Source[]>([]);
 	let sourceId = $state('');
 	let query = $state('');
@@ -26,6 +30,10 @@
 	let activeQuery = $state('');
 	let sentinel = $state<HTMLElement | null>(null);
 
+	type SourceResult = { source: Source; mangas: BrowseManga[] };
+	let multiResults = $state<SourceResult[]>([]);
+	let multiMode = $state(true);
+
 	const sources = $derived(
 		filterByActive && preferences.activePkgNames.length > 0
 			? allSources.filter((s) => preferences.activePkgNames.includes(s.extension.pkgName))
@@ -37,21 +45,47 @@
 	onMount(async () => {
 		try {
 			allSources = await getInstalledSources(preferences.nsfwFilter);
-			if (sources[0]) sourceId = sources[0].id;
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Gagal memuat source';
 		}
 	});
 
 	async function search() {
-		if (!sourceId || !query.trim()) return;
-		loading = true;
+		const q = query.trim();
+		if (!q) return;
 		searched = true;
 		error = '';
+		activeQuery = q;
+
+		if (!sourceId) {
+			multiMode = true;
+			loading = true;
+			multiResults = [];
+			const targets = sources;
+			const CONCURRENCY = 4;
+			let idx = 0;
+			async function worker() {
+				while (idx < targets.length) {
+					const src = targets[idx++];
+					try {
+						const result = await fetchBrowseManga(src.id, 'SEARCH', 1, q);
+						if (result.mangas.length) multiResults = [...multiResults, { source: src, mangas: result.mangas }];
+					} catch {
+						// Skip a source that errors (unreachable, unsupported search) —
+						// the rest of the fan-out keeps going.
+					}
+				}
+			}
+			await Promise.all(Array.from({ length: Math.min(CONCURRENCY, targets.length) }, worker));
+			loading = false;
+			return;
+		}
+
+		multiMode = false;
+		loading = true;
 		pageNum = 1;
-		activeQuery = query.trim();
 		try {
-			const result = await fetchBrowseManga(sourceId, 'SEARCH', 1, activeQuery);
+			const result = await fetchBrowseManga(sourceId, 'SEARCH', 1, q);
 			mangas = result.mangas;
 			hasNext = result.hasNextPage;
 			pageNum = 2;
@@ -63,7 +97,7 @@
 	}
 
 	async function loadMore() {
-		if (loadingMore || !hasNext || loading || !activeQuery) return;
+		if (multiMode || loadingMore || !hasNext || loading || !activeQuery) return;
 		loadingMore = true;
 		try {
 			const result = await fetchBrowseManga(sourceId, 'SEARCH', pageNum, activeQuery);
@@ -75,6 +109,12 @@
 		} finally {
 			loadingMore = false;
 		}
+	}
+
+	/** "Lihat semua" on a source's section — switch to single-source search on that source. */
+	function searchInSource(id: string) {
+		sourceId = id;
+		search();
 	}
 
 	$effect(() => {
@@ -101,6 +141,7 @@
 		}}
 	>
 		<Select bind:value={sourceId} class="w-full sm:w-48" label="Source">
+			<option value="">🌐 Semua source</option>
 			{#each sources as source}
 				<option value={source.id}>{source.name}</option>
 			{/each}
@@ -115,7 +156,7 @@
 				class="w-full rounded-[var(--radius)] border border-border bg-surface py-2 pl-9 pr-3 text-sm text-text outline-none transition placeholder:text-muted focus:border-accent"
 			/>
 		</div>
-		<Button type="submit" loading={loading} disabled={!query.trim() || !sourceId}>Cari</Button>
+		<Button type="submit" loading={loading} disabled={!query.trim() || sources.length === 0}>Cari</Button>
 	</form>
 
 	{#if sources.length === 0}
@@ -137,7 +178,46 @@
 		</div>
 	{/if}
 
-	{#if loading}
+	{#if searched && multiMode}
+		{#if loading}
+			<p class="mb-4 flex items-center gap-2 text-sm text-muted">
+				<Spinner size={14} /> Mencari di {sources.length} source…
+			</p>
+		{/if}
+		{#if !loading && multiResults.length === 0}
+			<EmptyState
+				title="Tidak ditemukan"
+				description={`Tidak ada hasil untuk "${activeQuery}" di source manapun.`}
+			/>
+		{:else}
+			<div class="space-y-8">
+				{#each multiResults as group (group.source.id)}
+					<section>
+						<div class="mb-3 flex items-center justify-between gap-2">
+							<h2 class="flex items-center gap-2 text-sm font-semibold text-text">
+								{group.source.name}
+								<span class="rounded-full bg-surface-hover px-2 py-0.5 text-xs font-normal text-muted">
+									{group.mangas.length}{group.mangas.length >= 20 ? '+' : ''}
+								</span>
+							</h2>
+							<button
+								type="button"
+								onclick={() => searchInSource(group.source.id)}
+								class="flex shrink-0 items-center gap-1 text-xs text-accent hover:underline"
+							>
+								Lihat semua <ChevronRight size={12} />
+							</button>
+						</div>
+						<MangaGrid>
+							{#each group.mangas.slice(0, 12) as manga (manga.id)}
+								<MangaCard {manga} href="/manga/{manga.id}" showLibraryToggle />
+							{/each}
+						</MangaGrid>
+					</section>
+				{/each}
+			</div>
+		{/if}
+	{:else if loading}
 		<GridSkeleton />
 	{:else if searched && mangas.length === 0 && sources.length > 0}
 		<EmptyState title="Tidak ditemukan" description={`Tidak ada hasil untuk "${query}".`} />
