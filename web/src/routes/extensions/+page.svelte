@@ -6,13 +6,11 @@
 	import { preferences } from '$lib/preferences.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import Dropdown from '$lib/components/ui/Dropdown.svelte';
-	import { Button, Select, EmptyState, Spinner } from '$lib/components/ui';
+	import { Button, Select, EmptyState, Spinner, ViewToggle } from '$lib/components/ui';
 	import Search from '@lucide/svelte/icons/search';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import Check from '@lucide/svelte/icons/check';
-	import LayoutGrid from '@lucide/svelte/icons/layout-grid';
-	import LayoutList from '@lucide/svelte/icons/layout-list';
 	import type { Extension } from '$lib/graphql/types';
 
 	const LANG_META: Record<string, { flag: string; name: string }> = {
@@ -229,26 +227,7 @@
 		</Dropdown>
 
 		<!-- View mode toggle -->
-		<div class="flex items-center rounded-[var(--radius)] border border-border bg-surface">
-			<button
-				type="button"
-				onclick={() => (viewMode = 'list')}
-				class="flex items-center rounded-l-[var(--radius)] px-2.5 py-2 transition
-					{viewMode === 'list' ? 'bg-accent text-white' : 'text-muted hover:text-text'}"
-				title="Tampilan list"
-			>
-				<LayoutList size={16} />
-			</button>
-			<button
-				type="button"
-				onclick={() => (viewMode = 'grid')}
-				class="flex items-center rounded-r-[var(--radius)] px-2.5 py-2 transition
-					{viewMode === 'grid' ? 'bg-accent text-white' : 'text-muted hover:text-text'}"
-				title="Tampilan grid"
-			>
-				<LayoutGrid size={16} />
-			</button>
-		</div>
+		<ViewToggle bind:value={viewMode} />
 
 		<!-- Admin: status select | Non-admin: "Aktif saja" chip -->
 		{#if admin}

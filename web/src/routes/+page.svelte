@@ -8,12 +8,10 @@
 	import { apiUrl } from '$lib/graphql/client';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import ContinueReading from '$lib/components/ContinueReading.svelte';
-	import { Button, Card, EmptyState, Spinner } from '$lib/components/ui';
+	import { Button, Card, EmptyState, Spinner, ViewToggle } from '$lib/components/ui';
 	import { langDisplay } from '$lib/lang';
 	import Puzzle from '@lucide/svelte/icons/puzzle';
 	import ServerCrash from '@lucide/svelte/icons/server-crash';
-	import LayoutGrid from '@lucide/svelte/icons/layout-grid';
-	import LayoutList from '@lucide/svelte/icons/layout-list';
 
 	// Non-admin users (including guests) use per-device active extension preferences.
 	const filterByActive = $derived($page.data.authEnabled && !$page.data.user?.is_admin);
@@ -80,36 +78,27 @@
 			<div class="flex items-start gap-3">
 				<ServerCrash size={20} class="mt-0.5 shrink-0 text-danger" />
 				<div>
-					<p class="font-medium text-danger">Suwayomi tidak terhubung</p>
-					<p class="mt-1 text-sm text-muted">{error}</p>
-					<p class="mt-2 text-sm text-muted">
-						Jalankan <code class="rounded bg-surface-hover px-1.5 py-0.5">cd suwayomi && ./bootstrap.sh</code>
-					</p>
+					<p class="font-medium text-danger">Server komik sedang tidak tersambung</p>
+					<p class="mt-1 text-sm text-muted">Coba muat ulang beberapa saat lagi.</p>
+					{#if $page.data.user?.is_admin}
+						<p class="mt-2 text-xs text-muted/80">{error}</p>
+						<p class="mt-1 text-xs text-muted/80">
+							Admin: jalankan <code class="rounded bg-surface-hover px-1.5 py-0.5">cd suwayomi && ./bootstrap.sh</code>
+						</p>
+					{/if}
 				</div>
 			</div>
 		</Card>
 	{:else}
-		<ContinueReading chapters={recent} seeAllHref="/library" />
+		<ContinueReading chapters={recent} seeAllHref="/history" />
 
 		<div class="mb-3 flex items-center justify-between">
 			<h2 class="text-lg font-semibold text-text">Source Terinstall</h2>
 			{#if sources.length > 0}
-				<div class="flex items-center gap-1 rounded-lg border border-border bg-surface p-1">
-					<button
-						onclick={() => (preferences.extViewMode = 'list')}
-						class="rounded-md p-1.5 transition {preferences.extViewMode === 'list' ? 'bg-accent text-white' : 'text-muted hover:text-text'}"
-						title="Tampilan list"
-					>
-						<LayoutList size={15} />
-					</button>
-					<button
-						onclick={() => (preferences.extViewMode = 'grid')}
-						class="rounded-md p-1.5 transition {preferences.extViewMode === 'grid' ? 'bg-accent text-white' : 'text-muted hover:text-text'}"
-						title="Tampilan grid"
-					>
-						<LayoutGrid size={15} />
-					</button>
-				</div>
+				<ViewToggle
+					value={preferences.extViewMode}
+					onchange={(v) => (preferences.extViewMode = v)}
+				/>
 			{/if}
 		</div>
 		{#if sources.length === 0}
