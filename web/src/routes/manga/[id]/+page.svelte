@@ -100,6 +100,41 @@
 		);
 	});
 
+	// Chapter rows carry interactive controls (download button, dropdown) and
+	// variable height (optional date line), which makes true windowed
+	// virtualization risky — height math and scroll-anchor math both get
+	// fragile. Incremental rendering gets the same win (DOM node count stays
+	// bounded on 1000+ chapter series) without touching scroll position math.
+	const RENDER_CHUNK = 150;
+	let renderLimit = $state(RENDER_CHUNK);
+	let chapterSentinel = $state<HTMLElement | null>(null);
+	const rendered = $derived(visible.slice(0, renderLimit));
+
+	// Reset the window whenever the filtered/sorted set changes shape — keyed
+	// on length + edge ids so a plain read-state toggle (same set, same order)
+	// doesn't collapse the list the user already scrolled through.
+	let lastVisibleKey = '';
+	$effect(() => {
+		const key = `${visible.length}-${visible[0]?.id ?? ''}-${visible[visible.length - 1]?.id ?? ''}-${sortDir}`;
+		if (key === lastVisibleKey) return;
+		lastVisibleKey = key;
+		renderLimit = RENDER_CHUNK;
+	});
+
+	$effect(() => {
+		if (!chapterSentinel) return;
+		const observer = new IntersectionObserver(
+			(entries) => {
+				if (entries[0].isIntersecting && renderLimit < visible.length) {
+					renderLimit = Math.min(visible.length, renderLimit + RENDER_CHUNK);
+				}
+			},
+			{ rootMargin: '400px' }
+		);
+		observer.observe(chapterSentinel);
+		return () => observer.disconnect();
+	});
+
 	async function load() {
 		manga = await fetchMangaDetail(mangaId);
 		chapters = await fetchChapters(mangaId);
@@ -439,7 +474,7 @@
 							{#if visible.length === 0}
 								<div class="px-4 py-10 text-center text-sm text-muted">Tidak ada chapter cocok.</div>
 							{:else}
-								{#each visible as chapter (chapter.id)}
+								{#each rendered as chapter (chapter.id)}
 									<div class="flex items-center justify-between gap-2 px-4 py-3 transition hover:bg-surface-hover">
 										<a href="/read/{chapter.id}" class="flex min-w-0 flex-1 items-center gap-3">
 											{#if chapter.read}
@@ -503,6 +538,11 @@
 										</div>
 									</div>
 								{/each}
+								{#if renderLimit < visible.length}
+									<div bind:this={chapterSentinel} class="px-4 py-3 text-center text-xs text-muted">
+										Memuat chapter lainnya…
+									</div>
+								{/if}
 							{/if}
 						</div>
 					</Card>
