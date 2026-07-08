@@ -235,6 +235,19 @@ class LocalData {
 		this.#changed();
 	}
 
+	/** Tombstone every history row across all manga ("hapus semua riwayat"). */
+	async clearAllHistory() {
+		const rows = this.history;
+		if (!rows.length) return;
+		const ts = nowMs();
+		await putMany(
+			'history',
+			rows.map((r) => ({ ...r, deleted: true, updatedAt: ts }))
+		);
+		this.history = [];
+		this.#changed();
+	}
+
 	// ── Library ──────────────────────────────────────────────────────────────
 	isInLibrary(mangaId: number): boolean {
 		return this.librarySet.has(mangaId);
