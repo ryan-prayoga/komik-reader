@@ -6,10 +6,11 @@
 	import MangaCard from '$lib/components/MangaCard.svelte';
 	import MangaGrid from '$lib/components/MangaGrid.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
-	import { Button, Badge, Chip, EmptyState, Spinner, Input, Modal } from '$lib/components/ui';
+	import { Button, Badge, Chip, EmptyState, Spinner, Input, Modal, Select } from '$lib/components/ui';
 	import Cloud from '@lucide/svelte/icons/cloud';
 	import FolderTree from '@lucide/svelte/icons/folder-tree';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
+	import Search from '@lucide/svelte/icons/search';
 
 	onMount(() => {
 		localData.reload();
@@ -19,9 +20,35 @@
 		$page.url.searchParams.get('category') ? Number($page.url.searchParams.get('category')) : null
 	);
 
+	let search = $state('');
+	let sortBy = $state<'recent' | 'title' | 'title_desc'>('recent');
+
+	// mangaId → most-recent read timestamp, for the "terakhir dibaca" sort.
+	const lastReadAt = $derived.by(() => {
+		const map = new Map<number, number>();
+		for (const h of localData.history) {
+			const prev = map.get(h.mangaId) ?? 0;
+			if (h.updatedAt > prev) map.set(h.mangaId, h.updatedAt);
+		}
+		return map;
+	});
+
 	const items = $derived.by(() => {
 		const lib = localData.library;
-		return categoryId ? lib.filter((l) => l.categoryIds.includes(categoryId)) : lib;
+		const inCat = categoryId ? lib.filter((l) => l.categoryIds.includes(categoryId)) : lib;
+		const q = search.trim().toLowerCase();
+		const filtered = q ? inCat.filter((l) => l.title.toLowerCase().includes(q)) : inCat;
+		const sorted = [...filtered];
+		if (sortBy === 'title') {
+			sorted.sort((a, b) => a.title.localeCompare(b.title));
+		} else if (sortBy === 'title_desc') {
+			sorted.sort((a, b) => b.title.localeCompare(a.title));
+		} else {
+			sorted.sort(
+				(a, b) => (lastReadAt.get(b.mangaId) ?? 0) - (lastReadAt.get(a.mangaId) ?? 0)
+			);
+		}
+		return sorted;
 	});
 
 	function lastRead(mangaId: number) {
@@ -75,8 +102,29 @@
 		</Chip>
 	</div>
 
+	{#if localData.library.length > 0}
+		<div class="mb-5 flex flex-wrap items-center gap-2">
+			<div class="relative min-w-[200px] flex-1">
+				<Search size={16} class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+				<input
+					type="search"
+					placeholder="Cari di library..."
+					bind:value={search}
+					class="w-full rounded-[var(--radius)] border border-border bg-surface py-2 pl-9 pr-3 text-sm text-text outline-none transition placeholder:text-muted focus:border-accent"
+				/>
+			</div>
+			<Select bind:value={sortBy} class="w-44">
+				<option value="recent">Terakhir dibaca</option>
+				<option value="title">Judul A–Z</option>
+				<option value="title_desc">Judul Z–A</option>
+			</Select>
+		</div>
+	{/if}
+
 	{#if !localData.ready}
 		<div class="flex justify-center py-20 text-muted"><Spinner size={28} /></div>
+	{:else if items.length === 0 && (search.trim() || categoryId)}
+		<EmptyState title="Tidak ditemukan" description="Coba ubah pencarian atau kategori." />
 	{:else if items.length === 0}
 		<EmptyState
 			title="Library masih kosong"
@@ -100,10 +148,10 @@
 						href="/manga/{manga.mangaId}"
 					/>
 					<a
-						href={last ? `/read/${last.chapterId}` : `/manga/${manga.mangaId}`}
+						href={last && !last.isRead ? `/read/${last.chapterId}` : `/manga/${manga.mangaId}`}
 						class="mt-2 block truncate rounded-lg border border-border bg-surface px-3 py-1.5 text-center text-xs text-muted transition hover:border-accent hover:text-text"
 					>
-						{last ? `Lanjut: ${last.chapterName}` : 'Mulai baca'}
+						{last && !last.isRead ? `Lanjut: ${last.chapterName}` : last ? 'Baca berikutnya' : 'Mulai baca'}
 					</a>
 				</div>
 			{/each}
