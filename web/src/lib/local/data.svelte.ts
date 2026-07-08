@@ -2,6 +2,15 @@ import { browser } from '$app/environment';
 import { getAll, getMeta, putItem, putMany, setMeta } from './db';
 import type { LocalHistory, LocalLibrary, LocalCategory, LocalReadtime } from './types';
 
+export type LocalDataExport = {
+	version: 1;
+	exportedAt: number;
+	history: LocalHistory[];
+	library: LocalLibrary[];
+	categories: LocalCategory[];
+	readtime: LocalReadtime[];
+};
+
 const nowMs = () => Date.now();
 
 const DEVICE_ID_KEY = 'deviceId';
@@ -353,6 +362,53 @@ class LocalData {
 
 	mangaInCategory(categoryId: number): LocalLibrary[] {
 		return this.library.filter((l) => l.categoryIds.includes(categoryId));
+	}
+
+	// ── Export / Import ──────────────────────────────────────────────────────
+	/** Dump every local-first store for backup or device-to-device transfer. */
+	async exportData(): Promise<LocalDataExport> {
+		const [history, library, categories, readtime] = await Promise.all([
+			getAll<LocalHistory>('history'),
+			getAll<LocalLibrary>('library'),
+			getAll<LocalCategory>('categories'),
+			getAll<LocalReadtime>('readtime')
+		]);
+		return { version: 1, exportedAt: nowMs(), history, library, categories, readtime };
+	}
+
+	/**
+	 * Merge an export back in. Last-write-wins by `updatedAt` per row (same rule
+	 * the sync engine uses), so importing an older backup can't clobber newer
+	 * local changes — safe to import repeatedly or onto a partially-seeded device.
+	 */
+	async importData(dump: LocalDataExport) {
+		function newer<T extends { updatedAt: number }>(
+			incoming: T[],
+			existingByKey: Map<string, T>,
+			keyOf: (row: T) => string
+		): T[] {
+			return incoming.filter((row) => {
+				const existing = existingByKey.get(keyOf(row));
+				return !existing || row.updatedAt > existing.updatedAt;
+			});
+		}
+
+		const existingHistory = new Map(this.history.map((h) => [String(h.chapterId), h]));
+		const existingLibrary = new Map(this.library.map((l) => [String(l.mangaId), l]));
+		const existingCategories = new Map(this.categories.map((c) => [String(c.id), c]));
+		const existingReadtime = new Map(this.readtime.map((r) => [r.key, r]));
+
+		await Promise.all([
+			putMany('history', newer(dump.history ?? [], existingHistory, (r) => String(r.chapterId))),
+			putMany('library', newer(dump.library ?? [], existingLibrary, (r) => String(r.mangaId))),
+			putMany(
+				'categories',
+				newer(dump.categories ?? [], existingCategories, (r) => String(r.id))
+			),
+			putMany('readtime', newer(dump.readtime ?? [], existingReadtime, (r) => r.key))
+		]);
+		await this.reload();
+		this.#changed();
 	}
 }
 

@@ -16,10 +16,59 @@
 	import BookOpen from '@lucide/svelte/icons/book-open';
 	import Columns2 from '@lucide/svelte/icons/columns-2';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
+	import Download from '@lucide/svelte/icons/download';
+	import Upload from '@lucide/svelte/icons/upload';
 
 	let confirmHistory = $state(false);
 	let confirmDownloads = $state(false);
 	let clearingDownloads = $state(false);
+	let exporting = $state(false);
+	let importing = $state(false);
+	let importFileInput = $state<HTMLInputElement | null>(null);
+
+	async function exportBackup() {
+		exporting = true;
+		try {
+			const dump = await localData.exportData();
+			const blob = new Blob([JSON.stringify(dump, null, 2)], { type: 'application/json' });
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			const date = new Date().toISOString().slice(0, 10);
+			a.href = url;
+			a.download = `komik-reader-backup-${date}.json`;
+			a.click();
+			URL.revokeObjectURL(url);
+			showToast('Backup diunduh.', 'success');
+		} catch {
+			showToast('Gagal membuat backup.', 'error');
+		} finally {
+			exporting = false;
+		}
+	}
+
+	function pickImportFile() {
+		importFileInput?.click();
+	}
+
+	async function handleImportFile(e: Event) {
+		const file = (e.target as HTMLInputElement).files?.[0];
+		(e.target as HTMLInputElement).value = '';
+		if (!file) return;
+		importing = true;
+		try {
+			const text = await file.text();
+			const dump = JSON.parse(text);
+			if (!dump || typeof dump !== 'object' || !Array.isArray(dump.history)) {
+				throw new Error('Format file tidak valid');
+			}
+			await localData.importData(dump);
+			showToast('Backup berhasil diimpor.', 'success');
+		} catch (err) {
+			showToast(err instanceof Error ? err.message : 'Gagal impor backup.', 'error');
+		} finally {
+			importing = false;
+		}
+	}
 
 	async function clearHistory() {
 		await localData.clearAllHistory();
@@ -196,6 +245,31 @@
 				</div>
 			</div>
 		</Card>
+
+		<!-- Backup -->
+		<Card padding="lg">
+			<h2 class="mb-1 text-lg font-semibold text-text">Backup</h2>
+			<p class="mb-4 text-sm text-muted">
+				Ekspor riwayat, library, dan kategori ke file — pindahkan ke perangkat lain tanpa login.
+			</p>
+			<div class="flex flex-wrap gap-2">
+				<Button variant="secondary" size="sm" loading={exporting} onclick={exportBackup}>
+					<Download size={14} /> Ekspor ke file
+				</Button>
+				<Button variant="secondary" size="sm" loading={importing} onclick={pickImportFile}>
+					<Upload size={14} /> Impor dari file
+				</Button>
+				<input
+					bind:this={importFileInput}
+					type="file"
+					accept="application/json"
+					class="hidden"
+					onchange={handleImportFile}
+				/>
+			</div>
+		</Card>
+
+		<p class="pt-2 text-center text-xs text-muted">Komik Reader v{__APP_VERSION__}</p>
 	</div>
 </section>
 
