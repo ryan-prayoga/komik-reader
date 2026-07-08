@@ -14,6 +14,7 @@
 	import ReaderControls from '$lib/components/reader/ReaderControls.svelte';
 	import ReaderSettings from '$lib/components/reader/ReaderSettings.svelte';
 	import Spinner from '$lib/components/ui/Spinner.svelte';
+	import CheckCircle from '@lucide/svelte/icons/check-circle';
 	import type { Chapter } from '$lib/graphql/types';
 
 	const chapterId = $derived(Number($page.params.chapterId));
@@ -134,11 +135,11 @@
 		return currentChapterProgress;
 	});
 
-	const pageLabel = $derived(
-		isPaged
-			? `${currentPage + 1} / ${pages.length}`
-			: `${viewedSection?.pages.length ?? pages.length} halaman`
-	);
+	const pageLabel = $derived.by(() => {
+		if (isPaged) return `${currentPage + 1} / ${pages.length}`;
+		const total = viewedSection?.pages.length ?? pages.length;
+		return total ? `${Math.min(currentPageIdx + 1, total)} / ${total}` : `${total} halaman`;
+	});
 
 	// `chapters`/`current` are fetched once per chapter load and otherwise never
 	// touched again, so the picker/dock kept showing a chapter as unread until a
@@ -535,7 +536,7 @@
 				role="button"
 				tabindex="0"
 				onclick={toggleChrome}
-				onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && toggleChrome()}
+				onkeydown={(e) => e.key === 'Enter' && toggleChrome()}
 			>
 				<WebtoonView
 					{sections}
@@ -550,6 +551,17 @@
 			{#if loadingNextChapter}
 				<div class="flex items-center justify-center py-8 text-white/50">
 					<Spinner size={20} />
+				</div>
+			{:else if !nextUnloadedChapter && sections.length > 0 && chapters.length > 0}
+				<div class="flex flex-col items-center gap-3 px-4 py-16 text-center text-white/70">
+					<CheckCircle size={28} class="text-success" />
+					<p class="text-sm font-medium text-white/80">Kamu sudah di chapter terbaru</p>
+					<a
+						href={backHref}
+						class="rounded-full bg-white/10 px-5 py-2 text-sm text-white/80 transition hover:bg-white/20"
+					>
+						Kembali ke detail
+					</a>
 				</div>
 			{/if}
 		{/if}
