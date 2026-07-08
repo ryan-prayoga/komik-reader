@@ -106,9 +106,9 @@
 			<button
 				type="button"
 				onclick={toggleLibrary}
-				class="absolute right-2 top-2 flex h-10 w-10 items-center justify-center rounded-xl transition {inLibrary
+				class="absolute right-2 top-2 flex h-10 w-10 items-center justify-center rounded-xl bg-black/30 backdrop-blur-sm transition {inLibrary
 					? 'text-accent'
-					: 'text-white/70 opacity-0 group-hover:opacity-100'} {saving ? 'pointer-events-none opacity-60' : ''}"
+					: 'text-white/80 opacity-100 lg:opacity-0 lg:group-hover:opacity-100'} {saving ? 'pointer-events-none opacity-60' : ''}"
 				aria-label={inLibrary ? 'Hapus dari library' : 'Tambah ke library'}
 			>
 				<Bookmark size={22} fill={inLibrary ? 'currentColor' : 'none'} stroke-width={2} />
@@ -140,11 +140,15 @@
 
 	<div class="p-3">
 		<h3 class="line-clamp-2 text-sm font-medium leading-snug text-text">{manga.title}</h3>
-		{#if rich?.latestUploadedChapter}
-			<p class="mt-0.5 truncate text-xs text-muted">
-				{chapterLabel(rich.latestUploadedChapter.chapterNumber)}
-				{#if rich.latestUploadedChapter.uploadDate && rich.latestUploadedChapter.uploadDate !== '0'}
-					<span class="opacity-70">· {relativeTimeShort(rich.latestUploadedChapter.uploadDate)}</span>
+		{#if rich}
+			<!-- Reserve the chapter line even before enrichment lands, so the grid
+			     doesn't reflow when latestUploadedChapter streams in async. -->
+			<p class="mt-0.5 h-4 truncate text-xs text-muted">
+				{#if rich.latestUploadedChapter}
+					{chapterLabel(rich.latestUploadedChapter.chapterNumber)}
+					{#if rich.latestUploadedChapter.uploadDate && rich.latestUploadedChapter.uploadDate !== '0'}
+						<span class="opacity-70">· {relativeTimeShort(rich.latestUploadedChapter.uploadDate)}</span>
+					{/if}
 				{/if}
 			</p>
 		{/if}
