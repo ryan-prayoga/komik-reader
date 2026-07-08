@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { cacheChapterToDevice } from '$lib/offline/cache';
+	import { showToast } from '$lib/stores/toast.svelte';
 	import Download from '@lucide/svelte/icons/download';
 	import Check from '@lucide/svelte/icons/check';
 	import Spinner from '$lib/components/ui/Spinner.svelte';
@@ -30,7 +31,6 @@
 
 	let loading = $state(false);
 	let progress = $state(0);
-	let error = $state('');
 	let cachedNow = $state(false);
 
 	const done = $derived(isOffline || cachedNow);
@@ -38,11 +38,10 @@
 	async function handleClick() {
 		if (done) return;
 		if (!mangaId || !mangaTitle || !chapterName) {
-			error = 'Info chapter tidak lengkap';
+			showToast('Info chapter tidak lengkap.', 'error');
 			return;
 		}
 		loading = true;
-		error = '';
 		progress = 0;
 		try {
 			await cacheChapterToDevice(
@@ -59,7 +58,7 @@
 			cachedNow = true;
 			oncached?.();
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Gagal simpan offline';
+			showToast(e instanceof Error ? e.message : 'Gagal simpan offline.', 'error');
 		} finally {
 			loading = false;
 		}
@@ -92,7 +91,4 @@
 			<Download size={iconSize} />
 		{/if}
 	</button>
-{/if}
-{#if error}
-	<span class="text-xs text-danger">{error}</span>
 {/if}
