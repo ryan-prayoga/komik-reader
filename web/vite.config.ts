@@ -41,6 +41,14 @@ export default defineConfig({
 				]
 			},
 			workbox: {
+				// This app is fully SSR (adapter-node, nothing prerendered), so there is
+				// no precached HTML shell to fall back to. @vite-pwa/sveltekit defaults
+				// navigateFallback to '/' when the key is absent, which made the built SW
+				// call createHandlerBoundToURL('/') — '/' is not in the precache manifest,
+				// so that call THREW at SW startup and silently killed every registerRoute
+				// after it (including the komik-pages cache below). Declaring the key as
+				// undefined keeps the plugin from injecting the broken fallback.
+				navigateFallback: undefined,
 				globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,woff2}'],
 				runtimeCaching: [
 					{

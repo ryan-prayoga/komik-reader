@@ -39,13 +39,25 @@
 		syncEngine.start(!!data.user);
 
 		// iOS/Android standalone PWAs reopen at whatever path the OS last saw
-		// (not the manifest start_url) — this fires once per real cold launch
-		// (layout only mounts on a fresh document load, never on in-app client
-		// navigation), so redirect that specific case back to Home.
+		// (not the manifest start_url) — redirect that back to Home. But ONLY on a
+		// genuine OS cold launch: this mount also runs after in-place reloads
+		// (SW autoUpdate's forced reload, WebKit OOM crash recovery, manual
+		// refresh), and redirecting those yanked readers out of /read/* to Home
+		// mid-chapter. sessionStorage survives same-session reloads but not an OS
+		// relaunch, so its absence is the cold-launch signal. The reader is also
+		// exempt outright — reopening into a chapter should resume it, never
+		// discard it.
 		const standalone =
 			window.matchMedia('(display-mode: standalone)').matches ||
 			(navigator as unknown as { standalone?: boolean }).standalone === true;
-		if (standalone && $page.url.pathname !== '/') {
+		const coldLaunch = !sessionStorage.getItem('komik:launched');
+		sessionStorage.setItem('komik:launched', '1');
+		if (
+			standalone &&
+			coldLaunch &&
+			$page.url.pathname !== '/' &&
+			!$page.url.pathname.startsWith('/read/')
+		) {
 			goto('/', { replaceState: true });
 		}
 	});

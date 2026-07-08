@@ -1,12 +1,34 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
+	import { afterNavigate } from '$app/navigation';
 	import { useRegisterSW } from 'virtual:pwa-register/svelte';
 	import { readable } from 'svelte/store';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import Button from '$lib/components/ui/Button.svelte';
 
+	// In autoUpdate mode vite-pwa force-reloads the page the moment a new SW
+	// activates — with the hourly poll below that meant a deploy could reload the
+	// app mid-chapter and dump the user out of the reader. Defer the reload while
+	// on /read/* and run it on the first navigation that leaves the reader.
+	let reloadPending = false;
+
+	function reloadOutsideReader() {
+		if (window.location.pathname.startsWith('/read/')) {
+			reloadPending = true;
+		} else {
+			window.location.reload();
+		}
+	}
+
+	afterNavigate(() => {
+		if (reloadPending && !window.location.pathname.startsWith('/read/')) {
+			window.location.reload();
+		}
+	});
+
 	const { needRefresh, updateServiceWorker } = browser
 		? useRegisterSW({
+				onNeedReload: reloadOutsideReader,
 				onRegisteredSW(_url, registration) {
 					// Long-lived tabs (e.g. mid-chapter) never revisit the network layer that
 					// would otherwise surface an update, so poll for a new worker hourly.
