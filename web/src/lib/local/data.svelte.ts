@@ -117,15 +117,6 @@ class LocalData {
 		this.#changed();
 	}
 
-	async setHistoryRead(chapterId: number, isRead: boolean) {
-		const row = this.history.find((h) => h.chapterId === chapterId);
-		if (!row) return;
-		const next = { ...row, isRead, updatedAt: nowMs() };
-		await putItem('history', next);
-		this.history = this.history.map((h) => (h.chapterId === chapterId ? next : h));
-		this.#changed();
-	}
-
 	/**
 	 * Upsert a single chapter's read flag, creating a history row if absent.
 	 * Used by the detail page so read/unread marks persist locally (works for
@@ -208,14 +199,6 @@ class LocalData {
 			...rows,
 			...this.history.filter((h) => !byId.has(h.chapterId))
 		].sort((a, b) => b.updatedAt - a.updatedAt);
-		this.#changed();
-	}
-
-	async removeHistory(chapterId: number) {
-		const row = this.history.find((h) => h.chapterId === chapterId);
-		if (!row) return;
-		await putItem('history', { ...row, deleted: true, updatedAt: nowMs() });
-		this.history = this.history.filter((h) => h.chapterId !== chapterId);
 		this.#changed();
 	}
 

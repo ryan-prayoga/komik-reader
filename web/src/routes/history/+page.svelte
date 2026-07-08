@@ -61,11 +61,20 @@
 					? Math.min(100, Math.round(((recent.lastPage + 1) / recent.totalPages) * 100))
 					: null;
 			const totalMs = rows.reduce((acc, r) => acc + (r.timeSpentMs ?? 0), 0);
+			// Newest row that actually carries a sourceId — not just the first
+			// match, so an older chapter read from a different source can't
+			// override the label a more recent read implies.
+			const sourceRow = rows
+				.filter((r) => r.sourceId)
+				.reduce<LocalHistory | null>(
+					(a, b) => (!a || b.updatedAt > a.updatedAt ? b : a),
+					null
+				);
 			out.push({
 				mangaId,
 				mangaTitle: recent.mangaTitle,
 				thumbnailUrl: recent.thumbnailUrl,
-				sourceId: rows.find((r) => r.sourceId)?.sourceId ?? librarySource.get(mangaId) ?? null,
+				sourceId: sourceRow?.sourceId ?? librarySource.get(mangaId) ?? null,
 				lastChapterId: recent.chapterId,
 				lastChapterName: recent.chapterName,
 				lastReadAt: recent.updatedAt,
