@@ -16,6 +16,8 @@
 	import Check from '@lucide/svelte/icons/check';
 	import Search from '@lucide/svelte/icons/search';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
+	import CheckSquare from '@lucide/svelte/icons/check-square';
+	import Square from '@lucide/svelte/icons/square';
 
 	onMount(() => {
 		localData.reload();
@@ -130,29 +132,70 @@
 		confirmCatOpen = false;
 		pendingCat = null;
 	}
+
+	let selectMode = $state(false);
+	let selected = $state<Set<number>>(new Set());
+	let confirmBulkOpen = $state(false);
+	const selectedCount = $derived(selected.size);
+
+	function toggleSelect(id: number) {
+		const next = new Set(selected);
+		if (next.has(id)) next.delete(id);
+		else next.add(id);
+		selected = next;
+	}
+
+	function exitSelectMode() {
+		selectMode = false;
+		selected = new Set();
+	}
+
+	async function removeSelected() {
+		const ids = [...selected];
+		for (const id of ids) {
+			await localData.removeFromLibrary(id);
+			void updates.remove(id);
+		}
+		showToast(`${ids.length} manga dihapus dari koleksi.`, 'success');
+		confirmBulkOpen = false;
+		exitSelectMode();
+	}
 </script>
 
 <section>
 	<PageHeader title="Koleksi" subtitle="Bookmark di perangkat ini. Login untuk sync antar device.">
 		{#if localData.library.length > 0}
-			<Button
-				variant="secondary"
-				size="sm"
-				loading={updates.checking}
-				onclick={runCheckUpdates}
-			>
-				<RefreshCw size={14} class={updates.checking ? 'animate-spin' : ''} />
-				{updates.checking
-					? `${updates.progress.done}/${updates.progress.total}`
-					: 'Cek update'}
-			</Button>
+			{#if selectMode}
+				<Button variant="ghost" size="sm" onclick={exitSelectMode}>Batal</Button>
+				<Button
+					variant="danger"
+					size="sm"
+					disabled={selectedCount === 0}
+					onclick={() => (confirmBulkOpen = true)}
+				>
+					<Trash2 size={14} /> Hapus ({selectedCount})
+				</Button>
+			{:else}
+				<Button variant="secondary" size="sm" onclick={() => (selectMode = true)}>Pilih</Button>
+				<Button
+					variant="secondary"
+					size="sm"
+					loading={updates.checking}
+					onclick={runCheckUpdates}
+				>
+					<RefreshCw size={14} class={updates.checking ? 'animate-spin' : ''} />
+					{updates.checking
+						? `${updates.progress.done}/${updates.progress.total}`
+						: 'Cek update'}
+				</Button>
+			{/if}
 		{/if}
-		{#if updates.updateCount > 0}
+		{#if updates.updateCount > 0 && !selectMode}
 			<Badge tone="accent">{updates.updateCount} update</Badge>
 		{/if}
-		{#if syncEngine.loggedIn}
+		{#if syncEngine.loggedIn && !selectMode}
 			<Badge tone="success"><Cloud size={13} /> Tersync</Badge>
-		{:else}
+		{:else if !syncEngine.loggedIn && !selectMode}
 			<Button href="/login" variant="secondary" size="sm">Login untuk sync</Button>
 		{/if}
 	</PageHeader>
@@ -225,23 +268,62 @@
 					last && !last.isRead && last.totalPages
 						? Math.min(100, Math.round(((last.lastPage + 1) / last.totalPages) * 100))
 						: null}
-				<MangaCard
-					manga={{
-						id: manga.mangaId,
-						title: manga.title,
-						thumbnailUrl: manga.thumbnailUrl,
-						inLibrary: true,
-						sourceId: manga.sourceId ?? ''
-					}}
-					href="/manga/{manga.mangaId}"
-					hasUpdate={!!meta?.hasUpdate}
-					progressLabel={meta?.hasUpdate
-						? `Baru · ${meta.latestChapterName}`
-						: last && !last.isRead
-							? `Lanjut · ${last.chapterName}`
-							: null}
-					progressPercent={meta?.hasUpdate ? 100 : pct}
-				/>
+				{#if selectMode}
+					<button
+						type="button"
+						onclick={() => toggleSelect(manga.mangaId)}
+						class="relative text-left"
+					>
+						<span
+							class="absolute left-2 top-2 z-[2] rounded bg-black/50 p-0.5 text-white"
+							aria-hidden="true"
+						>
+							{#if selected.has(manga.mangaId)}
+								<CheckSquare size={18} class="text-accent" />
+							{:else}
+								<Square size={18} />
+							{/if}
+						</span>
+						<div class:opacity-80={selected.has(manga.mangaId)} class:ring-2={selected.has(manga.mangaId)} class:ring-accent={selected.has(manga.mangaId)} class="rounded-[var(--radius)]">
+							<MangaCard
+								manga={{
+									id: manga.mangaId,
+									title: manga.title,
+									thumbnailUrl: manga.thumbnailUrl,
+									inLibrary: true,
+									sourceId: manga.sourceId ?? ''
+								}}
+								href="/manga/{manga.mangaId}"
+								hasUpdate={!!meta?.hasUpdate}
+								progressLabel={meta?.hasUpdate
+									? `Baru · ${meta.latestChapterName}`
+									: last && !last.isRead
+										? `Lanjut · ${last.chapterName}`
+										: null}
+								progressPercent={meta?.hasUpdate ? 100 : pct}
+								class="pointer-events-none"
+							/>
+						</div>
+					</button>
+				{:else}
+					<MangaCard
+						manga={{
+							id: manga.mangaId,
+							title: manga.title,
+							thumbnailUrl: manga.thumbnailUrl,
+							inLibrary: true,
+							sourceId: manga.sourceId ?? ''
+						}}
+						href="/manga/{manga.mangaId}"
+						hasUpdate={!!meta?.hasUpdate}
+						progressLabel={meta?.hasUpdate
+							? `Baru · ${meta.latestChapterName}`
+							: last && !last.isRead
+								? `Lanjut · ${last.chapterName}`
+								: null}
+						progressPercent={meta?.hasUpdate ? 100 : pct}
+					/>
+				{/if}
 			{/each}
 		</MangaGrid>
 	{/if}
@@ -313,6 +395,16 @@
 	</p>
 	{#snippet footer()}
 		<Button variant="ghost" onclick={() => (confirmCatOpen = false)}>Batal</Button>
-		<Button onclick={confirmRemoveCategory}>Hapus</Button>
+		<Button variant="danger" onclick={confirmRemoveCategory}>Hapus</Button>
+	{/snippet}
+</Modal>
+
+<Modal bind:open={confirmBulkOpen} title="Hapus dari koleksi?">
+	<p class="text-sm text-muted">
+		{selectedCount} manga akan dihapus dari koleksi di perangkat ini. Riwayat baca tetap ada.
+	</p>
+	{#snippet footer()}
+		<Button variant="ghost" onclick={() => (confirmBulkOpen = false)}>Batal</Button>
+		<Button variant="danger" onclick={removeSelected}>Hapus</Button>
 	{/snippet}
 </Modal>

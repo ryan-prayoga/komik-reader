@@ -1,6 +1,8 @@
 <script lang="ts">
 	import ThemeToggle from '$lib/components/ui/ThemeToggle.svelte';
 	import Search from '@lucide/svelte/icons/search';
+
+	// Cmd+K is handled globally by KeyboardShortcuts; this is a visual affordance only on sm+.
 </script>
 
 <header

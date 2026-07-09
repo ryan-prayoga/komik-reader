@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import Modal from '$lib/components/ui/Modal.svelte';
+	import CommandPalette from '$lib/components/nav/CommandPalette.svelte';
 
 	// Desktop-only shortcuts: "/" jumps to search, "g" + a letter jumps to a section.
 	const GOTO: Record<string, string> = {
@@ -13,7 +14,8 @@
 	};
 
 	const HELP: { keys: string; label: string }[] = [
-		{ keys: '/', label: 'Fokus ke pencarian' },
+		{ keys: '⌘/Ctrl K', label: 'Command palette' },
+		{ keys: '/', label: 'Ke halaman cari' },
 		{ keys: '? ', label: 'Tampilkan bantuan ini' },
 		{ keys: 'g lalu h', label: 'Ke Beranda' },
 		{ keys: 'g lalu l', label: 'Ke Koleksi' },
@@ -26,6 +28,7 @@
 	];
 
 	let helpOpen = $state(false);
+	let paletteOpen = $state(false);
 	let pendingGoto = $state(false);
 	let pendingTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -40,9 +43,18 @@
 	}
 
 	function onkeydown(e: KeyboardEvent) {
+		// Cmd/Ctrl+K — command palette (even from inputs except when composing).
+		if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+			if ($page.url.pathname.startsWith('/read/')) return;
+			e.preventDefault();
+			paletteOpen = true;
+			return;
+		}
+
 		if (e.metaKey || e.ctrlKey || e.altKey || isEditableTarget(e.target)) return;
 		// Reader has its own surface — don't steal `/` mid-chapter into search.
 		if ($page.url.pathname.startsWith('/read/')) return;
+		if (paletteOpen) return;
 
 		if (pendingGoto) {
 			pendingGoto = false;
@@ -70,12 +82,16 @@
 
 <svelte:window {onkeydown} />
 
+<CommandPalette bind:open={paletteOpen} />
+
 <Modal bind:open={helpOpen} title="Pintasan Keyboard">
 	<div class="divide-y divide-border">
 		{#each HELP as row}
 			<div class="flex items-center justify-between gap-4 py-2">
 				<span class="text-sm text-text">{row.label}</span>
-				<kbd class="rounded border border-border bg-surface px-2 py-0.5 font-mono text-xs text-muted">{row.keys}</kbd>
+				<kbd class="rounded border border-border bg-surface px-2 py-0.5 font-mono text-xs text-muted"
+					>{row.keys}</kbd
+				>
 			</div>
 		{/each}
 	</div>

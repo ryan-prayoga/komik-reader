@@ -32,6 +32,7 @@
 	import CloudOff from '@lucide/svelte/icons/cloud-off';
 	import Clock from '@lucide/svelte/icons/clock';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
+	import Share2 from '@lucide/svelte/icons/share-2';
 	import type { Chapter, MangaDetail } from '$lib/graphql/types';
 
 	const mangaId = $derived(Number($page.params.id));
@@ -282,6 +283,26 @@
 	}
 
 	const pageTitle = $derived(manga ? `${manga.title} · Komik Reader` : 'Detail · Komik Reader');
+
+	async function shareManga() {
+		if (!manga || typeof window === 'undefined') return;
+		const url = `${window.location.origin}/manga/${manga.id}`;
+		const payload = { title: manga.title, text: `Baca ${manga.title}`, url };
+		try {
+			if (navigator.share) {
+				await navigator.share(payload);
+				return;
+			}
+		} catch {
+			/* user cancelled or share failed — fall through to copy */
+		}
+		try {
+			await navigator.clipboard.writeText(url);
+			showToast('Link disalin.', 'success');
+		} catch {
+			showToast('Gagal menyalin link.', 'error');
+		}
+	}
 </script>
 
 <svelte:head>
@@ -387,6 +408,9 @@
 								thumbnailUrl={manga.thumbnailUrl ? apiUrl(manga.thumbnailUrl) : null}
 								sourceId={manga.sourceId}
 							/>
+							<Button variant="secondary" onclick={shareManga}>
+								<Share2 size={16} /> Bagikan
+							</Button>
 							{#if chapters.length > 0}
 								<Dropdown align="left">
 									{#snippet trigger({ toggle })}

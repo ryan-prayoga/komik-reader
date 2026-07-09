@@ -93,6 +93,36 @@
 		);
 	});
 
+	// Incremental render keeps long series (1000+) usable without full virtualization.
+	const CHUNK = 120;
+	let renderLimit = $state(CHUNK);
+	let listSentinel = $state<HTMLElement | null>(null);
+	let dockSentinel = $state<HTMLElement | null>(null);
+	const renderedChapters = $derived(filteredChapters.slice(0, renderLimit));
+
+	$effect(() => {
+		// Reset window when filter/query changes — keep active chapter in the window.
+		filteredChapters.length;
+		pickerQuery;
+		const idx = filteredChapters.findIndex((c) => c.id === currentChapterId);
+		renderLimit = Math.max(CHUNK, idx >= 0 ? idx + 40 : CHUNK);
+	});
+
+	$effect(() => {
+		const nodes = [listSentinel, dockSentinel].filter(Boolean) as HTMLElement[];
+		if (!nodes.length) return;
+		const observer = new IntersectionObserver(
+			(entries) => {
+				if (entries.some((e) => e.isIntersecting) && renderLimit < filteredChapters.length) {
+					renderLimit = Math.min(filteredChapters.length, renderLimit + CHUNK);
+				}
+			},
+			{ rootMargin: '200px' }
+		);
+		for (const n of nodes) observer.observe(n);
+		return () => observer.disconnect();
+	});
+
 	function scrollActiveTo(node: HTMLElement, isActive: boolean) {
 		if (isActive) {
 			setTimeout(() => node.scrollIntoView({ block: 'center' }), 80);
@@ -350,7 +380,7 @@
 			</div>
 		</div>
 		<div class="overflow-y-auto">
-			{#each filteredChapters as ch (ch.id)}
+			{#each renderedChapters as ch (ch.id)}
 				{@const isActive = ch.id === currentChapterId}
 				<a
 					href="/read/{ch.id}"
@@ -365,6 +395,11 @@
 					{ch.name}
 				</a>
 			{/each}
+			{#if renderLimit < filteredChapters.length}
+				<div bind:this={listSentinel} class="px-4 py-3 text-center text-xs text-white/40">
+					Memuat chapter lainnya…
+				</div>
+			{/if}
 		</div>
 	</div>
 {/if}
@@ -391,7 +426,7 @@
 			</div>
 		</div>
 		<div class="flex-1 overflow-y-auto">
-			{#each filteredChapters as ch (ch.id)}
+			{#each renderedChapters as ch (ch.id)}
 				{@const isActive = ch.id === currentChapterId}
 				<a
 					href="/read/{ch.id}"
@@ -405,6 +440,11 @@
 					{ch.name}
 				</a>
 			{/each}
+			{#if renderLimit < filteredChapters.length}
+				<div bind:this={dockSentinel} class="px-4 py-2 text-center text-xs text-white/40">
+					Memuat…
+				</div>
+			{/if}
 		</div>
 	</aside>
 {/if}
