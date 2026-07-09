@@ -5,6 +5,7 @@
 	import { syncEngine } from '$lib/local/sync.svelte';
 	import { getInstalledSources } from '$lib/graphql/api';
 	import { relativeTime as formatDate } from '$lib/utils/format';
+	import { imgFallback } from '$lib/utils/imgFallback';
 	import { formatDuration } from '$lib/reading-time';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import { Button, Card, Badge, EmptyState, Modal } from '$lib/components/ui';
@@ -186,7 +187,13 @@
 							aria-label="Buka detail {g.mangaTitle}"
 						>
 							{#if g.thumbnailUrl}
-								<img src={g.thumbnailUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
+								<img
+									src={g.thumbnailUrl}
+									alt=""
+									class="h-full w-full object-cover"
+									loading="lazy"
+									use:imgFallback
+								/>
 							{/if}
 						</a>
 						<button type="button" onclick={() => openGroup(g)} class="min-w-0 flex-1 cursor-pointer text-left">
@@ -236,7 +243,7 @@
 	</p>
 	{#snippet footer()}
 		<Button variant="ghost" onclick={() => (confirmOpen = false)}>Batal</Button>
-		<Button onclick={confirmDelete}>Hapus</Button>
+		<Button variant="danger" onclick={confirmDelete}>Hapus</Button>
 	{/snippet}
 </Modal>
 
@@ -246,6 +253,6 @@
 	</p>
 	{#snippet footer()}
 		<Button variant="ghost" onclick={() => (confirmClearAll = false)}>Batal</Button>
-		<Button onclick={doClearAll}>Hapus semua</Button>
+		<Button variant="danger" onclick={doClearAll}>Hapus semua</Button>
 	{/snippet}
 </Modal>

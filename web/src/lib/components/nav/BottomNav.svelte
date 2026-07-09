@@ -15,34 +15,51 @@
 		...(user?.is_admin ? [adminNav.href] : [])
 	]);
 	const moreActive = $derived(manageHrefs.some((h) => isActive($page.url.pathname, h)));
+
+	// Compact icon-only nav on short landscape phones.
+	let compact = $state(false);
+	$effect(() => {
+		if (typeof window === 'undefined') return;
+		const mq = window.matchMedia('(max-height: 500px) and (orientation: landscape)');
+		const sync = () => {
+			compact = mq.matches;
+		};
+		sync();
+		mq.addEventListener('change', sync);
+		return () => mq.removeEventListener('change', sync);
+	});
 </script>
 
 <nav
 	class="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-bg/95 backdrop-blur lg:hidden"
 	style="padding-bottom: env(safe-area-inset-bottom)"
+	aria-label="Navigasi utama"
 >
 	<div class="mx-auto grid max-w-md grid-cols-5">
 		{#each primaryNav as item}
 			{@const active = isActive($page.url.pathname, item.href)}
 			<a
 				href={item.href}
-				class="flex flex-col items-center gap-1 py-2 text-[0.7rem] font-medium transition active:scale-95 {active
-					? 'text-accent'
-					: 'text-muted'}"
+				class="flex flex-col items-center justify-center gap-0.5 font-medium transition active:scale-95 {compact
+					? 'min-h-11 py-2'
+					: 'py-2 text-[0.7rem]'} {active ? 'text-accent' : 'text-muted'}"
+				aria-label={item.label}
+				aria-current={active ? 'page' : undefined}
 			>
 				<item.icon size={20} class="transition-transform duration-200 {active ? 'scale-110' : ''}" />
-				<span>{item.label}</span>
+				{#if !compact}<span>{item.label}</span>{/if}
 			</a>
 		{/each}
 		<button
 			type="button"
 			onclick={onmore}
-			class="flex flex-col items-center gap-1 py-2 text-[0.7rem] font-medium transition active:scale-95 {moreActive
-				? 'text-accent'
-				: 'text-muted'}"
+			aria-label="Lainnya"
+			class="flex flex-col items-center justify-center gap-0.5 font-medium transition active:scale-95 {compact
+				? 'min-h-11 py-2'
+				: 'py-2 text-[0.7rem]'} {moreActive ? 'text-accent' : 'text-muted'}"
 		>
 			<Menu size={20} />
-			<span>Lainnya</span>
+			{#if !compact}<span>Lainnya</span>{/if}
 		</button>
 	</div>
 </nav>

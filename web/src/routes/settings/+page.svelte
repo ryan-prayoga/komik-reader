@@ -277,6 +277,25 @@
 			</div>
 		</Card>
 
+		<!-- Help -->
+		<Card padding="lg">
+			<h2 class="mb-1 text-lg font-semibold text-text">Bantuan</h2>
+			<p class="mb-4 text-sm text-muted">
+				Pintasan keyboard: tekan <kbd class="rounded border border-border bg-surface px-1.5 py-0.5 font-mono text-xs">?</kbd> di mana saja (bukan di reader),
+				atau <kbd class="rounded border border-border bg-surface px-1.5 py-0.5 font-mono text-xs">⌘K</kbd> /
+				<kbd class="rounded border border-border bg-surface px-1.5 py-0.5 font-mono text-xs">Ctrl+K</kbd> untuk command palette.
+			</p>
+			<Button
+				variant="secondary"
+				size="sm"
+				onclick={() => {
+					window.dispatchEvent(new KeyboardEvent('keydown', { key: '?', bubbles: true }));
+				}}
+			>
+				Lihat pintasan keyboard
+			</Button>
+		</Card>
+
 		<p class="pt-2 text-center text-xs text-muted">Komik Reader v{__APP_VERSION__}</p>
 	</div>
 </section>
@@ -285,7 +304,7 @@
 	<p class="text-sm text-muted">Seluruh riwayat baca di perangkat ini akan dihapus. Tidak bisa dibatalkan.</p>
 	{#snippet footer()}
 		<Button variant="ghost" onclick={() => (confirmHistory = false)}>Batal</Button>
-		<Button onclick={clearHistory}>Hapus</Button>
+		<Button variant="danger" onclick={clearHistory}>Hapus</Button>
 	{/snippet}
 </Modal>
 
@@ -293,6 +312,6 @@
 	<p class="text-sm text-muted">Semua chapter offline akan dihapus dari perangkat ini.</p>
 	{#snippet footer()}
 		<Button variant="ghost" onclick={() => (confirmDownloads = false)}>Batal</Button>
-		<Button loading={clearingDownloads} onclick={clearDownloads}>Hapus semua</Button>
+		<Button variant="danger" loading={clearingDownloads} onclick={clearDownloads}>Hapus semua</Button>
 	{/snippet}
 </Modal>

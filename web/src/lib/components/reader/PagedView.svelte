@@ -221,9 +221,10 @@
 		// Crop borders: mild extra scale to hide white letterboxing on scans.
 		const crop = readerSettings.cropBorders ? 1.04 : 1;
 		const z = zoom * crop;
-		if (fit === 'width') return `width: min(100%, ${56 * z}rem)`;
-		if (fit === 'height') return `max-height: ${88 * z}vh; width: auto`;
-		return `transform: scale(${z}); transform-origin: center`;
+		// Short opacity fade on page change (respects reduced-motion via CSS elsewhere).
+		if (fit === 'width') return `width: min(100%, ${56 * z}rem); transition: opacity 120ms ease`;
+		if (fit === 'height') return `max-height: ${88 * z}vh; width: auto; transition: opacity 120ms ease`;
+		return `transform: scale(${z}); transform-origin: center; transition: opacity 120ms ease, transform 120ms ease`;
 	}
 </script>
 

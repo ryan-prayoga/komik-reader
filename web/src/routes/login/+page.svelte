@@ -28,14 +28,27 @@
 		<input type="hidden" name="redirectTo" value={form?.redirectTo ?? data.redirectTo} />
 
 		{#if form?.error}
-			<div class="rounded-[var(--radius)] border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
+			<div
+				id="login-error"
+				role="alert"
+				class="rounded-[var(--radius)] border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger"
+			>
 				{form.error}
 			</div>
 		{/if}
 
 		<label class="block">
 			<span class="text-sm font-medium text-text">Email atau username</span>
-			<input name="login" type="text" autocomplete="username" value={form?.login ?? ''} required class={field} />
+			<input
+				name="login"
+				type="text"
+				autocomplete="username"
+				value={form?.login ?? ''}
+				required
+				class={field}
+				aria-invalid={!!form?.error}
+				aria-describedby={form?.error ? 'login-error' : undefined}
+			/>
 		</label>
 
 		<label class="block">
@@ -47,6 +60,8 @@
 					autocomplete="current-password"
 					required
 					class="{field} pr-10"
+					aria-invalid={!!form?.error}
+					aria-describedby={form?.error ? 'login-error' : undefined}
 				/>
 				<button
 					type="button"

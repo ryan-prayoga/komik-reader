@@ -5,6 +5,7 @@
 	import { localData } from '$lib/local/data.svelte';
 	import { updates } from '$lib/updates/updates.svelte';
 	import { relativeTimeShort, chapterLabel } from '$lib/utils/format';
+	import { imgFallback } from '$lib/utils/imgFallback';
 	import ImageOff from '@lucide/svelte/icons/image-off';
 	import Bookmark from '@lucide/svelte/icons/bookmark';
 
@@ -103,6 +104,7 @@
 				alt={manga.title}
 				class="h-full w-full object-cover transition duration-300 group-hover:scale-105"
 				loading="lazy"
+				use:imgFallback
 			/>
 		{:else}
 			<div class="flex h-full items-center justify-center text-muted">

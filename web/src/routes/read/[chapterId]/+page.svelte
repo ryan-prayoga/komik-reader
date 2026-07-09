@@ -424,17 +424,27 @@
 		}
 	}
 
-	function makeStubChapter(id: number): Chapter {
+	function makeStubChapter(id: number, name = 'Chapter'): Chapter {
 		return {
 			id,
-			name: 'Chapter',
+			name,
 			chapterNumber: 0,
 			isRead: false,
-			isDownloaded: false,
+			isDownloaded: true,
 			lastPageRead: 0,
 			uploadDate: '',
 			sourceOrder: 0
 		};
+	}
+
+	async function hydrateOfflineMeta(id: number) {
+		const meta = await getOfflineChapter(id).catch(() => null);
+		if (!meta) return makeStubChapter(id);
+		mangaId = meta.mangaId;
+		mangaTitle = meta.mangaTitle || mangaTitle;
+		mangaThumb = meta.thumbnailUrl ? apiUrl(meta.thumbnailUrl) : mangaThumb;
+		mangaSourceId = meta.sourceId ?? mangaSourceId;
+		return makeStubChapter(id, meta.chapterName || 'Chapter');
 	}
 
 	// Webtoon mode doesn't remount on chapter change — the same component instance
@@ -530,7 +540,10 @@
 						pages = cached;
 						offlineMode = true;
 						chapterOffline = true;
-						sections = [{ chapter: makeStubChapter(id), pages: cached }];
+						const stub = await hydrateOfflineMeta(id);
+						if (cancelled) return;
+						current = stub;
+						sections = [{ chapter: stub, pages: cached }];
 						return;
 					}
 					throw new Error('Offline — chapter belum disimpan di perangkat.');
@@ -586,7 +599,11 @@
 				if (cached?.length) {
 					pages = cached;
 					offlineMode = true;
-					sections = [{ chapter: makeStubChapter(id), pages: cached }];
+					chapterOffline = true;
+					const stub = await hydrateOfflineMeta(id);
+					if (cancelled) return;
+					current = stub;
+					sections = [{ chapter: stub, pages: cached }];
 					if (initialPage > 0 && initialPage < cached.length) {
 						currentPage = initialPage;
 					}

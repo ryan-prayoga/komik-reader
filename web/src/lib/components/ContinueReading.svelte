@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { apiUrl } from '$lib/graphql/client';
+	import { imgFallback } from '$lib/utils/imgFallback';
 	import Play from '@lucide/svelte/icons/play';
 	import type { RecentChapter } from '$lib/graphql/types';
 
@@ -40,6 +41,7 @@
 								alt={chapter.manga.title}
 								class="h-full w-full object-cover transition duration-300 group-hover:scale-105"
 								loading="lazy"
+								use:imgFallback
 							/>
 						{/if}
 						<span

@@ -109,7 +109,9 @@
 	</PageHeader>
 
 	{#if !localData.ready || loading}
-		<div class="flex justify-center py-16 text-muted"><Spinner size={26} /></div>
+		<div class="flex justify-center py-16 text-muted">
+			<Spinner size={26} label="Memuat beranda…" />
+		</div>
 	{:else if error}
 		<Card class="border-danger/30 bg-danger/10">
 			<div class="flex items-start gap-3">
