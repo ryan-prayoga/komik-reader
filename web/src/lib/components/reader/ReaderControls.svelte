@@ -158,9 +158,9 @@
      lets users change speed / pause without needing auto-pause-on-tap. -->
 {#if autoScroll && onautoscroll && !show}
 	<div
-		class="fixed left-1/2 z-40 flex -translate-x-1/2 items-center gap-1 rounded-full border border-white/15 bg-black/70 px-2 py-1.5 shadow-(--shadow-float) backdrop-blur-sm {dockVisible &&
+		class="fixed right-4 z-40 hidden items-center gap-1 rounded-full border border-white/15 bg-black/70 px-2 py-1.5 shadow-(--shadow-float) backdrop-blur-sm md:flex {dockVisible &&
 		hasChapters
-			? 'lg:right-72 lg:left-[calc(50%-9rem)] lg:translate-x-0'
+			? 'lg:right-[19rem]'
 			: ''}"
 		style="bottom: calc(1rem + env(safe-area-inset-bottom))"
 		transition:fade={{ duration: motionDuration(150) }}
