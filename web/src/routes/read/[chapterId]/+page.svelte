@@ -57,6 +57,7 @@
 	let nextChapterError = $state('');
 	let chapterOffline = $state(false);
 	let downloadProgress = $state<number | null>(null);
+	let isFullscreen = $state(false);
 
 	// Keep the screen awake while reading (especially auto-scroll) so the panel
 	// doesn't go black mid-chapter. Best-effort — ignored if unsupported/denied.
@@ -367,6 +368,27 @@
 		const row = await getOfflineChapter(id).catch(() => null);
 		chapterOffline = !!row || offlineMode;
 	}
+
+	function toggleFullscreen() {
+		if (typeof document === 'undefined') return;
+		if (!document.fullscreenElement) {
+			void document.documentElement.requestFullscreen?.().catch(() => {
+				showToast('Layar penuh tidak didukung di browser ini.', 'info');
+			});
+		} else {
+			void document.exitFullscreen?.();
+		}
+	}
+
+	$effect(() => {
+		if (typeof document === 'undefined') return;
+		const onFs = () => {
+			isFullscreen = !!document.fullscreenElement;
+		};
+		document.addEventListener('fullscreenchange', onFs);
+		onFs();
+		return () => document.removeEventListener('fullscreenchange', onFs);
+	});
 
 	async function saveCurrentOffline() {
 		const chId = viewedChapterId || chapterId;
@@ -797,7 +819,9 @@
 			currentChapterId={viewedChapterId}
 			{chapterOffline}
 			{downloadProgress}
+			fullscreen={isFullscreen}
 			ondownload={mangaId && !chapterOffline ? saveCurrentOffline : undefined}
+			onfullscreen={toggleFullscreen}
 			onsettings={() => (settingsOpen = true)}
 			onseek={reportPage}
 			autoScroll={!isPaged ? autoScroll : undefined}

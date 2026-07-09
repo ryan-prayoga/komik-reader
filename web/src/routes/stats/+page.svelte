@@ -4,6 +4,7 @@
 		formatDuration,
 		formatDurationLong,
 		getAllMangaStats,
+		getDailyStats,
 		getGlobalStats
 	} from '$lib/reading-time';
 	import PageHeader from '$lib/components/PageHeader.svelte';
@@ -18,6 +19,8 @@
 	const extra = $derived(syncEngine.loggedIn ? localData.otherMsByChapter : undefined);
 	const global = $derived(getGlobalStats(localData.history, extra));
 	const mangaList = $derived(getAllMangaStats(localData.history, extra));
+	const daily = $derived(getDailyStats(localData.history, 7, extra));
+	const dailyMax = $derived(Math.max(1, ...daily.map((d) => d.ms)));
 	const hasAny = $derived(mangaList.length > 0);
 	const completedShare = $derived(
 		global.totalMs > 0 ? Math.round((global.completedMs / global.totalMs) * 100) : 0
@@ -106,6 +109,34 @@
 				</div>
 			</Card>
 		{/if}
+
+		<!-- 7-day activity (approx. by last-touch day of each chapter's time) -->
+		<Card padding="lg" class="mb-6">
+			<div class="mb-4 flex items-center justify-between gap-2">
+				<h2 class="text-sm font-semibold text-text">7 hari terakhir</h2>
+				<span class="text-[11px] text-muted">Perkiraan dari aktivitas terakhir</span>
+			</div>
+			<div class="flex h-32 items-end gap-2">
+				{#each daily as day (day.key)}
+					{@const h = Math.max(day.ms > 0 ? 8 : 0, Math.round((day.ms / dailyMax) * 100))}
+					<div class="flex min-w-0 flex-1 flex-col items-center gap-1">
+						<span class="text-[10px] tabular-nums text-muted">
+							{day.ms > 0 ? formatDuration(day.ms) : '—'}
+						</span>
+						<div class="flex w-full flex-1 items-end justify-center">
+							<div
+								class="w-full max-w-8 rounded-t-md transition-[height] duration-300 {day.ms > 0
+									? 'bg-accent'
+									: 'bg-surface-hover'}"
+								style="height: {h}%"
+								title="{day.key}: {formatDuration(day.ms)}"
+							></div>
+						</div>
+						<span class="text-[11px] font-medium text-muted">{day.label}</span>
+					</div>
+				{/each}
+			</div>
+		</Card>
 
 		<Card padding="none">
 			<div class="flex items-center justify-between px-4 py-3">

@@ -128,14 +128,37 @@
 		}
 	}
 
-	// Touch: swipe to page, pinch to zoom.
+	// Touch: swipe to page, pinch to zoom, double-tap center to toggle zoom.
 	let touchX = 0;
 	let pinchStartDist = 0;
 	let pinchStartZoom = 1;
+	let lastCenterTapAt = 0;
+	let centerTapTimer: ReturnType<typeof setTimeout> | undefined;
 
 	function dist(e: TouchEvent): number {
 		const [a, b] = [e.touches[0], e.touches[1]];
 		return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+	}
+
+	function toggleZoom() {
+		if (!onzoom) return;
+		onzoom(zoom >= 1.4 ? 1 : 1.5);
+	}
+
+	function onCenterActivate() {
+		const now = Date.now();
+		if (now - lastCenterTapAt < 320) {
+			clearTimeout(centerTapTimer);
+			lastCenterTapAt = 0;
+			toggleZoom();
+			return;
+		}
+		lastCenterTapAt = now;
+		clearTimeout(centerTapTimer);
+		// Wait to distinguish double-tap from single toggle-chrome.
+		centerTapTimer = setTimeout(() => {
+			if (Date.now() - lastCenterTapAt >= 300) ontoggle();
+		}, 320);
 	}
 
 	function onTouchStart(e: TouchEvent) {
@@ -250,7 +273,18 @@
 			class="h-full w-1/3"
 			onclick={direction === 'rtl' ? next : prev}
 		></button>
-		<button type="button" aria-label="Tampilkan kontrol" class="h-full w-1/3" onclick={ontoggle}></button>
+		<button
+			type="button"
+			aria-label="Tampilkan kontrol atau double-tap zoom"
+			class="h-full w-1/3"
+			onclick={onCenterActivate}
+			ondblclick={(e) => {
+				e.preventDefault();
+				clearTimeout(centerTapTimer);
+				lastCenterTapAt = 0;
+				toggleZoom();
+			}}
+		></button>
 		<button
 			type="button"
 			aria-label={direction === 'rtl' ? 'Sebelumnya' : 'Berikutnya'}

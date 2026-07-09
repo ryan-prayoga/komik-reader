@@ -13,6 +13,8 @@
 	import Search from '@lucide/svelte/icons/search';
 	import Download from '@lucide/svelte/icons/download';
 	import Check from '@lucide/svelte/icons/check';
+	import Maximize from '@lucide/svelte/icons/maximize';
+	import Minimize from '@lucide/svelte/icons/minimize';
 	import type { Chapter } from '$lib/graphql/types';
 
 	interface Props {
@@ -35,7 +37,9 @@
 		/** Chapter already saved offline (or just finished caching). */
 		chapterOffline?: boolean;
 		downloadProgress?: number | null;
+		fullscreen?: boolean;
 		ondownload?: () => void;
+		onfullscreen?: () => void;
 		onsettings: () => void;
 		onseek?: (index: number) => void;
 		onautoscroll?: () => void;
@@ -61,7 +65,9 @@
 		autoScrollSpeed = 2,
 		chapterOffline = false,
 		downloadProgress = null,
+		fullscreen = false,
 		ondownload,
+		onfullscreen,
 		onsettings,
 		onseek,
 		onautoscroll,
@@ -207,6 +213,17 @@
 				{:else}
 					<Download size={16} />
 				{/if}
+			</button>
+		{/if}
+		{#if onfullscreen}
+			<button
+				type="button"
+				onclick={onfullscreen}
+				aria-label={fullscreen ? 'Keluar layar penuh' : 'Layar penuh'}
+				title={fullscreen ? 'Keluar layar penuh' : 'Layar penuh'}
+				class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black/40 transition hover:bg-black/60"
+			>
+				{#if fullscreen}<Minimize size={16} />{:else}<Maximize size={16} />{/if}
 			</button>
 		{/if}
 		<button

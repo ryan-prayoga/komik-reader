@@ -12,6 +12,8 @@
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import WifiOff from '@lucide/svelte/icons/wifi-off';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
+	import CheckSquare from '@lucide/svelte/icons/check-square';
+	import Square from '@lucide/svelte/icons/square';
 
 	let openGroups = $state<Set<string>>(new Set());
 
@@ -74,16 +76,69 @@
 		offlineChapters = await listOfflineChapters();
 	}
 
+	let selected = $state<Set<number>>(new Set());
+	let selectMode = $state(false);
+
+	const selectedCount = $derived(selected.size);
+
+	function toggleSelect(id: number) {
+		const next = new Set(selected);
+		if (next.has(id)) next.delete(id);
+		else next.add(id);
+		selected = next;
+	}
+
+	function toggleSelectAllInGroup(chapters: OfflineChapter[]) {
+		const next = new Set(selected);
+		const allOn = chapters.every((c) => next.has(c.chapterId));
+		for (const c of chapters) {
+			if (allOn) next.delete(c.chapterId);
+			else next.add(c.chapterId);
+		}
+		selected = next;
+	}
+
+	function exitSelectMode() {
+		selectMode = false;
+		selected = new Set();
+	}
+
 	async function removeFromDevice(chapterId: number) {
 		await removeChapterFromDevice(chapterId);
 		offlineChapters = offlineChapters.filter((c) => c.chapterId !== chapterId);
+		selected = new Set([...selected].filter((id) => id !== chapterId));
 		showToast('Chapter dihapus.', 'success');
+	}
+
+	function confirmRemoveOne(chapter: OfflineChapter) {
+		openConfirm({
+			title: 'Hapus chapter offline?',
+			body: `"${chapter.chapterName}" akan dihapus dari perangkat.`,
+			onconfirm: async () => {
+				await removeFromDevice(chapter.chapterId);
+			}
+		});
 	}
 
 	async function doRemoveChapters(chapters: OfflineChapter[]) {
 		for (const c of chapters) await removeChapterFromDevice(c.chapterId);
 		const ids = new Set(chapters.map((c) => c.chapterId));
 		offlineChapters = offlineChapters.filter((c) => !ids.has(c.chapterId));
+		selected = new Set([...selected].filter((id) => !ids.has(id)));
+	}
+
+	function confirmRemoveSelected() {
+		const targets = offlineChapters.filter((c) => selected.has(c.chapterId));
+		if (!targets.length) return;
+		openConfirm({
+			title: 'Hapus yang dipilih?',
+			body: `${targets.length} chapter offline akan dihapus dari perangkat.`,
+			onconfirm: async () => {
+				await doRemoveChapters(targets);
+				showToast(`${targets.length} chapter dihapus.`, 'success');
+				exitSelectMode();
+			}
+		});
 	}
 
 	function confirmRemoveAll(group: OfflineGroup) {
@@ -148,7 +203,25 @@
 		subtitle={totalChapters > 0
 			? `${totalChapters} chapter · ${totalPages} halaman${storageLabel ? ` · ~${storageLabel} terpakai` : ''}`
 			: 'Chapter tersimpan di perangkat.'}
-	/>
+	>
+		{#if totalChapters > 0}
+			{#if selectMode}
+				<Button variant="ghost" size="sm" onclick={exitSelectMode}>Batal</Button>
+				<Button
+					variant="danger"
+					size="sm"
+					disabled={selectedCount === 0}
+					onclick={confirmRemoveSelected}
+				>
+					<Trash2 size={14} /> Hapus ({selectedCount})
+				</Button>
+			{:else}
+				<Button variant="secondary" size="sm" onclick={() => (selectMode = true)}>
+					Pilih
+				</Button>
+			{/if}
+		{/if}
+	</PageHeader>
 
 	{#if loading}
 		<div class="flex justify-center py-16 text-muted"><Spinner size={26} /></div>
@@ -164,8 +237,19 @@
 			{#each groups as group (group.mangaId)}
 				{@const key = String(group.mangaId)}
 				{@const open = openGroups.has(key)}
+				{@const groupAllSelected = group.chapters.every((c) => selected.has(c.chapterId))}
 				<Card padding="none">
 					<div class="flex items-center gap-3 px-3 py-3">
+						{#if selectMode}
+							<button
+								type="button"
+								class="shrink-0 text-accent"
+								aria-label="Pilih semua di grup"
+								onclick={() => toggleSelectAllInGroup(group.chapters)}
+							>
+								{#if groupAllSelected}<CheckSquare size={20} />{:else}<Square size={20} />{/if}
+							</button>
+						{/if}
 						<a
 							href="/manga/{group.mangaId}"
 							class="h-14 w-10 shrink-0 overflow-hidden rounded-[var(--radius-sm)] bg-surface-hover"
@@ -201,26 +285,48 @@
 						<div class="divide-y divide-border border-t border-border">
 							{#each group.chapters as chapter (chapter.chapterId)}
 								<div class="flex items-center justify-between gap-3 px-4 py-3">
-									<div class="min-w-0">
+									{#if selectMode}
+										<button
+											type="button"
+											class="shrink-0 text-accent"
+											aria-label="Pilih chapter"
+											onclick={() => toggleSelect(chapter.chapterId)}
+										>
+											{#if selected.has(chapter.chapterId)}
+												<CheckSquare size={18} />
+											{:else}
+												<Square size={18} />
+											{/if}
+										</button>
+									{/if}
+									<div class="min-w-0 flex-1">
 										<p class="truncate text-sm text-text">{chapter.chapterName}</p>
 										<p class="text-xs text-muted">{chapter.pageCount} hlm · {formatDate(chapter.cachedAt)}</p>
 									</div>
-									<div class="flex shrink-0 gap-2">
-										<Button href="/read/{chapter.chapterId}" size="sm">Baca</Button>
-										<Button variant="ghost" size="sm" onclick={() => removeFromDevice(chapter.chapterId)}>
-											<Trash2 size={14} />
-										</Button>
-									</div>
+									{#if !selectMode}
+										<div class="flex shrink-0 gap-2">
+											<Button href="/read/{chapter.chapterId}" size="sm">Baca</Button>
+											<Button
+												variant="ghost"
+												size="sm"
+												onclick={() => confirmRemoveOne(chapter)}
+											>
+												<Trash2 size={14} />
+											</Button>
+										</div>
+									{/if}
 								</div>
 							{/each}
-							<div class="flex gap-2 border-t border-border px-4 py-3">
-								<Button variant="ghost" size="sm" onclick={() => confirmRemoveRead(group)}>
-									<Trash2 size={13} /> Hapus sudah dibaca
-								</Button>
-								<Button variant="ghost" size="sm" onclick={() => confirmRemoveAll(group)}>
-									<Trash2 size={13} /> Hapus semua
-								</Button>
-							</div>
+							{#if !selectMode}
+								<div class="flex gap-2 border-t border-border px-4 py-3">
+									<Button variant="ghost" size="sm" onclick={() => confirmRemoveRead(group)}>
+										<Trash2 size={13} /> Hapus sudah dibaca
+									</Button>
+									<Button variant="ghost" size="sm" onclick={() => confirmRemoveAll(group)}>
+										<Trash2 size={13} /> Hapus semua
+									</Button>
+								</div>
+							{/if}
 						</div>
 					{/if}
 				</Card>
@@ -233,6 +339,6 @@
 	<p class="text-sm text-muted">{confirmState?.body ?? ''}</p>
 	{#snippet footer()}
 		<Button variant="ghost" onclick={() => (confirmOpen = false)}>Batal</Button>
-		<Button loading={confirming} onclick={runConfirm}>Hapus</Button>
+		<Button variant="danger" loading={confirming} onclick={runConfirm}>Hapus</Button>
 	{/snippet}
 </Modal>

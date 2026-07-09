@@ -176,6 +176,49 @@ export type GlobalStats = {
 	completedMs: number;
 };
 
+export type DailyStat = {
+	/** YYYY-MM-DD local */
+	key: string;
+	/** Short weekday label, e.g. Sen */
+	label: string;
+	ms: number;
+};
+
+/**
+ * Rough daily activity from history `updatedAt` + `timeSpentMs`.
+ * Not a perfect session log — attributes each chapter's total time to the day
+ * it was last touched — but enough for a 7-day sparkline on Stats.
+ */
+export function getDailyStats(
+	rows: LocalHistory[],
+	days = 7,
+	extraMsByChapter?: Map<number, number>
+): DailyStat[] {
+	const dayMs = new Map<string, number>();
+	for (const h of rows) {
+		if (h.deleted) continue;
+		const ms = (h.timeSpentMs ?? 0) + (extraMsByChapter?.get(h.chapterId) ?? 0);
+		if (ms <= 0) continue;
+		const d = new Date(h.updatedAt);
+		const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+		dayMs.set(key, (dayMs.get(key) ?? 0) + ms);
+	}
+
+	const out: DailyStat[] = [];
+	const now = new Date();
+	const weekdays = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+	for (let i = days - 1; i >= 0; i--) {
+		const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+		const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+		out.push({
+			key,
+			label: weekdays[d.getDay()] ?? '',
+			ms: dayMs.get(key) ?? 0
+		});
+	}
+	return out;
+}
+
 // `extraMsByChapter` adds reading time contributed by OTHER devices (from the
 // account-synced `readtime` rows). Pass it to include cross-device totals; omit
 // it (guests / logged out) for this-device-only stats.

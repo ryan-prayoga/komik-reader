@@ -55,7 +55,7 @@
 					</li>
 				{:else}
 					<li>· <strong class="text-white/90">Tap kiri/kanan</strong> ganti halaman</li>
-					<li>· <strong class="text-white/90">Tap tengah</strong> untuk kontrol</li>
+					<li>· <strong class="text-white/90">Tap tengah</strong> kontrol · <strong class="text-white/90">double-tap</strong> zoom</li>
 					<li>· <strong class="text-white/90">Geser / pinch</strong> navigasi & zoom</li>
 				{/if}
 				<li>
