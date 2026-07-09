@@ -9,6 +9,7 @@
 	import LibraryButton from '$lib/components/LibraryButton.svelte';
 	import { localData } from '$lib/local/data.svelte';
 	import { syncEngine } from '$lib/local/sync.svelte';
+	import { updates } from '$lib/updates/updates.svelte';
 	import { showToast } from '$lib/stores/toast.svelte';
 	import { formatDuration, getMangaStats } from '$lib/reading-time';
 	import { listOfflineChapters } from '$lib/offline/db';
@@ -135,9 +136,25 @@
 		return () => observer.disconnect();
 	});
 
+	async function seedUpdates(markSeen: boolean) {
+		if (!manga || !chapters.length) return;
+		await updates.seedFromChapters(
+			{
+				mangaId: manga.id,
+				title: manga.title,
+				thumbnailUrl: manga.thumbnailUrl ? apiUrl(manga.thumbnailUrl) : null,
+				sourceId: manga.sourceId
+			},
+			chapters,
+			{ markSeen }
+		);
+	}
+
 	async function load() {
 		manga = await fetchMangaDetail(mangaId);
 		chapters = await fetchChapters(mangaId);
+		// Opening detail = user has seen the current list; clears "update" badge.
+		await seedUpdates(true);
 	}
 
 	let refreshing = $state(false);
@@ -146,6 +163,9 @@
 		refreshing = true;
 		try {
 			chapters = await fetchChapters(mangaId);
+			// Refresh from source — update latest without auto-clearing if still unread?
+			// User explicitly refreshed while on detail → mark seen.
+			await seedUpdates(true);
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Gagal memuat chapter';
 		} finally {

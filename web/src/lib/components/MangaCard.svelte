@@ -3,6 +3,7 @@
 	import { apiUrl } from '$lib/graphql/client';
 	import { setMangaInLibrary } from '$lib/graphql/api';
 	import { localData } from '$lib/local/data.svelte';
+	import { updates } from '$lib/updates/updates.svelte';
 	import { relativeTimeShort, chapterLabel } from '$lib/utils/format';
 	import ImageOff from '@lucide/svelte/icons/image-off';
 	import Bookmark from '@lucide/svelte/icons/bookmark';
@@ -16,6 +17,8 @@
 		progressPercent?: number | null;
 		/** Small label over the progress bar, e.g. chapter name. */
 		progressLabel?: string | null;
+		/** Show "Baru" badge when library has a newer chapter than last seen. */
+		hasUpdate?: boolean;
 		class?: string;
 	}
 
@@ -25,6 +28,7 @@
 		showLibraryToggle = false,
 		progressPercent = null,
 		progressLabel = null,
+		hasUpdate = false,
 		class: klass = ''
 	}: Props = $props();
 
@@ -46,6 +50,7 @@
 				thumbnailUrl: manga.thumbnailUrl,
 				sourceId: manga.sourceId
 			});
+			if (!next) void updates.remove(manga.id);
 			// Best-effort: also flag it in-library on the source server (extension
 			// update crons key off this). Local state above is the source of truth.
 			await setMangaInLibrary(manga.id, next).catch(() => {});
@@ -105,7 +110,13 @@
 			</div>
 		{/if}
 
-		{#if format}
+		{#if hasUpdate}
+			<span
+				class="absolute left-2 top-2 z-[1] rounded-[var(--radius-sm)] bg-accent px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white shadow"
+			>
+				Baru
+			</span>
+		{:else if format}
 			<span
 				class="absolute left-2 top-3 rounded-[var(--radius-sm)] px-2 py-1 text-[11px] font-bold tracking-wide backdrop-blur-sm {format.cls}"
 			>

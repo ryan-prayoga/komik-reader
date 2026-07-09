@@ -7,6 +7,7 @@
 	import { preferences } from '$lib/preferences.svelte';
 	import { localData } from '$lib/local/data.svelte';
 	import { syncEngine } from '$lib/local/sync.svelte';
+	import { updates } from '$lib/updates/updates.svelte';
 	import InstallPrompt from '$lib/components/InstallPrompt.svelte';
 	import UpdatePrompt from '$lib/components/UpdatePrompt.svelte';
 	import Toast from '$lib/components/ui/Toast.svelte';
@@ -62,6 +63,7 @@
 	onMount(async () => {
 		preferences.init();
 		await localData.init();
+		await updates.init();
 		syncEngine.start(!!data.user);
 
 		// iOS/Android standalone PWAs reopen at whatever path the OS last saw

@@ -8,6 +8,7 @@
 	import { getCachedPageUrls } from '$lib/offline/cache';
 	import { readerSettings, BG_CLASS } from '$lib/reader-settings.svelte';
 	import { localData } from '$lib/local/data.svelte';
+	import { updates } from '$lib/updates/updates.svelte';
 	import { readingTimer } from '$lib/reading-time';
 	import WebtoonView from '$lib/components/reader/WebtoonView.svelte';
 	import PagedView from '$lib/components/reader/PagedView.svelte';
@@ -467,6 +468,19 @@
 					// position other devices reported.
 					if (!initialPage && (current?.lastPageRead ?? 0) > 0) {
 						initialPage = current!.lastPageRead;
+					}
+					// Refresh latest snapshot without clearing badges (unless first seed).
+					if (chapters.length && mangaTitle) {
+						void updates.seedFromChapters(
+							{
+								mangaId: resolvedMangaId,
+								title: mangaTitle,
+								thumbnailUrl: mangaThumb,
+								sourceId: mangaSourceId
+							},
+							chapters,
+							{ markSeen: false }
+						);
 					}
 				}
 

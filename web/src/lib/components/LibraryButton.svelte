@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { localData } from '$lib/local/data.svelte';
+	import { updates } from '$lib/updates/updates.svelte';
 	import { showToast } from '$lib/stores/toast.svelte';
 	import Bookmark from '@lucide/svelte/icons/bookmark';
 	import Plus from '@lucide/svelte/icons/plus';
@@ -27,6 +28,7 @@
 
 	async function toggle() {
 		const inLibrary = await localData.toggleLibrary({ mangaId, title, thumbnailUrl, sourceId });
+		if (!inLibrary) void updates.remove(mangaId);
 		showToast(inLibrary ? 'Ditambahkan ke koleksi.' : 'Dihapus dari koleksi.', 'success');
 		onchange?.(inLibrary);
 	}

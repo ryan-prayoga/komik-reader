@@ -61,6 +61,26 @@ export type LocalCategory = {
 	deleted?: boolean;
 };
 
+/**
+ * Device-local snapshot of the newest chapter known for a library manga.
+ * `hasUpdate` is derived: latest is newer than what the user last "saw"
+ * (opened detail / marked seen). Not synced across devices.
+ */
+export type LocalUpdateMeta = {
+	mangaId: number;
+	title: string;
+	thumbnailUrl: string | null;
+	sourceId: string | null;
+	latestChapterId: number | null;
+	latestChapterNumber: number;
+	latestChapterName: string;
+	/** Baseline when user last acknowledged the chapter list. */
+	seenChapterId: number | null;
+	seenChapterNumber: number;
+	lastCheckedAt: number;
+	updatedAt: number;
+};
+
 export type SyncEntity = 'history' | 'library' | 'categories' | 'readtime';
 
 /** Wire shape exchanged with the server sync endpoint. */

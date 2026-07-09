@@ -3,6 +3,8 @@
 	import { page } from '$app/stores';
 	import { localData } from '$lib/local/data.svelte';
 	import { syncEngine } from '$lib/local/sync.svelte';
+	import { updates } from '$lib/updates/updates.svelte';
+	import { showToast } from '$lib/stores/toast.svelte';
 	import MangaCard from '$lib/components/MangaCard.svelte';
 	import MangaGrid from '$lib/components/MangaGrid.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
@@ -11,9 +13,11 @@
 	import FolderTree from '@lucide/svelte/icons/folder-tree';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import Search from '@lucide/svelte/icons/search';
+	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 
 	onMount(() => {
 		localData.reload();
+		void updates.init();
 	});
 
 	const categoryId = $derived(
@@ -21,7 +25,8 @@
 	);
 
 	let search = $state('');
-	let sortBy = $state<'recent' | 'title' | 'title_desc'>('recent');
+	let sortBy = $state<'recent' | 'title' | 'title_desc' | 'updates'>('recent');
+	let onlyUpdates = $state(false);
 
 	// mangaId → most-recent read timestamp, for the "terakhir dibaca" sort.
 	const lastReadAt = $derived.by(() => {
@@ -37,12 +42,20 @@
 		const lib = localData.library;
 		const inCat = categoryId ? lib.filter((l) => l.categoryIds.includes(categoryId)) : lib;
 		const q = search.trim().toLowerCase();
-		const filtered = q ? inCat.filter((l) => l.title.toLowerCase().includes(q)) : inCat;
+		let filtered = q ? inCat.filter((l) => l.title.toLowerCase().includes(q)) : inCat;
+		if (onlyUpdates) filtered = filtered.filter((l) => updates.hasUpdate(l.mangaId));
 		const sorted = [...filtered];
 		if (sortBy === 'title') {
 			sorted.sort((a, b) => a.title.localeCompare(b.title));
 		} else if (sortBy === 'title_desc') {
 			sorted.sort((a, b) => b.title.localeCompare(a.title));
+		} else if (sortBy === 'updates') {
+			sorted.sort((a, b) => {
+				const au = updates.hasUpdate(a.mangaId) ? 1 : 0;
+				const bu = updates.hasUpdate(b.mangaId) ? 1 : 0;
+				if (bu !== au) return bu - au;
+				return (lastReadAt.get(b.mangaId) ?? 0) - (lastReadAt.get(a.mangaId) ?? 0);
+			});
 		} else {
 			sorted.sort(
 				(a, b) => (lastReadAt.get(b.mangaId) ?? 0) - (lastReadAt.get(a.mangaId) ?? 0)
@@ -50,6 +63,29 @@
 		}
 		return sorted;
 	});
+
+	async function runCheckUpdates() {
+		if (updates.checking) {
+			updates.stopCheck();
+			return;
+		}
+		if (localData.library.length === 0) {
+			showToast('Koleksi masih kosong.', 'info');
+			return;
+		}
+		const { found, failed } = await updates.checkAll();
+		if (found > 0) {
+			showToast(
+				`${found} manga punya chapter baru${failed ? ` · ${failed} gagal` : ''}.`,
+				'success'
+			);
+		} else {
+			showToast(
+				failed ? `Selesai — ${failed} gagal dicek.` : 'Semua sudah up to date.',
+				failed ? 'info' : 'success'
+			);
+		}
+	}
 
 	function lastRead(mangaId: number) {
 		return localData.history.find((h) => h.mangaId === mangaId) ?? null;
@@ -81,6 +117,22 @@
 
 <section>
 	<PageHeader title="Koleksi" subtitle="Bookmark di perangkat ini. Login untuk sync antar device.">
+		{#if localData.library.length > 0}
+			<Button
+				variant="secondary"
+				size="sm"
+				loading={updates.checking}
+				onclick={runCheckUpdates}
+			>
+				<RefreshCw size={14} class={updates.checking ? 'animate-spin' : ''} />
+				{updates.checking
+					? `${updates.progress.done}/${updates.progress.total}`
+					: 'Cek update'}
+			</Button>
+		{/if}
+		{#if updates.updateCount > 0}
+			<Badge tone="accent">{updates.updateCount} update</Badge>
+		{/if}
 		{#if syncEngine.loggedIn}
 			<Badge tone="success"><Cloud size={13} /> Tersync</Badge>
 		{:else}
@@ -90,13 +142,22 @@
 
 	<div class="mb-4 flex flex-wrap items-center gap-2">
 		{#if localData.categories.length > 0}
-			<Chip href="/library" selected={!categoryId}>Semua</Chip>
+			<Chip href="/library" selected={!categoryId && !onlyUpdates}>Semua</Chip>
 			{#each localData.categories as category (category.id)}
 				<Chip href="/library?category={category.id}" selected={categoryId === category.id}>
 					{category.name}
 				</Chip>
 			{/each}
 		{/if}
+		<Chip
+			selected={onlyUpdates}
+			onclick={() => {
+				onlyUpdates = !onlyUpdates;
+				if (onlyUpdates) sortBy = 'updates';
+			}}
+		>
+			Ada update{#if updates.updateCount > 0}&nbsp;({updates.updateCount}){/if}
+		</Chip>
 		<Chip dashed onclick={() => (manageOpen = true)}>
 			<FolderTree size={13} /> Kelola Kategori
 		</Chip>
@@ -108,13 +169,14 @@
 				<Search size={16} class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
 				<input
 					type="search"
-					placeholder="Cari di library..."
+					placeholder="Cari di koleksi..."
 					bind:value={search}
 					class="w-full rounded-[var(--radius)] border border-border bg-surface py-2 pl-9 pr-3 text-sm text-text outline-none transition placeholder:text-muted focus:border-accent"
 				/>
 			</div>
 			<Select bind:value={sortBy} class="w-44">
 				<option value="recent">Terakhir dibaca</option>
+				<option value="updates">Ada update dulu</option>
 				<option value="title">Judul A–Z</option>
 				<option value="title_desc">Judul Z–A</option>
 			</Select>
@@ -123,8 +185,13 @@
 
 	{#if !localData.ready}
 		<div class="flex justify-center py-20 text-muted"><Spinner size={28} /></div>
-	{:else if items.length === 0 && (search.trim() || categoryId)}
-		<EmptyState title="Tidak ditemukan" description="Coba ubah pencarian atau kategori." />
+	{:else if items.length === 0 && (search.trim() || categoryId || onlyUpdates)}
+		<EmptyState
+			title="Tidak ditemukan"
+			description={onlyUpdates
+				? 'Tidak ada manga dengan chapter baru. Coba Cek update.'
+				: 'Coba ubah pencarian atau kategori.'}
+		/>
 	{:else if items.length === 0}
 		<EmptyState
 			title="Koleksi masih kosong"
@@ -136,6 +203,7 @@
 		<MangaGrid>
 			{#each items as manga (manga.mangaId)}
 				{@const last = lastRead(manga.mangaId)}
+				{@const meta = updates.get(manga.mangaId)}
 				{@const pct =
 					last && !last.isRead && last.totalPages
 						? Math.min(100, Math.round(((last.lastPage + 1) / last.totalPages) * 100))
@@ -148,9 +216,14 @@
 						inLibrary: true,
 						sourceId: manga.sourceId ?? ''
 					}}
-					href={last && !last.isRead ? `/read/${last.chapterId}` : `/manga/${manga.mangaId}`}
-					progressLabel={last && !last.isRead ? `Lanjut · ${last.chapterName}` : null}
-					progressPercent={pct}
+					href="/manga/{manga.mangaId}"
+					hasUpdate={!!meta?.hasUpdate}
+					progressLabel={meta?.hasUpdate
+						? `Baru · ${meta.latestChapterName}`
+						: last && !last.isRead
+							? `Lanjut · ${last.chapterName}`
+							: null}
+					progressPercent={meta?.hasUpdate ? 100 : pct}
 				/>
 			{/each}
 		</MangaGrid>

@@ -4,6 +4,8 @@
 	import { getInstalledSources } from '$lib/graphql/api';
 	import { preferences } from '$lib/preferences.svelte';
 	import { localData } from '$lib/local/data.svelte';
+	import { updates } from '$lib/updates/updates.svelte';
+	import { showToast } from '$lib/stores/toast.svelte';
 	import type { RecentChapter, Source } from '$lib/graphql/types';
 	import { apiUrl } from '$lib/graphql/client';
 	import PageHeader from '$lib/components/PageHeader.svelte';
@@ -15,6 +17,7 @@
 	import Puzzle from '@lucide/svelte/icons/puzzle';
 	import ServerCrash from '@lucide/svelte/icons/server-crash';
 	import LibraryBig from '@lucide/svelte/icons/library-big';
+	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 
 	// Non-admin users (including guests) use per-device active extension preferences.
 	const filterByActive = $derived($page.data.authEnabled && !$page.data.user?.is_admin);
@@ -64,7 +67,24 @@
 			: []
 	);
 
+	const updatePreview = $derived(updates.withUpdates.slice(0, 8));
+
+	async function runCheckUpdates() {
+		if (updates.checking) {
+			updates.stopCheck();
+			return;
+		}
+		if (!localData.library.length) {
+			showToast('Koleksi masih kosong — bookmark dulu.', 'info');
+			return;
+		}
+		const { found, failed } = await updates.checkAll();
+		if (found > 0) showToast(`${found} manga punya chapter baru.`, 'success');
+		else showToast(failed ? `Selesai · ${failed} gagal.` : 'Semua sudah up to date.', 'info');
+	}
+
 	onMount(async () => {
+		void updates.init();
 		try {
 			allSources = await getInstalledSources(preferences.nsfwFilter);
 		} catch (e) {
@@ -77,6 +97,12 @@
 
 <section>
 	<PageHeader title="Beranda" subtitle="Lanjutkan bacaan dan jelajahi source terinstall.">
+		{#if localData.library.length > 0}
+			<Button variant="secondary" size="sm" loading={updates.checking} onclick={runCheckUpdates}>
+				<RefreshCw size={14} class={updates.checking ? 'animate-spin' : ''} />
+				{updates.checking ? `${updates.progress.done}/${updates.progress.total}` : 'Cek update'}
+			</Button>
+		{/if}
 		<Button href="/extensions" variant="secondary" size="sm">
 			<Puzzle size={15} /> Ekstensi
 		</Button>
@@ -106,6 +132,43 @@
 	{:else}
 		<ContinueReading chapters={recent} seeAllHref="/history" />
 
+		{#if updatePreview.length > 0 || updates.checking}
+			<section class="mb-8">
+				<div class="mb-3 flex items-center justify-between gap-2">
+					<h2 class="text-lg font-semibold text-text">
+						Update baru
+						{#if updates.updateCount > 0}
+							<span class="ml-1 text-sm font-normal text-muted">({updates.updateCount})</span>
+						{/if}
+					</h2>
+					<a href="/library" class="text-sm text-accent hover:underline">Koleksi →</a>
+				</div>
+				{#if updates.checking && updatePreview.length === 0}
+					<p class="flex items-center gap-2 text-sm text-muted">
+						<Spinner size={14} /> Mengecek {updates.progress.done}/{updates.progress.total}…
+					</p>
+				{:else}
+					<MangaGrid>
+						{#each updatePreview as u (u.mangaId)}
+							<MangaCard
+								manga={{
+									id: u.mangaId,
+									title: u.title,
+									thumbnailUrl: u.thumbnailUrl,
+									inLibrary: true,
+									sourceId: u.sourceId ?? ''
+								}}
+								href="/manga/{u.mangaId}"
+								hasUpdate
+								progressLabel={`Baru · ${u.latestChapterName}`}
+								progressPercent={100}
+							/>
+						{/each}
+					</MangaGrid>
+				{/if}
+			</section>
+		{/if}
+
 		{#if libraryPreview.length > 0}
 			<section class="mb-8">
 				<div class="mb-3 flex items-center justify-between">
@@ -123,6 +186,7 @@
 								sourceId: m.sourceId ?? ''
 							}}
 							href="/manga/{m.mangaId}"
+							hasUpdate={updates.hasUpdate(m.mangaId)}
 						/>
 					{/each}
 				</MangaGrid>

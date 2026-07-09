@@ -3,9 +3,10 @@
 
 const DB_NAME = 'komik-reader-data';
 // v2: added `readtime` store (per-device reading time pulled from account sync).
-const DB_VERSION = 2;
+// v3: added `updates` store (per-manga latest/seen chapter snapshot for library badges).
+const DB_VERSION = 3;
 
-export type LocalStore = 'history' | 'library' | 'categories' | 'readtime' | 'meta';
+export type LocalStore = 'history' | 'library' | 'categories' | 'readtime' | 'updates' | 'meta';
 
 const STORES: Record<LocalStore, string> = {
 	history: 'chapterId',
@@ -13,6 +14,7 @@ const STORES: Record<LocalStore, string> = {
 	categories: 'id',
 	// Composite key `${chapterId}:${deviceId}` — one row per (chapter, device).
 	readtime: 'key',
+	updates: 'mangaId',
 	meta: 'key'
 };
 
@@ -81,4 +83,14 @@ export async function getMeta<T>(key: string): Promise<T | null> {
 
 export async function setMeta<T>(key: string, value: T): Promise<void> {
 	await putItem('meta', { key, value });
+}
+
+export async function deleteItem(store: LocalStore, key: IDBValidKey): Promise<void> {
+	const db = await openDb();
+	return new Promise((resolve, reject) => {
+		const tx = db.transaction(store, 'readwrite');
+		tx.objectStore(store).delete(key);
+		tx.oncomplete = () => resolve();
+		tx.onerror = () => reject(tx.error);
+	});
 }
