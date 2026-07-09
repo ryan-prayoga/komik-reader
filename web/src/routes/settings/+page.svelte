@@ -212,12 +212,20 @@
 		<!-- Content -->
 		<Card padding="lg">
 			<h2 class="mb-4 text-lg font-semibold text-text">Konten</h2>
-			<Switch
-				label="Tampilkan konten NSFW"
-				description="Extension dan source bertanda NSFW akan ditampilkan."
-				checked={preferences.showNsfw}
-				onchange={(v) => preferences.setShowNsfw(v)}
-			/>
+			<div class="space-y-4">
+				<Switch
+					label="Tampilkan konten NSFW"
+					description="Extension dan source bertanda NSFW akan ditampilkan."
+					checked={preferences.showNsfw}
+					onchange={(v) => preferences.setShowNsfw(v)}
+				/>
+				<Switch
+					label="Hemat data"
+					description="Lewati pengayaan detail di browse dan kurangi preload halaman di reader."
+					checked={preferences.dataSaver}
+					onchange={(v) => preferences.setDataSaver(v)}
+				/>
+			</div>
 		</Card>
 
 		<!-- Data management -->

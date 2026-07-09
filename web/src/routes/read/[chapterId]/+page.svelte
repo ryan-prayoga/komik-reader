@@ -160,6 +160,9 @@
 	const useDouble = $derived(readerSettings.mode === 'double' && wideViewport);
 	const backHref = $derived(mangaId ? `/manga/${mangaId}` : '/history');
 	const showOffline = $derived(offlineMode || !isOnline());
+	const reserveDock = $derived(
+		chapters.length > 0 && (chromeVisible || readerSettings.pinDock)
+	);
 
 	// Navigation index: paged uses stable URL chapterId (same as original),
 	// webtoon uses currently-viewed section to update nav when infinite-scrolling.
@@ -565,6 +568,8 @@
 							{ markSeen: false }
 						);
 					}
+					// Restore last mode/direction used for this series.
+					readerSettings.applyForManga(resolvedMangaId);
 				}
 
 				sections = [{ chapter: current ?? makeStubChapter(id), pages }];
@@ -598,6 +603,7 @@
 		return () => {
 			cancelled = true;
 			stopTimer();
+			readerSettings.clearActiveManga();
 		};
 	});
 
@@ -673,7 +679,7 @@
 
 <svelte:window onkeydown={onReaderKeydown} />
 
-<section class="relative min-h-dvh w-full {bgClass} {chapters.length > 0 ? 'lg:pr-72' : ''}">
+<section class="relative min-h-dvh w-full {bgClass} {reserveDock ? 'lg:pr-72' : ''}">
 	{#if loading}
 		<a
 			href={backHref}
@@ -820,6 +826,7 @@
 			{chapterOffline}
 			{downloadProgress}
 			fullscreen={isFullscreen}
+			pinDock={readerSettings.pinDock}
 			ondownload={mangaId && !chapterOffline ? saveCurrentOffline : undefined}
 			onfullscreen={toggleFullscreen}
 			onsettings={() => (settingsOpen = true)}

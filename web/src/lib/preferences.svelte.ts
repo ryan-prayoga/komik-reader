@@ -13,6 +13,8 @@ type StoredPrefs = {
 	extFilterStatus: string;
 	extFilterOnlyActive: boolean;
 	extViewMode: 'list' | 'grid';
+	/** Skip heavy browse enrichment / preloads to save mobile data. */
+	dataSaver: boolean;
 };
 
 const DEFAULTS: StoredPrefs = {
@@ -23,7 +25,8 @@ const DEFAULTS: StoredPrefs = {
 	extFilterLangs: [],
 	extFilterStatus: 'all',
 	extFilterOnlyActive: false,
-	extViewMode: 'list'
+	extViewMode: 'list',
+	dataSaver: false
 };
 
 function load(): StoredPrefs {
@@ -51,6 +54,7 @@ class PreferencesState {
 	extFilterStatus = $state(this.#initial.extFilterStatus);
 	extFilterOnlyActive = $state(this.#initial.extFilterOnlyActive);
 	extViewMode = $state<'list' | 'grid'>(this.#initial.extViewMode);
+	dataSaver = $state(this.#initial.dataSaver);
 
 	#save() {
 		if (browser) {
@@ -64,10 +68,16 @@ class PreferencesState {
 					extFilterLangs: this.extFilterLangs,
 					extFilterStatus: this.extFilterStatus,
 					extFilterOnlyActive: this.extFilterOnlyActive,
-					extViewMode: this.extViewMode
+					extViewMode: this.extViewMode,
+					dataSaver: this.dataSaver
 				})
 			);
 		}
+	}
+
+	setDataSaver(value: boolean) {
+		this.dataSaver = value;
+		this.#save();
 	}
 
 	setShowNsfw(value: boolean) {

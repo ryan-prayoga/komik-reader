@@ -15,6 +15,7 @@
 	import Check from '@lucide/svelte/icons/check';
 	import Maximize from '@lucide/svelte/icons/maximize';
 	import Minimize from '@lucide/svelte/icons/minimize';
+	import EyeOff from '@lucide/svelte/icons/eye-off';
 	import type { Chapter } from '$lib/graphql/types';
 
 	interface Props {
@@ -38,6 +39,8 @@
 		chapterOffline?: boolean;
 		downloadProgress?: number | null;
 		fullscreen?: boolean;
+		/** Keep desktop dock visible without chrome. */
+		pinDock?: boolean;
 		ondownload?: () => void;
 		onfullscreen?: () => void;
 		onsettings: () => void;
@@ -66,6 +69,7 @@
 		chapterOffline = false,
 		downloadProgress = null,
 		fullscreen = false,
+		pinDock = false,
 		ondownload,
 		onfullscreen,
 		onsettings,
@@ -76,7 +80,9 @@
 
 	let pickerOpen = $state(false);
 	let pickerQuery = $state('');
+	let unreadOnly = $state(false);
 	const hasChapters = $derived(chapters.length > 0);
+	const dockVisible = $derived(show || pinDock);
 
 	// Picker/dock reads oldest-to-newest (reading order) — `chapters` prop itself
 	// comes in newest-first (used for prev/next index math elsewhere), so flip it
@@ -87,11 +93,16 @@
 	// long series (100s of chapters) stay navigable.
 	const filteredChapters = $derived.by(() => {
 		const q = pickerQuery.trim().toLowerCase();
-		if (!q) return orderedChapters;
-		return orderedChapters.filter(
-			(c) => c.name.toLowerCase().includes(q) || String(c.chapterNumber).includes(q)
-		);
+		return orderedChapters.filter((c) => {
+			if (unreadOnly && c.isRead) return false;
+			if (q && !c.name.toLowerCase().includes(q) && !String(c.chapterNumber).includes(q)) {
+				return false;
+			}
+			return true;
+		});
 	});
+
+	const firstUnread = $derived(orderedChapters.find((c) => !c.isRead) ?? null);
 
 	// Incremental render keeps long series (1000+) usable without full virtualization.
 	const CHUNK = 120;
@@ -132,7 +143,9 @@
 
 <!-- Thin progress bar — always visible, z above chrome -->
 <div
-	class="pointer-events-none fixed inset-x-0 z-[60] h-0.5 {hasChapters ? 'lg:right-72' : ''}"
+	class="pointer-events-none fixed inset-x-0 z-[60] h-0.5 {dockVisible && hasChapters
+		? 'lg:right-72'
+		: ''}"
 	style="top: max(0.125rem, env(safe-area-inset-top))"
 >
 	<div
@@ -145,7 +158,8 @@
      lets users change speed / pause without needing auto-pause-on-tap. -->
 {#if autoScroll && onautoscroll && !show}
 	<div
-		class="fixed left-1/2 z-40 flex -translate-x-1/2 items-center gap-1 rounded-full border border-white/15 bg-black/70 px-2 py-1.5 shadow-(--shadow-float) backdrop-blur-sm {hasChapters
+		class="fixed left-1/2 z-40 flex -translate-x-1/2 items-center gap-1 rounded-full border border-white/15 bg-black/70 px-2 py-1.5 shadow-(--shadow-float) backdrop-blur-sm {dockVisible &&
+		hasChapters
 			? 'lg:right-72 lg:left-[calc(50%-9rem)] lg:translate-x-0'
 			: ''}"
 		style="bottom: calc(1rem + env(safe-area-inset-bottom))"
@@ -177,9 +191,9 @@
 
 <!-- Top bar -->
 <div
-	class="fixed inset-x-0 top-0 z-30 transition-transform duration-200 {hasChapters ? 'lg:right-72' : ''} {show
-		? 'translate-y-0'
-		: '-translate-y-full'}"
+	class="fixed inset-x-0 top-0 z-30 transition-transform duration-200 {dockVisible && hasChapters
+		? 'lg:right-72'
+		: ''} {show ? 'translate-y-0' : '-translate-y-full'}"
 >
 	<div
 		class="flex items-center gap-2 bg-gradient-to-b from-black/45 via-black/15 to-transparent px-3 pb-6 text-white [&_button]:[text-shadow:none]"
@@ -269,9 +283,9 @@
 
 <!-- Bottom bar -->
 <div
-	class="fixed inset-x-0 bottom-0 z-30 transition-transform duration-200 {hasChapters ? 'lg:right-72' : ''} {show
-		? 'translate-y-0'
-		: 'translate-y-full'}"
+	class="fixed inset-x-0 bottom-0 z-30 transition-transform duration-200 {dockVisible && hasChapters
+		? 'lg:right-72'
+		: ''} {show ? 'translate-y-0' : 'translate-y-full'}"
 >
 	<div
 		class="flex items-center gap-3 bg-gradient-to-t from-black/50 via-black/15 to-transparent px-3 pt-8 text-white"
@@ -369,7 +383,7 @@
 				<X size={16} />
 			</button>
 		</div>
-		<div class="shrink-0 border-b border-white/10 px-3 py-2">
+		<div class="shrink-0 space-y-2 border-b border-white/10 px-3 py-2">
 			<div class="relative">
 				<Search size={14} class="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" />
 				<input
@@ -377,6 +391,26 @@
 					placeholder="Cari chapter…"
 					class="w-full rounded-lg border border-white/10 bg-white/5 py-2 pl-8 pr-3 text-sm text-white placeholder:text-white/40 focus:border-accent focus:outline-none"
 				/>
+			</div>
+			<div class="flex flex-wrap gap-1.5">
+				<button
+					type="button"
+					onclick={() => (unreadOnly = !unreadOnly)}
+					class="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition {unreadOnly
+						? 'bg-accent text-white'
+						: 'bg-white/10 text-white/70 hover:bg-white/15'}"
+				>
+					<EyeOff size={11} /> Belum dibaca
+				</button>
+				{#if firstUnread}
+					<a
+						href="/read/{firstUnread.id}"
+						onclick={() => (pickerOpen = false)}
+						class="inline-flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80 transition hover:bg-white/15"
+					>
+						Loncat ke unread
+					</a>
+				{/if}
 			</div>
 		</div>
 		<div class="overflow-y-auto">
@@ -400,6 +434,9 @@
 					Memuat chapter lainnya…
 				</div>
 			{/if}
+			{#if filteredChapters.length === 0}
+				<p class="px-4 py-8 text-center text-sm text-white/40">Tidak ada chapter cocok.</p>
+			{/if}
 		</div>
 	</div>
 {/if}
@@ -407,15 +444,18 @@
 <!-- Desktop-only chapter dock — a persistent right rail, replaces the tap-to-open picker on lg:. -->
 {#if hasChapters}
 	<aside
-		class="fixed inset-y-0 right-0 z-30 hidden w-72 flex-col border-l border-white/10 bg-black/70 backdrop-blur-sm transition-opacity duration-200 lg:flex {show
+		class="fixed inset-y-0 right-0 z-30 hidden w-72 flex-col border-l border-white/10 bg-black/70 backdrop-blur-sm transition-opacity duration-200 lg:flex {dockVisible
 			? 'opacity-100'
 			: 'pointer-events-none opacity-0'}"
 	>
 		<div class="flex shrink-0 items-center gap-2 border-b border-white/10 px-4 py-4 text-white">
 			<List size={16} class="shrink-0 opacity-70" />
 			<span class="text-sm font-semibold">Daftar Chapter</span>
+			{#if pinDock}
+				<span class="ml-auto rounded bg-white/10 px-1.5 py-0.5 text-[10px] text-white/50">pin</span>
+			{/if}
 		</div>
-		<div class="shrink-0 border-b border-white/10 px-3 py-2">
+		<div class="shrink-0 space-y-2 border-b border-white/10 px-3 py-2">
 			<div class="relative">
 				<Search size={14} class="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" />
 				<input
@@ -423,6 +463,25 @@
 					placeholder="Cari chapter…"
 					class="w-full rounded-lg border border-white/10 bg-white/5 py-2 pl-8 pr-3 text-sm text-white placeholder:text-white/40 focus:border-accent focus:outline-none"
 				/>
+			</div>
+			<div class="flex flex-wrap gap-1.5">
+				<button
+					type="button"
+					onclick={() => (unreadOnly = !unreadOnly)}
+					class="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition {unreadOnly
+						? 'bg-accent text-white'
+						: 'bg-white/10 text-white/70 hover:bg-white/15'}"
+				>
+					<EyeOff size={11} /> Belum dibaca
+				</button>
+				{#if firstUnread}
+					<a
+						href="/read/{firstUnread.id}"
+						class="inline-flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80 transition hover:bg-white/15"
+					>
+						Loncat unread
+					</a>
+				{/if}
 			</div>
 		</div>
 		<div class="flex-1 overflow-y-auto">
@@ -444,6 +503,9 @@
 				<div bind:this={dockSentinel} class="px-4 py-2 text-center text-xs text-white/40">
 					Memuat…
 				</div>
+			{/if}
+			{#if filteredChapters.length === 0}
+				<p class="px-4 py-8 text-center text-sm text-white/40">Tidak ada chapter cocok.</p>
 			{/if}
 		</div>
 	</aside>

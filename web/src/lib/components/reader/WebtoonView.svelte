@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { Chapter } from '$lib/graphql/types';
+	import { preferences } from '$lib/preferences.svelte';
 	import Spinner from '$lib/components/ui/Spinner.svelte';
 
 	type Section = { chapter: Chapter; pages: string[] };
@@ -173,9 +174,9 @@
 		);
 		observer.observe(node);
 
-		// Preload observer: a much taller margin (both directions) flips the page to
-		// an eager fetch well before it reaches the viewport, so scrolling never
-		// lands on an unloaded black placeholder. One-shot — disconnects once armed.
+		// Preload observer: taller margin (or short when data-saver) flips the page to
+		// an eager fetch before viewport. One-shot — disconnects once armed.
+		const margin = preferences.dataSaver ? '400px 0px 400px 0px' : '2500px 0px 2500px 0px';
 		const preloader = new IntersectionObserver(
 			(entries) => {
 				if (entries[0]?.isIntersecting) {
@@ -183,7 +184,7 @@
 					preloader.disconnect();
 				}
 			},
-			{ threshold: 0, rootMargin: '2500px 0px 2500px 0px', root }
+			{ threshold: 0, rootMargin: margin, root }
 		);
 		preloader.observe(node);
 

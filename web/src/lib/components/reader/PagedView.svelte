@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { ReaderFit, ReaderDirection } from '$lib/reader-settings.svelte';
+	import { preferences } from '$lib/preferences.svelte';
 	import Spinner from '$lib/components/ui/Spinner.svelte';
 
 	interface Props {
@@ -204,6 +205,7 @@
 	// checking a panel, backing out of a spoiler-scroll) shouldn't hit a blank
 	// placeholder either.
 	const preload = $derived.by(() => {
+		if (preferences.dataSaver) return [] as string[];
 		const prevStart = pairStart(current - 1);
 		const idxs = [prevStart, nextIndex(current), nextIndex(current) + 1].filter(
 			(i) => i >= 0 && i <= lastIndex

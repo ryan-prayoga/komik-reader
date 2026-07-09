@@ -11,6 +11,7 @@
 	import { getBrowseSnapshot, saveBrowseSnapshot } from '$lib/stores/browseCache';
 	import { apiUrl } from '$lib/graphql/client';
 	import { localData } from '$lib/local/data.svelte';
+	import { preferences } from '$lib/preferences.svelte';
 	import type {
 		BrowseManga,
 		FetchMangaType,
@@ -198,7 +199,8 @@
 				pageNum += 1;
 			}
 			hasNext = result.hasNextPage;
-			enrichInBackground(result.mangas, gen);
+			// Data saver skips source hits that only polish genre/status/latest chapter.
+			if (!preferences.dataSaver) enrichInBackground(result.mangas, gen);
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Gagal memuat manga';
 		} finally {
