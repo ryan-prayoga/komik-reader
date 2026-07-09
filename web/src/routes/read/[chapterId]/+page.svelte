@@ -222,7 +222,11 @@
 
 	function reportPage(index: number) {
 		currentPage = index;
-		const isRead = index >= pages.length - 1;
+		// Monotonic: never let scrolling back downgrade an already-read chapter
+		// back to unread (isRead here is recomputed from raw page position on
+		// every call, so without this guard it would flip false again).
+		const alreadyRead = chapters.find((c) => c.id === chapterId)?.isRead ?? false;
+		const isRead = alreadyRead || index >= pages.length - 1;
 		updateChapterProgress(chapterId, index, isRead).catch(() => {});
 		if (isRead) markChapterReadLocally(chapterId);
 		if (mangaId) {
@@ -304,7 +308,10 @@
 		const pageKey = `${section.chapter.id}-${pageIdx}`;
 		if (pageKey === lastReportedPageKey) return;
 		lastReportedPageKey = pageKey;
-		const isRead = pageIdx >= section.pages.length - 1;
+		// Monotonic: same guard as reportPage — don't downgrade a read chapter
+		// back to unread when re-scrolling an earlier page.
+		const alreadyRead = chapters.find((c) => c.id === section.chapter.id)?.isRead ?? false;
+		const isRead = alreadyRead || pageIdx >= section.pages.length - 1;
 		updateChapterProgress(section.chapter.id, pageIdx, isRead).catch(() => {});
 		if (isRead) markChapterReadLocally(section.chapter.id);
 		localData.recordHistory({
@@ -775,6 +782,7 @@
 					(e.currentTarget as HTMLElement).dataset.ptrX = String(e.clientX);
 				}}
 				onclick={(e) => {
+					if ((e.target as HTMLElement).closest('button, a')) return;
 					const el = e.currentTarget as HTMLElement;
 					const y0 = Number(el.dataset.ptrY ?? e.clientY);
 					const x0 = Number(el.dataset.ptrX ?? e.clientX);
