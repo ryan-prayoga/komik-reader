@@ -260,9 +260,15 @@
 		if (!n) return '';
 		return new Date(n).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
 	}
+
+	const pageTitle = $derived(manga ? `${manga.title} · Komik Reader` : 'Detail · Komik Reader');
 </script>
 
-<section>
+<svelte:head>
+	<title>{pageTitle}</title>
+</svelte:head>
+
+<section class="pb-24 lg:pb-0">
 	{#if loading}
 		<div class="flex flex-col gap-6 md:flex-row">
 			<div class="mx-auto aspect-[3/4] w-40 shrink-0 animate-pulse rounded-[var(--radius)] bg-surface-hover md:mx-0 md:w-48"></div>
@@ -287,18 +293,18 @@
 			{error}
 		</div>
 	{:else if manga}
-		<!-- Fixed back button -->
+		<!-- In-flow back control (avoids fixed offsets vs top bar / collapsed sidebar) -->
 		<button
 			type="button"
 			onclick={goBack}
-			class="fixed left-4 top-[68px] z-20 inline-flex items-center gap-1 rounded-full bg-bg/85 px-3 py-1.5 text-sm text-muted shadow backdrop-blur transition hover:text-accent lg:left-64 lg:top-4"
+			class="mb-3 inline-flex items-center gap-1 rounded-full border border-border bg-surface px-3 py-1.5 text-sm text-muted transition hover:border-accent/40 hover:text-accent"
 		>
 			<ArrowLeft size={14} />
 			Kembali
 		</button>
 
 		<!-- Hero with blurred backdrop -->
-		<div class="relative -mx-4 -mt-4 lg:-mx-8 lg:-mt-8">
+		<div class="relative -mx-4 lg:-mx-8">
 			{#if manga.thumbnailUrl}
 				<div class="absolute inset-0 overflow-hidden">
 					<img src={apiUrl(manga.thumbnailUrl)} alt="" class="h-full w-full scale-110 object-cover blur-2xl" />
@@ -432,43 +438,69 @@
 					<Card padding="none">
 						<div class="divide-y divide-border">
 							<!-- Toolbar row -->
-							<div class="flex items-center gap-2 px-4 py-2.5">
-								<div class="relative flex-1">
-									<Search size={14} class="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
-									<input
-										bind:value={search}
-										placeholder="Cari chapter…"
-										class="w-full rounded-md border border-border bg-bg py-1.5 pl-8 pr-3 text-sm text-text placeholder:text-muted focus:border-accent focus:outline-none"
-									/>
+							<div class="space-y-2 px-4 py-2.5">
+								<div class="flex items-center gap-2">
+									<div class="relative flex-1">
+										<Search size={14} class="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+										<input
+											bind:value={search}
+											placeholder="Cari chapter…"
+											class="w-full rounded-md border border-border bg-bg py-1.5 pl-8 pr-3 text-sm text-text placeholder:text-muted focus:border-accent focus:outline-none"
+										/>
+									</div>
+									<div class="flex items-center rounded-md border border-border bg-bg p-0.5">
+										<button
+											type="button"
+											onclick={() => (sortDir = 'desc')}
+											title="Terbaru dulu"
+											aria-label="Urut terbaru dulu"
+											class="rounded p-1.5 transition {sortDir === 'desc' ? 'bg-accent text-white' : 'text-muted hover:text-text'}"
+										><ArrowDown size={13} /></button>
+										<button
+											type="button"
+											onclick={() => (sortDir = 'asc')}
+											title="Terlama dulu"
+											aria-label="Urut terlama dulu"
+											class="rounded p-1.5 transition {sortDir === 'asc' ? 'bg-accent text-white' : 'text-muted hover:text-text'}"
+										><ArrowUp size={13} /></button>
+									</div>
 								</div>
-								<div class="flex items-center rounded-md border border-border bg-bg p-0.5">
+								<div class="flex flex-wrap gap-1.5">
 									<button
-										onclick={() => (sortDir = 'desc')}
-										title="Terbaru dulu"
-										class="rounded p-1.5 transition {sortDir === 'desc' ? 'bg-accent text-white' : 'text-muted hover:text-text'}"
-									><ArrowDown size={13} /></button>
+										type="button"
+										onclick={() => (readFilter = 'all')}
+										class="rounded-full px-2.5 py-1 text-[11px] font-medium transition {readFilter === 'all'
+											? 'bg-accent text-white'
+											: 'bg-surface-hover text-muted hover:text-text'}"
+									>Semua</button>
 									<button
-										onclick={() => (sortDir = 'asc')}
-										title="Terlama dulu"
-										class="rounded p-1.5 transition {sortDir === 'asc' ? 'bg-accent text-white' : 'text-muted hover:text-text'}"
-									><ArrowUp size={13} /></button>
-									<div class="mx-1 h-3.5 w-px bg-border"></div>
+										type="button"
+										onclick={() => (readFilter = 'unread')}
+										class="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition {readFilter === 'unread'
+											? 'bg-accent text-white'
+											: 'bg-surface-hover text-muted hover:text-text'}"
+									><EyeOff size={11} /> Belum dibaca</button>
 									<button
-										onclick={() => (readFilter = readFilter === 'all' ? 'unread' : readFilter === 'unread' ? 'read' : 'all')}
-										title={readFilter === 'all' ? 'Semua chapter' : readFilter === 'unread' ? 'Belum dibaca' : 'Sudah dibaca'}
-										class="relative rounded p-1.5 transition {readFilter !== 'all' ? 'text-accent' : 'text-muted hover:text-text'}"
-									>
-										{#if readFilter === 'read'}<Eye size={13} />{:else}<EyeOff size={13} />{/if}
-										{#if readFilter !== 'all'}<span class="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-accent"></span>{/if}
-									</button>
+										type="button"
+										onclick={() => (readFilter = 'read')}
+										class="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition {readFilter === 'read'
+											? 'bg-accent text-white'
+											: 'bg-surface-hover text-muted hover:text-text'}"
+									><Eye size={11} /> Sudah dibaca</button>
 									<button
-										onclick={() => (downloadFilter = downloadFilter === 'all' ? 'downloaded' : downloadFilter === 'downloaded' ? 'not' : 'all')}
-										title={downloadFilter === 'all' ? 'Semua chapter' : downloadFilter === 'downloaded' ? 'Sudah diunduh' : 'Belum diunduh'}
-										class="relative rounded p-1.5 transition {downloadFilter !== 'all' ? 'text-accent' : 'text-muted hover:text-text'}"
-									>
-										{#if downloadFilter === 'not'}<CloudOff size={13} />{:else}<HardDriveDownload size={13} />{/if}
-										{#if downloadFilter !== 'all'}<span class="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-accent"></span>{/if}
-									</button>
+										type="button"
+										onclick={() => (downloadFilter = downloadFilter === 'downloaded' ? 'all' : 'downloaded')}
+										class="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition {downloadFilter === 'downloaded'
+											? 'bg-accent text-white'
+											: 'bg-surface-hover text-muted hover:text-text'}"
+									><HardDriveDownload size={11} /> Offline</button>
+									<button
+										type="button"
+										onclick={() => (downloadFilter = downloadFilter === 'not' ? 'all' : 'not')}
+										class="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition {downloadFilter === 'not'
+											? 'bg-accent text-white'
+											: 'bg-surface-hover text-muted hover:text-text'}"
+									><CloudOff size={11} /> Belum unduh</button>
 								</div>
 							</div>
 							{#if visible.length === 0}
@@ -549,5 +581,21 @@
 				{/if}
 			</div>
 		</div>
+
+		<!-- Sticky mobile CTA — keeps "lanjut baca" reachable while scrolling a long chapter list -->
+		{#if readTarget}
+			<div
+				class="fixed inset-x-0 bottom-16 z-30 border-t border-border bg-bg/95 px-4 py-2 backdrop-blur lg:hidden"
+				style="padding-bottom: calc(0.5rem + env(safe-area-inset-bottom))"
+			>
+				<Button href="/read/{readTarget.id}" size="md" block class="justify-start text-left">
+					<BookOpen size={16} class="shrink-0" />
+					<span class="flex min-w-0 flex-col leading-tight">
+						<span class="text-sm font-semibold">{startLabel}</span>
+						<span class="truncate text-[11px] font-normal text-white/80">{readTarget.name}</span>
+					</span>
+				</Button>
+			</div>
+		{/if}
 	{/if}
 </section>

@@ -42,8 +42,15 @@
 								loading="lazy"
 							/>
 						{/if}
+						<span
+							class="absolute left-2 top-2 rounded-full bg-accent px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white shadow"
+						>
+							Lanjut
+						</span>
 						<div class="absolute inset-0 flex items-center justify-center bg-black/0 transition group-hover:bg-black/30">
-							<span class="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-white opacity-0 transition group-hover:opacity-100">
+							<span
+								class="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-white opacity-90 shadow transition group-hover:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+							>
 								<Play size={16} fill="currentColor" />
 							</span>
 						</div>

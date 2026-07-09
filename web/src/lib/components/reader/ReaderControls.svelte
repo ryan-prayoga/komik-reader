@@ -96,6 +96,40 @@
 	></div>
 </div>
 
+<!-- Floating speed pill while auto-scroll is on and full chrome is hidden —
+     lets users change speed / pause without needing auto-pause-on-tap. -->
+{#if autoScroll && onautoscroll && !show}
+	<div
+		class="fixed left-1/2 z-40 flex -translate-x-1/2 items-center gap-1 rounded-full border border-white/15 bg-black/70 px-2 py-1.5 shadow-(--shadow-float) backdrop-blur-sm {hasChapters
+			? 'lg:right-72 lg:left-[calc(50%-9rem)] lg:translate-x-0'
+			: ''}"
+		style="bottom: calc(1rem + env(safe-area-inset-bottom))"
+		transition:fade={{ duration: motionDuration(150) }}
+	>
+		<button
+			type="button"
+			onclick={() => onautoscrollspeed?.(-0.5)}
+			aria-label="Perlambat auto-scroll"
+			class="flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold text-white/80 hover:bg-white/10"
+		>−</button>
+		<span class="min-w-8 text-center text-xs tabular-nums text-white">{autoScrollSpeed}×</span>
+		<button
+			type="button"
+			onclick={() => onautoscrollspeed?.(+0.5)}
+			aria-label="Percepat auto-scroll"
+			class="flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold text-white/80 hover:bg-white/10"
+		>+</button>
+		<button
+			type="button"
+			onclick={onautoscroll}
+			aria-label="Stop auto-scroll"
+			class="ml-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-accent text-white"
+		>
+			<Pause size={14} />
+		</button>
+	</div>
+{/if}
+
 <!-- Top bar -->
 <div
 	class="fixed inset-x-0 top-0 z-30 transition-transform duration-200 {hasChapters ? 'lg:right-72' : ''} {show
@@ -170,13 +204,13 @@
 				href={prevHref}
 				class="inline-flex items-center gap-1 rounded-full bg-black/40 px-3 py-2 text-xs transition hover:bg-black/60"
 			>
-				<ChevronLeft size={16} /> Prev
+				<ChevronLeft size={16} /> Sebelumnya
 			</a>
 		{:else}
 			<span
 				class="inline-flex items-center gap-1 rounded-full bg-black/20 px-3 py-2 text-xs text-white/40"
 			>
-				<ChevronLeft size={16} /> Prev
+				<ChevronLeft size={16} /> Sebelumnya
 			</span>
 		{/if}
 
@@ -217,13 +251,13 @@
 				href={nextHref}
 				class="inline-flex items-center gap-1 rounded-full bg-black/40 px-3 py-2 text-xs transition hover:bg-black/60"
 			>
-				Next <ChevronRight size={16} />
+				Berikutnya <ChevronRight size={16} />
 			</a>
 		{:else}
 			<span
 				class="inline-flex items-center gap-1 rounded-full bg-black/20 px-3 py-2 text-xs text-white/40"
 			>
-				Next <ChevronRight size={16} />
+				Berikutnya <ChevronRight size={16} />
 			</span>
 		{/if}
 	</div>

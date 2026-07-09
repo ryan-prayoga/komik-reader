@@ -14,7 +14,9 @@
 	import ReaderControls from '$lib/components/reader/ReaderControls.svelte';
 	import ReaderSettings from '$lib/components/reader/ReaderSettings.svelte';
 	import Spinner from '$lib/components/ui/Spinner.svelte';
+	import { showToast } from '$lib/stores/toast.svelte';
 	import CheckCircle from '@lucide/svelte/icons/check-circle';
+	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import type { Chapter } from '$lib/graphql/types';
 
 	const chapterId = $derived(Number($page.params.chapterId));
@@ -49,6 +51,38 @@
 	let settingsOpen = $state(false);
 	let autoScroll = $state(false);
 	let autoScrollSpeed = $state(readerSettings.autoScrollSpeed);
+	let nextChapterError = $state('');
+
+	// Keep the screen awake while reading (especially auto-scroll) so the panel
+	// doesn't go black mid-chapter. Best-effort — ignored if unsupported/denied.
+	$effect(() => {
+		if (typeof navigator === 'undefined' || !('wakeLock' in navigator)) return;
+		let lock: WakeLockSentinel | null = null;
+		let cancelled = false;
+
+		async function request() {
+			try {
+				lock = await navigator.wakeLock.request('screen');
+				lock.addEventListener('release', () => {
+					lock = null;
+				});
+			} catch {
+				/* permission / battery saver — ignore */
+			}
+		}
+
+		if (document.visibilityState === 'visible') void request();
+		const onVis = () => {
+			if (document.visibilityState === 'visible' && !lock && !cancelled) void request();
+		};
+		document.addEventListener('visibilitychange', onVis);
+
+		return () => {
+			cancelled = true;
+			document.removeEventListener('visibilitychange', onVis);
+			void lock?.release();
+		};
+	});
 
 	$effect(() => {
 		if (!autoScroll) return;
@@ -65,6 +99,16 @@
 				const whole = Math.trunc(delta);
 				remainder = delta - whole;
 				if (whole !== 0) window.scrollBy(0, whole);
+
+				// Stop cleanly at end of content when there's nothing left to load.
+				const doc = document.documentElement;
+				const atEnd =
+					window.scrollY + window.innerHeight >= doc.scrollHeight - 8;
+				if (atEnd && !loadingNextChapter && !nextUnloadedChapter) {
+					autoScroll = false;
+					showToast('Sudah di akhir bacaan.', 'info');
+					return;
+				}
 			}
 			lastTime = time;
 			rafId = requestAnimationFrame(step);
@@ -256,11 +300,13 @@
 	async function handleNearEnd() {
 		if (loadingNextChapter || !nextUnloadedChapter) return;
 		loadingNextChapter = true;
+		nextChapterError = '';
 		try {
 			const nextPages = (await fetchChapterPages(nextUnloadedChapter.id)).map((p) => apiUrl(p));
 			sections = [...sections, { chapter: nextUnloadedChapter, pages: nextPages }];
 		} catch {
-			// silent — user can navigate manually
+			nextChapterError = 'Gagal memuat chapter berikutnya.';
+			showToast('Gagal memuat chapter berikutnya. Coba lagi.', 'error');
 		} finally {
 			loadingNextChapter = false;
 		}
@@ -476,10 +522,29 @@
 		}
 		return ch?.mangaId ?? null;
 	}
+
+	const pageTitle = $derived.by(() => {
+		if (viewedChapterName && mangaTitle) return `${viewedChapterName} · ${mangaTitle} · Komik Reader`;
+		if (viewedChapterName) return `${viewedChapterName} · Komik Reader`;
+		if (mangaTitle) return `${mangaTitle} · Komik Reader`;
+		return 'Baca · Komik Reader';
+	});
 </script>
+
+<svelte:head>
+	<title>{pageTitle}</title>
+</svelte:head>
 
 <section class="relative min-h-dvh w-full {bgClass} {chapters.length > 0 ? 'lg:pr-72' : ''}">
 	{#if loading}
+		<a
+			href={backHref}
+			aria-label="Kembali"
+			class="fixed left-3 z-40 inline-flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white/90 backdrop-blur transition hover:bg-black/70"
+			style="top: calc(env(safe-area-inset-top) + 0.75rem)"
+		>
+			<ArrowLeft size={18} />
+		</a>
 		<div class="flex min-h-dvh flex-col">
 			<!-- shimmer strips — full width, no border-radius, mimic page panels -->
 			<div class="flex flex-col gap-[3px] pt-[3px]">
@@ -500,10 +565,18 @@
 			>
 				{error}
 			</div>
-			<p class="mt-4 text-sm text-white/70">
-				<a href="/downloads" class="text-accent hover:underline">Lihat chapter offline</a>
-				<span class="mx-2 text-white/30">·</span>
-				<a href={backHref} class="text-accent hover:underline">Kembali</a>
+			<p class="mt-4 flex flex-wrap items-center justify-center gap-3 text-sm text-white/70">
+				<button
+					type="button"
+					class="text-accent hover:underline"
+					onclick={() => location.reload()}
+				>
+					Coba lagi
+				</button>
+				<a href="/downloads" class="text-accent hover:underline">Chapter offline</a>
+				<a href={backHref} class="inline-flex items-center gap-1 text-accent hover:underline">
+					<ArrowLeft size={14} /> Kembali
+				</a>
 			</p>
 		</div>
 	{:else}
@@ -530,13 +603,23 @@
 				onzoom={(z) => readerSettings.set('zoom', z)}
 			/>
 		{:else}
+			<!-- Tap toggles chrome only when the finger didn't scroll (avoids whole-page
+			     role=button fighting with intentional scroll / auto-scroll). -->
 			<!-- eslint-disable-next-line svelte/valid-compile -->
 			<div
 				class="w-full cursor-default"
-				role="button"
-				tabindex="0"
-				onclick={toggleChrome}
-				onkeydown={(e) => e.key === 'Enter' && toggleChrome()}
+				role="presentation"
+				onpointerdown={(e) => {
+					(e.currentTarget as HTMLElement).dataset.ptrY = String(e.clientY);
+					(e.currentTarget as HTMLElement).dataset.ptrX = String(e.clientX);
+				}}
+				onclick={(e) => {
+					const el = e.currentTarget as HTMLElement;
+					const y0 = Number(el.dataset.ptrY ?? e.clientY);
+					const x0 = Number(el.dataset.ptrX ?? e.clientX);
+					if (Math.hypot(e.clientX - x0, e.clientY - y0) > 12) return;
+					toggleChrome();
+				}}
 			>
 				<WebtoonView
 					{sections}
@@ -551,6 +634,20 @@
 			{#if loadingNextChapter}
 				<div class="flex items-center justify-center py-8 text-white/50">
 					<Spinner size={20} />
+				</div>
+			{:else if nextChapterError}
+				<div class="flex flex-col items-center gap-2 px-4 py-8 text-center">
+					<p class="text-sm text-white/70">{nextChapterError}</p>
+					<button
+						type="button"
+						class="rounded-full bg-white/10 px-4 py-2 text-sm text-white/90 transition hover:bg-white/20"
+						onclick={() => {
+							nextChapterError = '';
+							void handleNearEnd();
+						}}
+					>
+						Coba lagi
+					</button>
 				</div>
 			{:else if !nextUnloadedChapter && sections.length > 0 && chapters.length > 0}
 				<div class="flex flex-col items-center gap-3 px-4 py-16 text-center text-white/70">

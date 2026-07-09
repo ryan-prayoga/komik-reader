@@ -18,7 +18,7 @@ export interface NavItem {
 /** Top-level destinations — also the mobile bottom-nav slots. */
 export const primaryNav: NavItem[] = [
 	{ href: '/', label: 'Beranda', icon: House },
-	{ href: '/library', label: 'Library', icon: LibraryBig },
+	{ href: '/library', label: 'Koleksi', icon: LibraryBig },
 	{ href: '/search', label: 'Cari', icon: Search },
 	{ href: '/history', label: 'Riwayat', icon: History }
 ];
@@ -26,7 +26,7 @@ export const primaryNav: NavItem[] = [
 /** Secondary destinations — sidebar lower section + mobile "More" sheet. */
 export const manageNav: NavItem[] = [
 	{ href: '/stats', label: 'Statistik', icon: BarChart3 },
-	{ href: '/extensions', label: 'Extensions', icon: Puzzle },
+	{ href: '/extensions', label: 'Ekstensi', icon: Puzzle },
 	{ href: '/downloads', label: 'Unduhan', icon: Download },
 	{ href: '/settings', label: 'Pengaturan', icon: Settings }
 ];

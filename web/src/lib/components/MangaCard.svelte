@@ -12,10 +12,21 @@
 		href: string;
 		/** Show the add/remove-from-library toggle (browse/search contexts). */
 		showLibraryToggle?: boolean;
+		/** 0–100 progress toward finishing the current chapter (library resume). */
+		progressPercent?: number | null;
+		/** Small label over the progress bar, e.g. chapter name. */
+		progressLabel?: string | null;
 		class?: string;
 	}
 
-	let { manga, href, showLibraryToggle = false, class: klass = '' }: Props = $props();
+	let {
+		manga,
+		href,
+		showLibraryToggle = false,
+		progressPercent = null,
+		progressLabel = null,
+		class: klass = ''
+	}: Props = $props();
 
 	// BrowseManga carries genre/status/latestUploadedChapter — plain Manga doesn't.
 	const rich = $derived('genre' in manga ? (manga as BrowseManga) : null);
@@ -134,6 +145,19 @@
 						{genre}
 					</span>
 				{/each}
+			</div>
+		{/if}
+
+		{#if progressLabel || (progressPercent != null && progressPercent > 0)}
+			<div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-2 pb-1.5 pt-6">
+				{#if progressLabel}
+					<p class="truncate text-[10px] font-medium text-white/90">{progressLabel}</p>
+				{/if}
+				{#if progressPercent != null && progressPercent > 0}
+					<div class="mt-1 h-[3px] overflow-hidden rounded-full bg-white/20">
+						<div class="h-full rounded-full bg-accent" style="width: {Math.min(100, progressPercent)}%"></div>
+					</div>
+				{/if}
 			</div>
 		{/if}
 	</div>

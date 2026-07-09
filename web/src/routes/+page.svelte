@@ -8,10 +8,13 @@
 	import { apiUrl } from '$lib/graphql/client';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import ContinueReading from '$lib/components/ContinueReading.svelte';
+	import MangaCard from '$lib/components/MangaCard.svelte';
+	import MangaGrid from '$lib/components/MangaGrid.svelte';
 	import { Button, Card, EmptyState, Spinner, ViewToggle } from '$lib/components/ui';
 	import { langDisplay } from '$lib/lang';
 	import Puzzle from '@lucide/svelte/icons/puzzle';
 	import ServerCrash from '@lucide/svelte/icons/server-crash';
+	import LibraryBig from '@lucide/svelte/icons/library-big';
 
 	// Non-admin users (including guests) use per-device active extension preferences.
 	const filterByActive = $derived($page.data.authEnabled && !$page.data.user?.is_admin);
@@ -30,6 +33,7 @@
 
 	// Continue-reading from local history — deduplicated per manga, latest chapter only.
 	const recent = $derived.by<RecentChapter[]>(() => {
+		if (!localData.ready) return [];
 		const seen = new Set<number>();
 		const out: RecentChapter[] = [];
 		for (const h of localData.history) {
@@ -53,6 +57,13 @@
 		return out;
 	});
 
+	// Recent library bookmarks for the home hub (newest first).
+	const libraryPreview = $derived(
+		localData.ready
+			? [...localData.library].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 6)
+			: []
+	);
+
 	onMount(async () => {
 		try {
 			allSources = await getInstalledSources(preferences.nsfwFilter);
@@ -67,17 +78,17 @@
 <section>
 	<PageHeader title="Beranda" subtitle="Lanjutkan bacaan dan jelajahi source terinstall.">
 		<Button href="/extensions" variant="secondary" size="sm">
-			<Puzzle size={15} /> Extensions
+			<Puzzle size={15} /> Ekstensi
 		</Button>
 	</PageHeader>
 
-	{#if loading}
+	{#if !localData.ready || loading}
 		<div class="flex justify-center py-16 text-muted"><Spinner size={26} /></div>
 	{:else if error}
 		<Card class="border-danger/30 bg-danger/10">
 			<div class="flex items-start gap-3">
 				<ServerCrash size={20} class="mt-0.5 shrink-0 text-danger" />
-				<div>
+				<div class="min-w-0 flex-1">
 					<p class="font-medium text-danger">Server komik sedang tidak tersambung</p>
 					<p class="mt-1 text-sm text-muted">Coba muat ulang beberapa saat lagi.</p>
 					{#if $page.data.user?.is_admin}
@@ -86,14 +97,40 @@
 							Admin: jalankan <code class="rounded bg-surface-hover px-1.5 py-0.5">cd suwayomi && ./bootstrap.sh</code>
 						</p>
 					{/if}
+					<div class="mt-3">
+						<Button size="sm" variant="secondary" onclick={() => location.reload()}>Coba lagi</Button>
+					</div>
 				</div>
 			</div>
 		</Card>
 	{:else}
 		<ContinueReading chapters={recent} seeAllHref="/history" />
 
+		{#if libraryPreview.length > 0}
+			<section class="mb-8">
+				<div class="mb-3 flex items-center justify-between">
+					<h2 class="text-lg font-semibold text-text">Dari koleksi</h2>
+					<a href="/library" class="text-sm text-accent hover:underline">Semua →</a>
+				</div>
+				<MangaGrid>
+					{#each libraryPreview as m (m.mangaId)}
+						<MangaCard
+							manga={{
+								id: m.mangaId,
+								title: m.title,
+								thumbnailUrl: m.thumbnailUrl,
+								inLibrary: true,
+								sourceId: m.sourceId ?? ''
+							}}
+							href="/manga/{m.mangaId}"
+						/>
+					{/each}
+				</MangaGrid>
+			</section>
+		{/if}
+
 		<div class="mb-3 flex items-center justify-between">
-			<h2 class="text-lg font-semibold text-text">Source Terinstall</h2>
+			<h2 class="text-lg font-semibold text-text">Jelajahi source</h2>
 			{#if sources.length > 0}
 				<ViewToggle
 					value={preferences.extViewMode}
@@ -105,20 +142,33 @@
 			<EmptyState
 				title="Belum ada source aktif"
 				description={filterByActive
-					? 'Aktifkan extension dulu untuk menampilkan source baca komik.'
-					: 'Install extension dulu untuk menampilkan source baca komik.'}
+					? 'Aktifkan ekstensi dulu untuk menampilkan source baca komik.'
+					: 'Install ekstensi dulu untuk menampilkan source baca komik.'}
 			>
-				{#snippet icon()}<Puzzle size={32} />{/snippet}
-				{#snippet action()}<Button href="/extensions">
-					{filterByActive ? 'Pilih Extension' : 'Buka Extensions'}
-				</Button>{/snippet}
+				{#snippet icon()}
+					{#if libraryPreview.length === 0 && recent.length === 0}
+						<LibraryBig size={32} />
+					{:else}
+						<Puzzle size={32} />
+					{/if}
+				{/snippet}
+				{#snippet action()}
+					<div class="flex flex-wrap justify-center gap-2">
+						<Button href="/extensions">
+							{filterByActive ? 'Pilih ekstensi' : 'Buka ekstensi'}
+						</Button>
+						{#if libraryPreview.length === 0}
+							<Button href="/search" variant="secondary">Cari komik</Button>
+						{/if}
+					</div>
+				{/snippet}
 			</EmptyState>
 		{:else if preferences.extViewMode === 'grid'}
 			<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
 				{#each sources as source}
 					<a
 						href="/browse/{source.id}"
-						class="flex flex-col items-center gap-2 rounded-[var(--radius)] border border-border bg-surface p-3 text-center shadow-(--shadow-card) transition hover:border-accent/40"
+						class="panel-cut flex flex-col items-center gap-2 border-[1.5px] border-border bg-surface p-3 text-center shadow-(--shadow-card) transition hover:border-accent/40"
 					>
 						<div class="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-bg text-muted">
 							{#if source.iconUrl}
@@ -139,7 +189,7 @@
 				{#each sources as source}
 					<a
 						href="/browse/{source.id}"
-						class="flex items-center gap-4 rounded-[var(--radius)] border border-border bg-surface p-4 shadow-(--shadow-card) transition hover:border-accent/40"
+						class="panel-cut flex items-center gap-4 border-[1.5px] border-border bg-surface p-4 shadow-(--shadow-card) transition hover:border-accent/40"
 					>
 						<div class="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-bg text-muted">
 							{#if source.iconUrl}

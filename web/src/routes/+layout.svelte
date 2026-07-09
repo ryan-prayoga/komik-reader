@@ -31,7 +31,33 @@
 	);
 	const canLogin = $derived(data.authEnabled && !data.user);
 
-	const themeColor = $derived(preferences.resolved === 'dark' ? '#0b0a09' : '#ffffff');
+	const themeColor = $derived(
+		isReader ? '#000000' : preferences.resolved === 'dark' ? '#0b0a09' : '#ffffff'
+	);
+
+	/** Default tab title for static routes; dynamic pages override via their own <svelte:head>. */
+	const defaultTitle = $derived.by(() => {
+		const path = $page.url.pathname;
+		if (path.startsWith('/read/')) return 'Baca · Komik Reader';
+		if (path.startsWith('/manga/')) return 'Detail · Komik Reader';
+		if (path.startsWith('/browse/')) return 'Jelajahi · Komik Reader';
+		if (path.startsWith('/admin')) return 'Admin · Komik Reader';
+		const map: Record<string, string> = {
+			'/': 'Beranda · Komik Reader',
+			'/library': 'Koleksi · Komik Reader',
+			'/search': 'Cari · Komik Reader',
+			'/history': 'Riwayat · Komik Reader',
+			'/stats': 'Statistik · Komik Reader',
+			'/extensions': 'Ekstensi · Komik Reader',
+			'/downloads': 'Unduhan · Komik Reader',
+			'/settings': 'Pengaturan · Komik Reader',
+			'/login': 'Masuk · Komik Reader',
+			'/register': 'Daftar · Komik Reader',
+			'/forgot-password': 'Lupa password · Komik Reader',
+			'/reset-password': 'Reset password · Komik Reader'
+		};
+		return map[path] ?? 'Komik Reader';
+	});
 
 	onMount(async () => {
 		preferences.init();
@@ -64,7 +90,7 @@
 </script>
 
 <svelte:head>
-	<title>Komik Reader</title>
+	<title>{defaultTitle}</title>
 	<meta name="theme-color" content={themeColor} />
 </svelte:head>
 
@@ -95,11 +121,15 @@
 {:else if isReader}
 	<div class="min-h-screen bg-black text-text">
 		{@render children()}
+		<Toast />
 	</div>
 {:else}
 	<div class="min-h-screen bg-bg px-4 py-6 text-text">
 		{@render children()}
+		<Toast />
 	</div>
 {/if}
 
-<UpdatePrompt />
+{#if !isReader}
+	<UpdatePrompt />
+{/if}

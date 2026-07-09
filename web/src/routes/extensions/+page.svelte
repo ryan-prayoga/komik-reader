@@ -150,10 +150,10 @@
 
 <section>
 	<PageHeader
-		title="Extensions"
+		title="Ekstensi"
 		subtitle={admin
-			? 'Kelola extension — install, update, dan lihat popularitas.'
-			: 'Aktifkan extension untuk mulai browse komik.'}
+			? 'Kelola ekstensi — install, update, dan lihat popularitas.'
+			: 'Aktifkan ekstensi untuk mulai browse komik.'}
 	>
 		{#if admin}
 			<Button variant="secondary" size="sm" loading={syncing} onclick={syncCatalog}>

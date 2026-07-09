@@ -79,10 +79,10 @@
 				<p class="text-sm font-medium text-text">Install Komik Reader</p>
 				{#if isIos}
 					<p class="flex items-center gap-1 text-xs text-muted">
-						Tap <Share size={12} class="inline shrink-0" /> lalu "Add to Home Screen".
+						Tap <Share size={12} class="inline shrink-0" /> lalu "Tambah ke Layar Utama".
 					</p>
 				{:else}
-					<p class="text-xs text-muted">Akses cepat dari home screen, seperti app native.</p>
+					<p class="text-xs text-muted">Akses cepat dari layar utama, seperti app native.</p>
 				{/if}
 			</div>
 		</div>

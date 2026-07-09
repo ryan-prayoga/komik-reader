@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { page } from '$app/stores';
 	import Modal from '$lib/components/ui/Modal.svelte';
 
 	// Desktop-only shortcuts: "/" jumps to search, "g" + a letter jumps to a section.
@@ -15,7 +16,7 @@
 		{ keys: '/', label: 'Fokus ke pencarian' },
 		{ keys: '? ', label: 'Tampilkan bantuan ini' },
 		{ keys: 'g lalu h', label: 'Ke Beranda' },
-		{ keys: 'g lalu l', label: 'Ke Library' },
+		{ keys: 'g lalu l', label: 'Ke Koleksi' },
 		{ keys: 'g lalu r', label: 'Ke Riwayat' },
 		{ keys: 'g lalu d', label: 'Ke Unduhan' },
 		{ keys: 'g lalu s', label: 'Ke Pengaturan' }
@@ -37,6 +38,8 @@
 
 	function onkeydown(e: KeyboardEvent) {
 		if (e.metaKey || e.ctrlKey || e.altKey || isEditableTarget(e.target)) return;
+		// Reader has its own surface — don't steal `/` mid-chapter into search.
+		if ($page.url.pathname.startsWith('/read/')) return;
 
 		if (pendingGoto) {
 			pendingGoto = false;

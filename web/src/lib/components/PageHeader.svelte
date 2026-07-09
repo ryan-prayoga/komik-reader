@@ -11,7 +11,7 @@
 
 <div class="mb-6 flex flex-wrap items-end justify-between gap-4">
 	<div class="min-w-0">
-		<h1 class="text-2xl font-semibold tracking-tight text-text">{title}</h1>
+		<h1 class="font-display text-3xl font-bold uppercase tracking-tight text-text">{title}</h1>
 		{#if subtitle}<p class="mt-1 text-sm text-muted">{subtitle}</p>{/if}
 	</div>
 	{#if children}

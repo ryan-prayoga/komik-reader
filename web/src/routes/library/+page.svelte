@@ -80,7 +80,7 @@
 </script>
 
 <section>
-	<PageHeader title="Library" subtitle="Bookmark di perangkat ini. Login untuk sync antar device.">
+	<PageHeader title="Koleksi" subtitle="Bookmark di perangkat ini. Login untuk sync antar device.">
 		{#if syncEngine.loggedIn}
 			<Badge tone="success"><Cloud size={13} /> Tersync</Badge>
 		{:else}
@@ -127,8 +127,8 @@
 		<EmptyState title="Tidak ditemukan" description="Coba ubah pencarian atau kategori." />
 	{:else if items.length === 0}
 		<EmptyState
-			title="Library masih kosong"
-			description="Browse komik lalu tap + Library di halaman detail."
+			title="Koleksi masih kosong"
+			description="Jelajahi komik lalu tap Koleksi di halaman detail."
 		>
 			{#snippet action()}<Button href="/search">Cari komik</Button>{/snippet}
 		</EmptyState>
@@ -136,24 +136,22 @@
 		<MangaGrid>
 			{#each items as manga (manga.mangaId)}
 				{@const last = lastRead(manga.mangaId)}
-				<div>
-					<MangaCard
-						manga={{
-							id: manga.mangaId,
-							title: manga.title,
-							thumbnailUrl: manga.thumbnailUrl,
-							inLibrary: true,
-							sourceId: manga.sourceId ?? ''
-						}}
-						href="/manga/{manga.mangaId}"
-					/>
-					<a
-						href={last && !last.isRead ? `/read/${last.chapterId}` : `/manga/${manga.mangaId}`}
-						class="mt-2 block truncate rounded-lg border border-border bg-surface px-3 py-1.5 text-center text-xs text-muted transition hover:border-accent hover:text-text"
-					>
-						{last && !last.isRead ? `Lanjut: ${last.chapterName}` : last ? 'Baca berikutnya' : 'Mulai baca'}
-					</a>
-				</div>
+				{@const pct =
+					last && !last.isRead && last.totalPages
+						? Math.min(100, Math.round(((last.lastPage + 1) / last.totalPages) * 100))
+						: null}
+				<MangaCard
+					manga={{
+						id: manga.mangaId,
+						title: manga.title,
+						thumbnailUrl: manga.thumbnailUrl,
+						inLibrary: true,
+						sourceId: manga.sourceId ?? ''
+					}}
+					href={last && !last.isRead ? `/read/${last.chapterId}` : `/manga/${manga.mangaId}`}
+					progressLabel={last && !last.isRead ? `Lanjut · ${last.chapterName}` : null}
+					progressPercent={pct}
+				/>
 			{/each}
 		</MangaGrid>
 	{/if}

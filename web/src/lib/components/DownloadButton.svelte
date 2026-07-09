@@ -74,8 +74,11 @@
 	</span>
 {:else}
 	<button
+		type="button"
 		class="inline-flex items-center {cls} border border-border bg-surface-hover transition hover:border-accent disabled:opacity-50"
 		title="Simpan offline"
+		aria-label={loading ? `Mengunduh ${progress}%` : 'Simpan offline'}
+		aria-busy={loading}
 		disabled={loading}
 		onclick={(e) => {
 			e.preventDefault();

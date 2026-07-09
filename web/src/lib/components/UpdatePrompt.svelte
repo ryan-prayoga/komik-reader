@@ -51,7 +51,7 @@
 
 {#if $needRefresh}
 	<div
-		class="fixed bottom-20 left-4 right-4 z-[60] mx-auto flex max-w-lg items-center justify-between gap-4 rounded-[var(--radius)] border border-border bg-surface px-4 py-3 shadow-(--shadow-float) sm:bottom-4 sm:left-auto"
+		class="fixed bottom-36 left-4 right-4 z-[60] mx-auto flex max-w-lg items-center justify-between gap-4 rounded-[var(--radius)] border border-border bg-surface px-4 py-3 shadow-(--shadow-float) sm:bottom-24 sm:left-auto"
 	>
 		<div class="flex items-center gap-3">
 			<div
@@ -64,6 +64,6 @@
 				<p class="text-xs text-muted">Versi baru siap dipakai.</p>
 			</div>
 		</div>
-		<Button variant="primary" size="sm" onclick={reload} loading={reloading}>Reload</Button>
+		<Button variant="primary" size="sm" onclick={reload} loading={reloading}>Muat ulang</Button>
 	</div>
 {/if}

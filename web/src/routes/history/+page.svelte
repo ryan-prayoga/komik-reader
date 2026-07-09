@@ -161,7 +161,14 @@
 		<EmptyState
 			title="Belum ada riwayat"
 			description="Buka chapter di reader untuk mencatat riwayat baca otomatis."
-		/>
+		>
+			{#snippet action()}
+				<div class="flex flex-wrap justify-center gap-2">
+					<Button href="/search">Cari komik</Button>
+					<Button href="/" variant="secondary">Ke beranda</Button>
+				</div>
+			{/snippet}
+		</EmptyState>
 	{:else}
 		{#each sections as section (section.label)}
 			<h2 class="mb-2 mt-6 text-xs font-semibold uppercase tracking-wide text-muted first:mt-0">

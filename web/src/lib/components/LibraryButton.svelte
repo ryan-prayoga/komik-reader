@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { localData } from '$lib/local/data.svelte';
-	import Star from '@lucide/svelte/icons/star';
+	import { showToast } from '$lib/stores/toast.svelte';
+	import Bookmark from '@lucide/svelte/icons/bookmark';
 	import Plus from '@lucide/svelte/icons/plus';
 
 	interface Props {
@@ -26,20 +27,22 @@
 
 	async function toggle() {
 		const inLibrary = await localData.toggleLibrary({ mangaId, title, thumbnailUrl, sourceId });
+		showToast(inLibrary ? 'Ditambahkan ke koleksi.' : 'Dihapus dari koleksi.', 'success');
 		onchange?.(inLibrary);
 	}
 </script>
 
 <button
+	type="button"
 	class="inline-flex items-center {cls} border transition active:scale-95 {saved
 		? 'border-accent bg-accent/15 text-accent hover:bg-accent/25'
 		: 'border-border bg-surface-hover hover:border-accent'}"
 	onclick={toggle}
 >
 	{#if saved}
-		<Star size={iconSize} fill="currentColor" />
+		<Bookmark size={iconSize} fill="currentColor" />
 	{:else}
 		<Plus size={iconSize} />
 	{/if}
-	{saved ? 'Di Library' : 'Library'}
+	{saved ? 'Di koleksi' : 'Koleksi'}
 </button>
