@@ -172,3 +172,23 @@ select {
 		animation: none !important;
 	}
 }
+
+/* Skip-to-content: off-screen until keyboard focus. */
+.skip-link {
+	position: absolute;
+	left: -9999px;
+	top: 0;
+	z-index: 300;
+}
+.skip-link:focus {
+	left: 1rem;
+	top: 1rem;
+	border-radius: var(--radius);
+	background: var(--accent);
+	padding: 0.5rem 1rem;
+	font-size: 0.875rem;
+	font-weight: 500;
+	color: #fff;
+	box-shadow: var(--shadow-lg);
+	outline: none;
+}

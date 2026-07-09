@@ -94,16 +94,25 @@
 <svelte:head>
 	<title>{defaultTitle}</title>
 	<meta name="theme-color" content={themeColor} />
+	<meta
+		name="description"
+		content="Baca komik online lewat Komik Reader — koleksi, offline, dan sync antar perangkat."
+	/>
 </svelte:head>
 
 {#if showShell}
+	<a href="#main-content" class="skip-link">Lewati ke konten</a>
 	<div class="min-h-screen bg-bg text-text lg:grid lg:grid-cols-[auto_1fr] 2xl:grid-cols-[auto_1fr_auto]">
 		<Sidebar user={data.user} {canLogin} />
 
 		<div class="flex min-h-screen min-w-0 flex-col">
 			<MobileTopBar />
 			<OfflineBanner />
-			<main class="mx-auto w-full max-w-6xl flex-1 px-4 pb-24 pt-4 lg:px-8 lg:pb-10 lg:pt-8">
+			<main
+				id="main-content"
+				class="mx-auto w-full max-w-6xl flex-1 px-4 pb-24 pt-4 lg:px-8 lg:pb-10 lg:pt-8"
+				tabindex="-1"
+			>
 				{#key $page.url.pathname}
 					<div in:panelSnap>
 						{@render children()}

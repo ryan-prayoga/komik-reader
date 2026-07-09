@@ -9,11 +9,20 @@
 		open?: boolean;
 		title?: string;
 		side?: 'bottom' | 'right';
+		/** Dark panel for immersive surfaces (e.g. reader settings over black pages). */
+		variant?: 'default' | 'dark';
 		children?: Snippet;
 		onclose?: () => void;
 	}
 
-	let { open = $bindable(false), title, side = 'bottom', children, onclose }: Props = $props();
+	let {
+		open = $bindable(false),
+		title,
+		side = 'bottom',
+		variant = 'default',
+		children,
+		onclose
+	}: Props = $props();
 
 	const titleId = 'sheet-title-' + Math.random().toString(36).slice(2, 8);
 
@@ -51,7 +60,9 @@
 		></button>
 		<div
 			use:trapFocus
-			class="absolute {panelPos} flex flex-col border border-border bg-bg shadow-(--shadow-float)"
+			class="absolute {panelPos} flex flex-col shadow-(--shadow-float) {variant === 'dark'
+				? 'border border-white/10 bg-neutral-950 text-white'
+				: 'border border-border bg-bg'}"
 			style="padding-bottom: env(safe-area-inset-bottom)"
 			transition:fly={flyParams}
 			role="dialog"
@@ -59,19 +70,30 @@
 			aria-labelledby={title ? titleId : undefined}
 		>
 			{#if title}
-				<div class="flex items-center justify-between border-b border-border px-4 py-3">
-					<h2 id={titleId} class="text-sm font-semibold text-text">{title}</h2>
+				<div
+					class="flex items-center justify-between px-4 py-3 {variant === 'dark'
+						? 'border-b border-white/10'
+						: 'border-b border-border'}"
+				>
+					<h2
+						id={titleId}
+						class="text-sm font-semibold {variant === 'dark' ? 'text-white' : 'text-text'}"
+					>
+						{title}
+					</h2>
 					<button
 						type="button"
 						aria-label="Tutup"
-						class="rounded-[var(--radius-sm)] p-1.5 text-muted transition hover:bg-surface hover:text-text"
+						class="rounded-[var(--radius-sm)] p-1.5 transition {variant === 'dark'
+							? 'text-white/60 hover:bg-white/10 hover:text-white'
+							: 'text-muted hover:bg-surface hover:text-text'}"
 						onclick={close}
 					>
 						<X size={18} />
 					</button>
 				</div>
 			{/if}
-			<div class="overflow-y-auto p-4">
+			<div class="overflow-y-auto p-4 {variant === 'dark' ? 'text-white/90' : ''}">
 				{@render children?.()}
 			</div>
 		</div>

@@ -137,7 +137,24 @@
 
 	const bgClass = $derived(BG_CLASS[readerSettings.bg]);
 	const isPaged = $derived(readerSettings.mode !== 'webtoon');
+	// Double spreads need width; track viewport so we never render double on phones.
+	let wideViewport = $state(true);
+	$effect(() => {
+		if (typeof window === 'undefined') return;
+		const mq = window.matchMedia('(min-width: 768px)');
+		const sync = () => {
+			wideViewport = mq.matches;
+			if (!mq.matches && readerSettings.mode === 'double') {
+				readerSettings.set('mode', 'paged');
+			}
+		};
+		sync();
+		mq.addEventListener('change', sync);
+		return () => mq.removeEventListener('change', sync);
+	});
+	const useDouble = $derived(readerSettings.mode === 'double' && wideViewport);
 	const backHref = $derived(mangaId ? `/manga/${mangaId}` : '/history');
+	const showOffline = $derived(offlineMode || !isOnline());
 
 	// Navigation index: paged uses stable URL chapterId (same as original),
 	// webtoon uses currently-viewed section to update nav when infinite-scrolling.
@@ -543,11 +560,52 @@
 		if (mangaTitle) return `${mangaTitle} · Komik Reader`;
 		return 'Baca · Komik Reader';
 	});
+
+	function isEditableTarget(target: EventTarget | null): boolean {
+		if (!(target instanceof HTMLElement)) return false;
+		return (
+			target.tagName === 'INPUT' ||
+			target.tagName === 'TEXTAREA' ||
+			target.tagName === 'SELECT' ||
+			target.isContentEditable
+		);
+	}
+
+	function onReaderKeydown(e: KeyboardEvent) {
+		if (loading || error || isEditableTarget(e.target)) return;
+		if (settingsOpen) return; // Sheet handles Escape
+
+		if (e.key === 'Escape') {
+			e.preventDefault();
+			chromeVisible = !chromeVisible;
+			return;
+		}
+		if (e.key === 'a' || e.key === 'A') {
+			if (isPaged) return;
+			e.preventDefault();
+			autoScroll = !autoScroll;
+			if (autoScroll) chromeVisible = false;
+			return;
+		}
+		if (e.key === '[') {
+			if (!prevChapter) return;
+			e.preventDefault();
+			void goto(`/read/${prevChapter.id}`);
+			return;
+		}
+		if (e.key === ']') {
+			if (!nextChapter) return;
+			e.preventDefault();
+			void goto(`/read/${nextChapter.id}`);
+		}
+	}
 </script>
 
 <svelte:head>
 	<title>{pageTitle}</title>
 </svelte:head>
+
+<svelte:window onkeydown={onReaderKeydown} />
 
 <section class="relative min-h-dvh w-full {bgClass} {chapters.length > 0 ? 'lg:pr-72' : ''}">
 	{#if loading}
@@ -605,7 +663,7 @@
 			<PagedView
 				{pages}
 				bind:current={currentPage}
-				double={readerSettings.mode === 'double'}
+				double={useDouble}
 				doubleOffset={readerSettings.doubleOffset}
 				fit={readerSettings.fit}
 				zoom={readerSettings.zoom}
@@ -688,7 +746,7 @@
 			showSlider={isPaged}
 			bind:current={currentPage}
 			max={pages.length - 1}
-			{offlineMode}
+			offlineMode={showOffline}
 			{scrollProgress}
 			{chapters}
 			currentChapterId={viewedChapterId}

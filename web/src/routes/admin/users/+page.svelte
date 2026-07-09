@@ -1,13 +1,27 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import { Button, Card, Badge } from '$lib/components/ui';
+	import { Button, Card, Badge, Modal } from '$lib/components/ui';
 
 	let { data, form } = $props();
 	let loading = $state<string | null>(null);
 	let resetUserId = $state<number | null>(null);
+	let deleteOpen = $state(false);
+	let pendingDelete = $state<{ id: number; username: string } | null>(null);
+	let deleteFormEl = $state<HTMLFormElement | null>(null);
 
 	const field =
 		'mt-1 w-full rounded-[var(--radius)] border border-border bg-bg px-3 py-2 text-sm text-text outline-none transition focus:border-accent';
+
+	function askDelete(id: number, username: string) {
+		pendingDelete = { id, username };
+		deleteOpen = true;
+	}
+
+	function confirmDelete() {
+		if (!pendingDelete || !deleteFormEl) return;
+		deleteFormEl.requestSubmit();
+		deleteOpen = false;
+	}
 </script>
 
 {#if form?.success}
@@ -96,16 +110,13 @@
 						</Button>
 
 						{#if user.id !== data.currentUserId}
-							<form
-								method="POST"
-								action="?/delete"
-								use:enhance={({ cancel }) => {
-									if (!confirm(`Hapus akun ${user.username}?`)) cancel();
-								}}
+							<Button
+								variant="ghost"
+								size="sm"
+								onclick={() => askDelete(user.id, user.username)}
 							>
-								<input type="hidden" name="user_id" value={user.id} />
-								<Button variant="ghost" size="sm" type="submit">Hapus</Button>
-							</form>
+								Hapus
+							</Button>
 						{/if}
 					</div>
 				</div>
@@ -136,3 +147,30 @@
 		{/each}
 	</div>
 </Card>
+
+<form
+	bind:this={deleteFormEl}
+	method="POST"
+	action="?/delete"
+	class="hidden"
+	use:enhance={() => {
+		loading = 'delete';
+		return async ({ update }) => {
+			loading = null;
+			pendingDelete = null;
+			await update();
+		};
+	}}
+>
+	<input type="hidden" name="user_id" value={pendingDelete?.id ?? ''} />
+</form>
+
+<Modal bind:open={deleteOpen} title="Hapus akun?">
+	<p class="text-sm text-muted">
+		Akun "{pendingDelete?.username ?? ''}" akan dihapus permanen. Tindakan ini tidak bisa dibatalkan.
+	</p>
+	{#snippet footer()}
+		<Button variant="ghost" onclick={() => (deleteOpen = false)}>Batal</Button>
+		<Button variant="danger" loading={loading === 'delete'} onclick={confirmDelete}>Hapus</Button>
+	{/snippet}
+</Modal>

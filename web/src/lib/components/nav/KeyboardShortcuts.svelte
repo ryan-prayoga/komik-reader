@@ -19,7 +19,10 @@
 		{ keys: 'g lalu l', label: 'Ke Koleksi' },
 		{ keys: 'g lalu r', label: 'Ke Riwayat' },
 		{ keys: 'g lalu d', label: 'Ke Unduhan' },
-		{ keys: 'g lalu s', label: 'Ke Pengaturan' }
+		{ keys: 'g lalu s', label: 'Ke Pengaturan' },
+		{ keys: 'Esc', label: 'Reader: tampilkan/sembunyikan kontrol' },
+		{ keys: 'A', label: 'Reader: toggle auto-scroll (webtoon)' },
+		{ keys: '[ ]', label: 'Reader: chapter sebelumnya / berikutnya' }
 	];
 
 	let helpOpen = $state(false);
