@@ -265,7 +265,7 @@
 				onclick={onfullscreen}
 				aria-label={fullscreen ? 'Keluar layar penuh' : 'Layar penuh'}
 				title={fullscreen ? 'Keluar layar penuh' : 'Layar penuh'}
-				class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black/40 transition hover:bg-black/60"
+				class="hidden h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black/40 transition hover:bg-black/60 md:inline-flex"
 			>
 				{#if fullscreen}<Minimize size={16} />{:else}<Maximize size={16} />{/if}
 			</button>
