@@ -598,7 +598,14 @@
 				} else {
 					document.documentElement.scrollTop = 0;
 				}
-				if (pages.length > 0) updateChapterProgress(id, currentPage, false).catch(() => {});
+				// Preserve the already-known read state — this call's job is only to
+				// persist the resume position (currentPage). Hardcoding `false` here
+				// used to flip an already-read chapter back to unread on the server
+				// the instant it was reopened (e.g. jumping back via the chapter
+				// list/dock), even before any scrolling happened.
+				if (pages.length > 0) {
+					updateChapterProgress(id, currentPage, current?.isRead ?? false).catch(() => {});
+				}
 			} catch (e) {
 				if (cancelled) return;
 				const cached = await getCachedPageUrls(id);
