@@ -1,16 +1,21 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
+	import { goto } from '$app/navigation';
+	import { browser } from '$app/environment';
 	import MangaCard from '$lib/components/MangaCard.svelte';
 	import MangaGrid from '$lib/components/MangaGrid.svelte';
 	import GridSkeleton from '$lib/components/GridSkeleton.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
-	import { Button, Select, EmptyState, Spinner } from '$lib/components/ui';
+	import { Button, Select, EmptyState, Spinner, Chip } from '$lib/components/ui';
 	import { fetchBrowseManga, getInstalledSources } from '$lib/graphql/api';
 	import { preferences } from '$lib/preferences.svelte';
 	import Search from '@lucide/svelte/icons/search';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import type { BrowseManga, Source } from '$lib/graphql/types';
+
+	const RECENT_KEY = 'komik-search-recent';
+	const RECENT_MAX = 8;
 
 	const filterByActive = $derived($page.data.authEnabled && !$page.data.user?.is_admin);
 
@@ -29,6 +34,9 @@
 	let hasNext = $state(false);
 	let activeQuery = $state('');
 	let sentinel = $state<HTMLElement | null>(null);
+	let multiProgress = $state({ done: 0, total: 0 });
+	let recent = $state<string[]>([]);
+	let searchGen = 0;
 
 	type SourceResult = { source: Source; mangas: BrowseManga[] };
 	let multiResults = $state<SourceResult[]>([]);
@@ -42,42 +50,93 @@
 				: allSources
 	);
 
-	onMount(async () => {
+	function loadRecent(): string[] {
+		if (!browser) return [];
 		try {
-			allSources = await getInstalledSources(preferences.nsfwFilter);
-		} catch (e) {
-			error = e instanceof Error ? e.message : 'Gagal memuat source';
+			const raw = localStorage.getItem(RECENT_KEY);
+			const list = raw ? (JSON.parse(raw) as string[]) : [];
+			return Array.isArray(list) ? list.filter((s) => typeof s === 'string').slice(0, RECENT_MAX) : [];
+		} catch {
+			return [];
 		}
-	});
+	}
 
-	async function search() {
+	function pushRecent(q: string) {
+		const next = [q, ...recent.filter((r) => r.toLowerCase() !== q.toLowerCase())].slice(
+			0,
+			RECENT_MAX
+		);
+		recent = next;
+		try {
+			localStorage.setItem(RECENT_KEY, JSON.stringify(next));
+		} catch {
+			/* ignore */
+		}
+	}
+
+	function clearRecent() {
+		recent = [];
+		try {
+			localStorage.removeItem(RECENT_KEY);
+		} catch {
+			/* ignore */
+		}
+	}
+
+	function syncUrl(q: string, src: string) {
+		const params = new URLSearchParams();
+		if (q) params.set('q', q);
+		if (src) params.set('source', src);
+		const qs = params.toString();
+		const href = qs ? `/search?${qs}` : '/search';
+		const cur = $page.url.pathname + $page.url.search;
+		if (cur !== href) goto(href, { replaceState: true, keepFocus: true, noScroll: true });
+	}
+
+	async function search(opts: { fromUrl?: boolean } = {}) {
 		const q = query.trim();
 		if (!q) return;
+		const gen = ++searchGen;
 		searched = true;
 		error = '';
 		activeQuery = q;
+		if (!opts.fromUrl) {
+			pushRecent(q);
+			syncUrl(q, sourceId);
+		}
 
 		if (!sourceId) {
 			multiMode = true;
 			loading = true;
 			multiResults = [];
 			const targets = sources;
+			multiProgress = { done: 0, total: targets.length };
 			const CONCURRENCY = 4;
 			let idx = 0;
 			async function worker() {
 				while (idx < targets.length) {
+					if (gen !== searchGen) return;
 					const src = targets[idx++];
 					try {
 						const result = await fetchBrowseManga(src.id, 'SEARCH', 1, q);
-						if (result.mangas.length) multiResults = [...multiResults, { source: src, mangas: result.mangas }];
+						if (gen !== searchGen) return;
+						if (result.mangas.length) {
+							multiResults = [...multiResults, { source: src, mangas: result.mangas }];
+						}
 					} catch {
-						// Skip a source that errors (unreachable, unsupported search) —
-						// the rest of the fan-out keeps going.
+						// Skip a source that errors — fan-out continues.
+					} finally {
+						if (gen === searchGen) {
+							multiProgress = {
+								done: multiProgress.done + 1,
+								total: targets.length
+							};
+						}
 					}
 				}
 			}
 			await Promise.all(Array.from({ length: Math.min(CONCURRENCY, targets.length) }, worker));
-			loading = false;
+			if (gen === searchGen) loading = false;
 			return;
 		}
 
@@ -86,13 +145,15 @@
 		pageNum = 1;
 		try {
 			const result = await fetchBrowseManga(sourceId, 'SEARCH', 1, q);
+			if (gen !== searchGen) return;
 			mangas = result.mangas;
 			hasNext = result.hasNextPage;
 			pageNum = 2;
 		} catch (e) {
+			if (gen !== searchGen) return;
 			error = e instanceof Error ? e.message : 'Gagal mencari';
 		} finally {
-			loading = false;
+			if (gen === searchGen) loading = false;
 		}
 	}
 
@@ -114,8 +175,29 @@
 	/** "Lihat semua" on a source's section — switch to single-source search on that source. */
 	function searchInSource(id: string) {
 		sourceId = id;
-		search();
+		void search();
 	}
+
+	function useRecent(q: string) {
+		query = q;
+		void search();
+	}
+
+	onMount(async () => {
+		recent = loadRecent();
+		const urlQ = $page.url.searchParams.get('q')?.trim() ?? '';
+		const urlSrc = $page.url.searchParams.get('source') ?? '';
+		if (urlQ) query = urlQ;
+		if (urlSrc) sourceId = urlSrc;
+
+		try {
+			allSources = await getInstalledSources(preferences.nsfwFilter);
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Gagal memuat source';
+		}
+
+		if (urlQ) void search({ fromUrl: true });
+	});
 
 	$effect(() => {
 		if (!sentinel) return;
@@ -134,10 +216,10 @@
 	<PageHeader title="Cari" subtitle="Telusuri judul dari source terinstall." />
 
 	<form
-		class="mb-6 flex flex-wrap items-end gap-3"
+		class="mb-4 flex flex-wrap items-end gap-3"
 		onsubmit={(e) => {
 			e.preventDefault();
-			search();
+			void search();
 		}}
 	>
 		<Select bind:value={sourceId} class="w-full sm:w-48" label="Source">
@@ -152,23 +234,44 @@
 				type="search"
 				placeholder="Cari judul manga..."
 				bind:value={query}
-				autofocus
 				class="w-full rounded-[var(--radius)] border border-border bg-surface py-2 pl-9 pr-3 text-sm text-text outline-none transition placeholder:text-muted focus:border-accent"
 			/>
 		</div>
-		<Button type="submit" loading={loading} disabled={!query.trim() || sources.length === 0}>Cari</Button>
+		<Button type="submit" loading={loading} disabled={!query.trim() || sources.length === 0}
+			>Cari</Button
+		>
 	</form>
+
+	{#if !searched && recent.length > 0}
+		<div class="mb-6">
+			<div class="mb-2 flex items-center justify-between">
+				<p class="text-xs font-medium uppercase tracking-wide text-muted">Pencarian terakhir</p>
+				<button
+					type="button"
+					class="text-xs text-muted hover:text-accent"
+					onclick={clearRecent}
+				>
+					Hapus
+				</button>
+			</div>
+			<div class="flex flex-wrap gap-2">
+				{#each recent as r}
+					<Chip onclick={() => useRecent(r)}>{r}</Chip>
+				{/each}
+			</div>
+		</div>
+	{/if}
 
 	{#if sources.length === 0}
 		<EmptyState
 			title="Belum ada source aktif"
 			description={filterByActive
-				? 'Aktifkan extension dulu untuk mulai mencari.'
-				: 'Install extension dulu untuk mulai mencari.'}
+				? 'Aktifkan ekstensi dulu untuk mulai mencari.'
+				: 'Install ekstensi dulu untuk mulai mencari.'}
 		>
 			{#snippet action()}<Button href="/extensions">
-				{filterByActive ? 'Pilih Extension' : 'Install extension'}
-			</Button>{/snippet}
+					{filterByActive ? 'Pilih ekstensi' : 'Install ekstensi'}
+				</Button>{/snippet}
 		</EmptyState>
 	{/if}
 
@@ -181,7 +284,11 @@
 	{#if searched && multiMode}
 		{#if loading}
 			<p class="mb-4 flex items-center gap-2 text-sm text-muted">
-				<Spinner size={14} /> Mencari di {sources.length} source…
+				<Spinner size={14} />
+				Mencari… {multiProgress.done}/{multiProgress.total} source
+				{#if multiResults.length > 0}
+					<span class="text-muted/80">· {multiResults.length} source ada hasil</span>
+				{/if}
 			</p>
 		{/if}
 		{#if !loading && multiResults.length === 0}
@@ -189,7 +296,7 @@
 				title="Tidak ditemukan"
 				description={`Tidak ada hasil untuk "${activeQuery}" di source manapun.`}
 			/>
-		{:else}
+		{:else if multiResults.length > 0}
 			<div class="space-y-8">
 				{#each multiResults as group (group.source.id)}
 					<section>
@@ -220,7 +327,7 @@
 	{:else if loading}
 		<GridSkeleton />
 	{:else if searched && mangas.length === 0 && sources.length > 0}
-		<EmptyState title="Tidak ditemukan" description={`Tidak ada hasil untuk "${query}".`} />
+		<EmptyState title="Tidak ditemukan" description={`Tidak ada hasil untuk "${activeQuery}".`} />
 	{:else if mangas.length > 0}
 		<MangaGrid>
 			{#each mangas as manga (manga.id)}
