@@ -12,6 +12,8 @@
 	import Cloud from '@lucide/svelte/icons/cloud';
 	import FolderTree from '@lucide/svelte/icons/folder-tree';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
+	import Pencil from '@lucide/svelte/icons/pencil';
+	import Check from '@lucide/svelte/icons/check';
 	import Search from '@lucide/svelte/icons/search';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 
@@ -93,6 +95,8 @@
 
 	let manageOpen = $state(false);
 	let newCategoryName = $state('');
+	let editingCatId = $state<number | null>(null);
+	let editingCatName = $state('');
 
 	let confirmCatOpen = $state(false);
 	let pendingCat = $state<{ id: number; name: string } | null>(null);
@@ -102,6 +106,19 @@
 		if (!name) return;
 		await localData.createCategory(name);
 		newCategoryName = '';
+	}
+
+	function startRename(id: number, name: string) {
+		editingCatId = id;
+		editingCatName = name;
+	}
+
+	async function saveRename() {
+		const name = editingCatName.trim();
+		if (!name || editingCatId == null) return;
+		await localData.renameCategory(editingCatId, name);
+		editingCatId = null;
+		editingCatName = '';
 	}
 
 	function askRemoveCategory(id: number, name: string) {
@@ -247,13 +264,43 @@
 		<div class="divide-y divide-border">
 			{#each localData.categories as category (category.id)}
 				<div class="flex items-center justify-between gap-3 py-2">
-					<div class="min-w-0">
-						<p class="text-sm font-medium text-text">{category.name}</p>
-						<p class="text-xs text-muted">{localData.mangaInCategory(category.id).length} manga</p>
+					<div class="min-w-0 flex-1">
+						{#if editingCatId === category.id}
+							<form
+								class="flex gap-2"
+								onsubmit={(e) => {
+									e.preventDefault();
+									void saveRename();
+								}}
+							>
+								<Input bind:value={editingCatName} class="min-w-0 flex-1" />
+								<Button type="submit" size="sm" disabled={!editingCatName.trim()}>
+									<Check size={14} />
+								</Button>
+							</form>
+						{:else}
+							<p class="text-sm font-medium text-text">{category.name}</p>
+							<p class="text-xs text-muted">{localData.mangaInCategory(category.id).length} manga</p>
+						{/if}
 					</div>
-					<Button variant="ghost" size="sm" onclick={() => askRemoveCategory(category.id, category.name)}>
-						<Trash2 size={14} /> Hapus
-					</Button>
+					{#if editingCatId !== category.id}
+						<div class="flex shrink-0 gap-1">
+							<Button
+								variant="ghost"
+								size="sm"
+								onclick={() => startRename(category.id, category.name)}
+							>
+								<Pencil size={14} />
+							</Button>
+							<Button
+								variant="ghost"
+								size="sm"
+								onclick={() => askRemoveCategory(category.id, category.name)}
+							>
+								<Trash2 size={14} />
+							</Button>
+						</div>
+					{/if}
 				</div>
 			{/each}
 		</div>

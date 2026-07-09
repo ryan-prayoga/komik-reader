@@ -358,7 +358,14 @@
 
 					{#if manga.genre?.length}
 						<div class="mt-3 flex flex-wrap gap-1.5">
-							{#each manga.genre as g}<Badge tone="outline">{g}</Badge>{/each}
+							{#each manga.genre as g}
+								<a
+									href="/search?q={encodeURIComponent(g)}"
+									class="inline-flex rounded-full border border-border px-2 py-0.5 text-xs font-medium text-muted transition hover:border-accent/40 hover:text-accent"
+								>
+									{g}
+								</a>
+							{/each}
 						</div>
 					{/if}
 

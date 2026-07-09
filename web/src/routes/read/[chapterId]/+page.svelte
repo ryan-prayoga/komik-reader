@@ -5,7 +5,8 @@
 	import { apiUrl } from '$lib/graphql/client';
 	import { fetchChapterPages, getMangaChapters, updateChapterProgress } from '$lib/graphql/api';
 	import { isOnline } from '$lib/offline/connection.svelte';
-	import { getCachedPageUrls } from '$lib/offline/cache';
+	import { cacheChapterToDevice, getCachedPageUrls } from '$lib/offline/cache';
+	import { getOfflineChapter } from '$lib/offline/db';
 	import { readerSettings, BG_CLASS } from '$lib/reader-settings.svelte';
 	import { localData } from '$lib/local/data.svelte';
 	import { updates } from '$lib/updates/updates.svelte';
@@ -14,6 +15,7 @@
 	import PagedView from '$lib/components/reader/PagedView.svelte';
 	import ReaderControls from '$lib/components/reader/ReaderControls.svelte';
 	import ReaderSettings from '$lib/components/reader/ReaderSettings.svelte';
+	import ReaderCoach from '$lib/components/reader/ReaderCoach.svelte';
 	import Spinner from '$lib/components/ui/Spinner.svelte';
 	import { showToast } from '$lib/stores/toast.svelte';
 	import CheckCircle from '@lucide/svelte/icons/check-circle';
@@ -53,6 +55,8 @@
 	let autoScroll = $state(false);
 	let autoScrollSpeed = $state(readerSettings.autoScrollSpeed);
 	let nextChapterError = $state('');
+	let chapterOffline = $state(false);
+	let downloadProgress = $state<number | null>(null);
 
 	// Keep the screen awake while reading (especially auto-scroll) so the panel
 	// doesn't go black mid-chapter. Best-effort — ignored if unsupported/denied.
@@ -359,6 +363,42 @@
 		chromeVisible = !chromeVisible;
 	}
 
+	async function refreshOfflineFlag(id: number) {
+		const row = await getOfflineChapter(id).catch(() => null);
+		chapterOffline = !!row || offlineMode;
+	}
+
+	async function saveCurrentOffline() {
+		const chId = viewedChapterId || chapterId;
+		if (!mangaId || chapterOffline || downloadProgress != null) return;
+		if (!isOnline()) {
+			showToast('Butuh koneksi untuk mengunduh chapter.', 'error');
+			return;
+		}
+		const name =
+			viewedChapterName || current?.name || chapters.find((c) => c.id === chId)?.name || 'Chapter';
+		downloadProgress = 0;
+		try {
+			await cacheChapterToDevice(
+				chId,
+				mangaId,
+				mangaTitle || 'Manga',
+				name,
+				(d, total) => {
+					downloadProgress = Math.round((d / total) * 100);
+				},
+				mangaThumb,
+				mangaSourceId
+			);
+			chapterOffline = true;
+			showToast('Chapter tersimpan offline.', 'success');
+		} catch (e) {
+			showToast(e instanceof Error ? e.message : 'Gagal simpan offline.', 'error');
+		} finally {
+			downloadProgress = null;
+		}
+	}
+
 	function makeStubChapter(id: number): Chapter {
 		return {
 			id,
@@ -428,6 +468,9 @@
 		loading = true;
 		error = '';
 		offlineMode = false;
+		chapterOffline = false;
+		downloadProgress = null;
+		void refreshOfflineFlag(id);
 		currentPage = 0;
 		initialPage = 0;
 		currentChapterId = id;
@@ -461,6 +504,7 @@
 					if (cached?.length) {
 						pages = cached;
 						offlineMode = true;
+						chapterOffline = true;
 						sections = [{ chapter: makeStubChapter(id), pages: cached }];
 						return;
 					}
@@ -699,6 +743,7 @@
 					gap={readerSettings.gap}
 					onpage={reportWebtoonPage}
 					onnearend={handleNearEnd}
+					onzoom={(z) => readerSettings.set('zoom', z)}
 					{initialPage}
 					resetToken={chapterId}
 				/>
@@ -750,6 +795,9 @@
 			{scrollProgress}
 			{chapters}
 			currentChapterId={viewedChapterId}
+			{chapterOffline}
+			{downloadProgress}
+			ondownload={mangaId && !chapterOffline ? saveCurrentOffline : undefined}
 			onsettings={() => (settingsOpen = true)}
 			onseek={reportPage}
 			autoScroll={!isPaged ? autoScroll : undefined}
@@ -759,6 +807,7 @@
 		/>
 
 		<ReaderSettings bind:open={settingsOpen} />
+		<ReaderCoach isWebtoon={!isPaged} />
 
 	{/if}
 </section>

@@ -14,6 +14,7 @@
 			chapterProgress: number
 		) => void;
 		onnearend?: () => void;
+		onzoom?: (zoom: number) => void;
 		zoom?: number;
 		gap?: boolean;
 		initialPage?: number;
@@ -27,11 +28,39 @@
 		sections,
 		onpage,
 		onnearend,
+		onzoom,
 		zoom = 1,
 		gap = true,
 		initialPage = 0,
 		resetToken
 	}: Props = $props();
+
+	// Pinch-to-zoom (same model as PagedView — parent owns persisted zoom).
+	let pinchStartDist = 0;
+	let pinchStartZoom = 1;
+
+	function pinchDist(e: TouchEvent): number {
+		const [a, b] = [e.touches[0], e.touches[1]];
+		return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+	}
+
+	function onTouchStart(e: TouchEvent) {
+		if (e.touches.length === 2) {
+			pinchStartDist = pinchDist(e);
+			pinchStartZoom = zoom;
+		}
+	}
+	function onTouchMove(e: TouchEvent) {
+		if (e.touches.length === 2 && pinchStartDist > 0 && onzoom) {
+			e.preventDefault();
+			const ratio = pinchDist(e) / pinchStartDist;
+			const z = Math.min(2, Math.max(0.5, +(pinchStartZoom * ratio).toFixed(2)));
+			onzoom(z);
+		}
+	}
+	function onTouchEnd() {
+		pinchStartDist = 0;
+	}
 
 	// Keyed by chapter id (not array index) so entries stay valid when `sections`
 	// is pruned from the front — an index-based key would silently go stale and
@@ -229,8 +258,11 @@
 
 <div
 	bind:this={rootEl}
-	class="mx-auto {gap ? 'space-y-1' : ''}"
+	class="mx-auto touch-pan-y {gap ? 'space-y-1' : ''}"
 	style="max-width: {maxWidth}; overflow-anchor: none;"
+	ontouchstart={onTouchStart}
+	ontouchmove={onTouchMove}
+	ontouchend={onTouchEnd}
 >
 	{#each sections as section, si (section.chapter.id)}
 		{#if si > 0}

@@ -11,6 +11,8 @@
 	import Play from '@lucide/svelte/icons/play';
 	import Pause from '@lucide/svelte/icons/pause';
 	import Search from '@lucide/svelte/icons/search';
+	import Download from '@lucide/svelte/icons/download';
+	import Check from '@lucide/svelte/icons/check';
 	import type { Chapter } from '$lib/graphql/types';
 
 	interface Props {
@@ -30,6 +32,10 @@
 		currentChapterId?: number;
 		autoScroll?: boolean;
 		autoScrollSpeed?: number;
+		/** Chapter already saved offline (or just finished caching). */
+		chapterOffline?: boolean;
+		downloadProgress?: number | null;
+		ondownload?: () => void;
 		onsettings: () => void;
 		onseek?: (index: number) => void;
 		onautoscroll?: () => void;
@@ -53,6 +59,9 @@
 		currentChapterId,
 		autoScroll = false,
 		autoScrollSpeed = 2,
+		chapterOffline = false,
+		downloadProgress = null,
+		ondownload,
 		onsettings,
 		onseek,
 		onautoscroll,
@@ -177,6 +186,27 @@
 					{autoScroll ? 'bg-accent text-white' : 'bg-black/40 hover:bg-black/60'}"
 			>
 				{#if autoScroll}<Pause size={16} />{:else}<Play size={16} />{/if}
+			</button>
+		{/if}
+		{#if ondownload}
+			<button
+				type="button"
+				onclick={ondownload}
+				disabled={chapterOffline || downloadProgress != null}
+				aria-label={chapterOffline ? 'Sudah offline' : 'Simpan offline'}
+				title={chapterOffline ? 'Sudah offline' : 'Simpan offline'}
+				class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition
+					{chapterOffline
+					? 'bg-success/25 text-success'
+					: 'bg-black/40 hover:bg-black/60 disabled:opacity-50'}"
+			>
+				{#if downloadProgress != null}
+					<span class="text-[10px] font-medium tabular-nums">{downloadProgress}%</span>
+				{:else if chapterOffline}
+					<Check size={16} />
+				{:else}
+					<Download size={16} />
+				{/if}
 			</button>
 		{/if}
 		<button
