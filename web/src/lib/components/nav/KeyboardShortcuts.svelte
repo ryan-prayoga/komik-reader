@@ -24,7 +24,8 @@
 		{ keys: 'g lalu s', label: 'Ke Pengaturan' },
 		{ keys: 'Esc', label: 'Reader: tampilkan/sembunyikan kontrol' },
 		{ keys: 'A', label: 'Reader: toggle auto-scroll (webtoon)' },
-		{ keys: '[ ]', label: 'Reader: chapter sebelumnya / berikutnya' }
+		{ keys: '[ ]', label: 'Reader: chapter sebelumnya / berikutnya' },
+		{ keys: 'Volume ±', label: 'Reader paged: ganti halaman (jika didukung)' }
 	];
 
 	let helpOpen = $state(false);

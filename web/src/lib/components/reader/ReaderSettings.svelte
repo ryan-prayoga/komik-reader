@@ -200,12 +200,18 @@
 			</div>
 		</div>
 
-		<div class="rounded-[var(--radius)] border border-white/10 bg-white/5 p-3">
+		<div class="space-y-3 rounded-[var(--radius)] border border-white/10 bg-white/5 p-3">
 			<Switch
 				label="Pin daftar chapter (desktop)"
 				description="Dock kanan tetap terlihat saat chrome disembunyikan."
 				checked={readerSettings.pinDock}
 				onchange={(v) => readerSettings.set('pinDock', v)}
+			/>
+			<Switch
+				label="Crop borders"
+				description="Perbesar sedikit agar tepi putih scan terpotong."
+				checked={readerSettings.cropBorders}
+				onchange={(v) => readerSettings.set('cropBorders', v)}
 			/>
 		</div>
 

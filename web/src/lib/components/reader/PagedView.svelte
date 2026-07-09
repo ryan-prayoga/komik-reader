@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { ReaderFit, ReaderDirection } from '$lib/reader-settings.svelte';
+	import { readerSettings, type ReaderFit, type ReaderDirection } from '$lib/reader-settings.svelte';
 	import { preferences } from '$lib/preferences.svelte';
 	import Spinner from '$lib/components/ui/Spinner.svelte';
 
@@ -120,10 +120,14 @@
 	function onkeydown(e: KeyboardEvent) {
 		const forward = direction === 'rtl' ? 'ArrowLeft' : 'ArrowRight';
 		const back = direction === 'rtl' ? 'ArrowRight' : 'ArrowLeft';
-		if (e.key === forward || e.key === ' ' || e.key === 'PageDown') {
+		// Volume keys: common manga-app mapping (works on some Android WebViews / PWA).
+		const volUp = e.key === 'AudioVolumeUp' || e.code === 'VolumeUp' || e.key === 'VolumeUp';
+		const volDown =
+			e.key === 'AudioVolumeDown' || e.code === 'VolumeDown' || e.key === 'VolumeDown';
+		if (e.key === forward || e.key === ' ' || e.key === 'PageDown' || volDown) {
 			e.preventDefault();
 			next();
-		} else if (e.key === back || e.key === 'PageUp') {
+		} else if (e.key === back || e.key === 'PageUp' || volUp) {
 			e.preventDefault();
 			prev();
 		}
@@ -214,9 +218,12 @@
 	});
 
 	function imgStyle(): string {
-		if (fit === 'width') return `width: min(100%, ${56 * zoom}rem)`;
-		if (fit === 'height') return `max-height: ${88 * zoom}vh; width: auto`;
-		return `transform: scale(${zoom}); transform-origin: center`;
+		// Crop borders: mild extra scale to hide white letterboxing on scans.
+		const crop = readerSettings.cropBorders ? 1.04 : 1;
+		const z = zoom * crop;
+		if (fit === 'width') return `width: min(100%, ${56 * z}rem)`;
+		if (fit === 'height') return `max-height: ${88 * z}vh; width: auto`;
+		return `transform: scale(${z}); transform-origin: center`;
 	}
 </script>
 
@@ -233,7 +240,7 @@
 	<div class="flex items-start justify-center gap-1 sm:items-center">
 		{#each visible as i (i)}
 			<div
-				class="relative flex items-center justify-center {loadedPages[i]
+				class="relative flex items-center justify-center overflow-hidden {loadedPages[i]
 					? ''
 					: 'min-h-[50vh] min-w-[40vw]'}"
 			>

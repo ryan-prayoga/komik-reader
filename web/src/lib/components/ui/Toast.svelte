@@ -17,14 +17,32 @@
 
 <div class="fixed bottom-36 right-4 z-[200] flex flex-col gap-2 sm:bottom-20 lg:bottom-6">
 	{#each toasts as toast (toast.id)}
+		{@const Icon = icons[toast.type]}
 		<div
 			role="alert"
 			transition:fly={{ y: 12, duration: motionDuration(200) }}
-			class="flex min-w-56 max-w-xs items-start gap-3 rounded-[var(--radius)] border px-4 py-3 shadow-(--shadow-float) {colors[toast.type]}"
+			class="flex min-w-56 max-w-xs items-start gap-3 rounded-[var(--radius)] border px-4 py-3 shadow-(--shadow-float) {colors[
+				toast.type
+			]}"
 		>
-			<svelte:component this={icons[toast.type]} size={16} class="mt-0.5 shrink-0" />
-			<p class="flex-1 text-sm">{toast.message}</p>
+			<Icon size={16} class="mt-0.5 shrink-0" />
+			<div class="min-w-0 flex-1">
+				<p class="text-sm">{toast.message}</p>
+				{#if toast.action}
+					<button
+						type="button"
+						class="mt-1.5 text-xs font-semibold underline-offset-2 hover:underline"
+						onclick={() => {
+							toast.action?.onClick();
+							dismissToast(toast.id);
+						}}
+					>
+						{toast.action.label}
+					</button>
+				{/if}
+			</div>
 			<button
+				type="button"
 				class="shrink-0 opacity-60 transition hover:opacity-100"
 				onclick={() => dismissToast(toast.id)}
 				aria-label="Tutup"

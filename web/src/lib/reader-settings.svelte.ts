@@ -20,6 +20,8 @@ type StoredReader = {
 	doubleOffset: boolean; // double mode: show first page alone so spreads pair up
 	/** Keep desktop chapter dock visible even when chrome is hidden. */
 	pinDock: boolean;
+	/** Scale pages slightly to hide white letterboxing/borders on scans. */
+	cropBorders: boolean;
 };
 
 export type MangaReaderPrefs = {
@@ -37,7 +39,8 @@ const DEFAULTS: StoredReader = {
 	autoScrollSpeed: 2,
 	direction: 'ltr',
 	doubleOffset: false,
-	pinDock: false
+	pinDock: false,
+	cropBorders: false
 };
 
 function load(): StoredReader {
@@ -80,6 +83,7 @@ class ReaderSettingsState {
 	direction = $state<ReaderDirection>(this.#initial.direction);
 	doubleOffset = $state(this.#initial.doubleOffset);
 	pinDock = $state(this.#initial.pinDock);
+	cropBorders = $state(this.#initial.cropBorders);
 	/** Manga whose per-title prefs are currently applied (for remember-on-change). */
 	#activeMangaId: number | null = null;
 
@@ -97,7 +101,8 @@ class ReaderSettingsState {
 				autoScrollSpeed: this.autoScrollSpeed,
 				direction: this.direction,
 				doubleOffset: this.doubleOffset,
-				pinDock: this.pinDock
+				pinDock: this.pinDock,
+				cropBorders: this.cropBorders
 			})
 		);
 	}

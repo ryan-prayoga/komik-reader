@@ -78,6 +78,8 @@
 
 	let selected = $state<Set<number>>(new Set());
 	let selectMode = $state(false);
+	/** Deferred hard-deletes so toast "Urungkan" can cancel within the window. */
+	const pendingHardDelete = new Map<number, ReturnType<typeof setTimeout>>();
 
 	const selectedCount = $derived(selected.size);
 
@@ -103,11 +105,42 @@
 		selected = new Set();
 	}
 
-	async function removeFromDevice(chapterId: number) {
-		await removeChapterFromDevice(chapterId);
-		offlineChapters = offlineChapters.filter((c) => c.chapterId !== chapterId);
-		selected = new Set([...selected].filter((id) => id !== chapterId));
-		showToast('Chapter dihapus.', 'success');
+	function scheduleRemove(chapter: OfflineChapter) {
+		// Optimistic UI — hard-delete after toast window unless user undoes.
+		const prev = pendingHardDelete.get(chapter.chapterId);
+		if (prev) clearTimeout(prev);
+
+		offlineChapters = offlineChapters.filter((c) => c.chapterId !== chapter.chapterId);
+		selected = new Set([...selected].filter((id) => id !== chapter.chapterId));
+
+		let undone = false;
+		showToast(`“${chapter.chapterName}” dihapus.`, 'success', {
+			duration: 5500,
+			action: {
+				label: 'Urungkan',
+				onClick: () => {
+					undone = true;
+					const t = pendingHardDelete.get(chapter.chapterId);
+					if (t) {
+						clearTimeout(t);
+						pendingHardDelete.delete(chapter.chapterId);
+					}
+					if (!offlineChapters.some((c) => c.chapterId === chapter.chapterId)) {
+						offlineChapters = [...offlineChapters, chapter].sort(
+							(a, b) => b.cachedAt - a.cachedAt
+						);
+					}
+					showToast('Penghapusan dibatalkan.', 'info');
+				}
+			}
+		});
+
+		const timer = setTimeout(() => {
+			pendingHardDelete.delete(chapter.chapterId);
+			if (undone) return;
+			void removeChapterFromDevice(chapter.chapterId).then(() => refreshStorage());
+		}, 5000);
+		pendingHardDelete.set(chapter.chapterId, timer);
 	}
 
 	function confirmRemoveOne(chapter: OfflineChapter) {
@@ -115,7 +148,7 @@
 			title: 'Hapus chapter offline?',
 			body: `"${chapter.chapterName}" akan dihapus dari perangkat.`,
 			onconfirm: async () => {
-				await removeFromDevice(chapter.chapterId);
+				scheduleRemove(chapter);
 			}
 		});
 	}

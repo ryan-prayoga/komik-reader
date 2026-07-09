@@ -57,6 +57,7 @@
 					<li>· <strong class="text-white/90">Tap kiri/kanan</strong> ganti halaman</li>
 					<li>· <strong class="text-white/90">Tap tengah</strong> kontrol · <strong class="text-white/90">double-tap</strong> zoom</li>
 					<li>· <strong class="text-white/90">Geser / pinch</strong> navigasi & zoom</li>
+					<li>· <strong class="text-white/90">Volume</strong> (jika didukung) ganti halaman</li>
 				{/if}
 				<li>
 					· Keyboard: <kbd class="rounded bg-white/10 px-1">Esc</kbd> kontrol ·

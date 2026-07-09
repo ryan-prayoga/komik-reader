@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import type { Chapter } from '$lib/graphql/types';
 	import { preferences } from '$lib/preferences.svelte';
+	import { readerSettings } from '$lib/reader-settings.svelte';
 	import Spinner from '$lib/components/ui/Spinner.svelte';
 
 	type Section = { chapter: Chapter; pages: string[] };
@@ -254,7 +255,7 @@
 		};
 	});
 
-	const maxWidth = $derived(`${48 * zoom}rem`);
+	const maxWidth = $derived(`${48 * zoom * (readerSettings.cropBorders ? 1.03 : 1)}rem`);
 </script>
 
 <div
@@ -307,7 +308,7 @@
 					alt="Halaman {pi + 1}"
 					class="mx-auto block w-full transition-opacity duration-300 {loadedPages[key]
 						? 'opacity-100'
-						: 'opacity-0'}"
+						: 'opacity-0'} {readerSettings.cropBorders ? 'scale-[1.03]' : ''}"
 					style="aspect-ratio: auto 2 / 3"
 					loading={eagerPages[key] || (si === 0 && pi <= initialPage) ? 'eager' : 'lazy'}
 					decoding="async"
