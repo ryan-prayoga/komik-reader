@@ -1,5 +1,6 @@
 import { browser } from '$app/environment';
 import { getAll, getMeta, putItem, putMany, setMeta } from './db';
+import { planChapterIdMigration, type LiveChapter } from './migrate';
 import type { LocalHistory, LocalLibrary, LocalCategory, LocalReadtime } from './types';
 
 export type LocalDataExport = {
@@ -231,6 +232,29 @@ class LocalData {
 		await putItem('history', next);
 		this.history = this.history.map((h) => (h.chapterId === chapterId ? next : h));
 		this.#changed();
+	}
+
+	/**
+	 * Re-key history rows whose chapterId no longer exists in the live chapter
+	 * list (Suwayomi re-created the row with a new id after a source re-upload)
+	 * onto the live chapter with the same chapterNumber. Returns the migrated
+	 * rows so callers can re-assert read/progress state on the server for the
+	 * new ids. See migrate.ts for the matching rules.
+	 */
+	async migrateChapterIds(mangaId: number, chapters: LiveChapter[]): Promise<LocalHistory[]> {
+		const { writes, migrated, remap } = planChapterIdMigration(
+			mangaId,
+			chapters,
+			this.history,
+			nowMs()
+		);
+		if (!migrated.length) return [];
+		await putMany('history', writes);
+		this.history = this.history
+			.map((h) => remap.get(h.chapterId) ?? h)
+			.sort((a, b) => b.updatedAt - a.updatedAt);
+		this.#changed();
+		return migrated;
 	}
 
 	/** Tombstone every history row for a manga (per-manga delete in Riwayat). */

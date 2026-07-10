@@ -6,8 +6,16 @@
 
 import { browser } from '$app/environment';
 import { updateChapterProgress } from './api';
+import { GraphqlError } from './client';
 
 const STORAGE_KEY = 'komik-reader-pending-progress';
+
+// Guests are blocked from progress writes at the proxy (401) — that's a
+// permanent condition, not a blip. Queueing those would grow the queue
+// unboundedly and, worse, replay stale positions long after the state moved on.
+function isAuthError(e: unknown): boolean {
+	return e instanceof GraphqlError && /^HTTP 40[13]\b/.test(e.message);
+}
 
 type PendingEntry = { chapterId: number; lastPageRead: number; isRead: boolean };
 
@@ -40,8 +48,8 @@ export async function queueChapterProgress(
 				writeQueue(queue);
 			}
 		}
-	} catch {
-		if (!browser) return;
+	} catch (e) {
+		if (!browser || isAuthError(e)) return;
 		const queue = readQueue();
 		// Latest attempt wins — only the most recent position/read-state per
 		// chapter is worth resending.
@@ -66,8 +74,15 @@ export async function replayQueuedProgress(): Promise<void> {
 				const current = readQueue();
 				delete current[entry.chapterId];
 				writeQueue(current);
-			} catch {
-				// still offline / still failing — leave it queued for the next replay
+			} catch (e) {
+				// Auth errors never heal on their own — drop the entry instead of
+				// replaying an ever-staler write forever. Anything else (offline,
+				// timeout) stays queued for the next replay.
+				if (isAuthError(e)) {
+					const current = readQueue();
+					delete current[entry.chapterId];
+					writeQueue(current);
+				}
 			}
 		}
 	} finally {

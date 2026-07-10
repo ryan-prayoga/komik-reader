@@ -656,6 +656,18 @@
 					const fetchedChapters = await getMangaChapters(resolvedMangaId);
 					if (cancelled) return;
 					chapters = fetchedChapters;
+					// Suwayomi may have re-created chapter rows (new ids) since the
+					// history rows were written — re-key them so the read-state guard
+					// and the resume lookup below see this device's actual progress,
+					// and re-assert that state on the server for the new ids.
+					const migrated = await localData.migrateChapterIds(resolvedMangaId, fetchedChapters);
+					for (const m of migrated) void queueChapterProgress(m.chapterId, m.lastPage, m.isRead);
+					if (cancelled) return;
+					if (!initialPage) {
+						initialPage = untrack(
+							() => localData.history.find((h) => h.chapterId === id)?.lastPage ?? 0
+						);
+					}
 					current = chapters.find((c) => c.id === id) ?? null;
 					// This device may have no local history for the chapter (new
 					// device, cleared storage) — fall back to the server-side
