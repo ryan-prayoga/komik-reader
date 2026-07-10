@@ -79,8 +79,14 @@ export default defineConfig({
 				target: 'http://localhost:4567',
 				changeOrigin: true,
 				bypass(req) {
-					// Local SvelteKit server routes — do not proxy to Suwayomi.
-					if (req.url?.startsWith('/api/ext/')) return req.url;
+					// Local SvelteKit server routes — do not proxy to Suwayomi. Must
+					// mirror the exclusions in $lib/server/guard.ts (isSuwayomiApiPath),
+					// or these endpoints 404 against Suwayomi in dev (auth/sync were
+					// unreachable, so login and account sync only worked in prod).
+					const url = req.url ?? '';
+					if (url.startsWith('/api/ext/') || url.startsWith('/api/auth') || url.startsWith('/api/sync')) {
+						return url;
+					}
 					return null;
 				}
 			}
