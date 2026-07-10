@@ -261,6 +261,21 @@
 	// touched again, so the picker/dock kept showing a chapter as unread until a
 	// full reload even after its last page had been marked read server-side.
 	// Patch the local copy the moment we know it's read so the UI reflects it live.
+	// Webtoon's progress bar / page label only get a correct value once the
+	// resume-scroll settles and its own IntersectionObserver reports back — until
+	// then they're stuck at the reset defaults (0%, page 1), which for a chapter
+	// resumed deep in (e.g. page 80/100) visibly looks like it reopened from the
+	// start for as long as that settle takes. Seed them from initialPage right
+	// when pages are known so they're already approximately right; the
+	// observer's first real report only refines them (true scroll-extent
+	// progress vs this page-index estimate).
+	function seedWebtoonProgress(pageCount: number) {
+		if (isPaged || pageCount <= 0) return;
+		const idx = Math.min(Math.max(initialPage, 0), pageCount - 1);
+		currentPageIdx = idx;
+		currentChapterProgress = pageCount > 1 ? idx / (pageCount - 1) : 0;
+	}
+
 	function markChapterReadLocally(id: number) {
 		chapters = chapters.map((c) => (c.id === id ? { ...c, isRead: true } : c));
 		if (current?.id === id) current = { ...current, isRead: true };
@@ -616,6 +631,8 @@
 						if (cancelled) return;
 						current = stub;
 						sections = [{ chapter: stub, pages: cached }];
+						if (initialPage > 0 && initialPage < cached.length) currentPage = initialPage;
+						seedWebtoonProgress(cached.length);
 						return;
 					}
 					throw new Error('Offline — chapter belum disimpan di perangkat.');
@@ -669,6 +686,7 @@
 				} else {
 					document.documentElement.scrollTop = 0;
 				}
+				seedWebtoonProgress(pages.length);
 				// Preserve the already-known read state — this call's job is only to
 				// persist the resume position (currentPage). Hardcoding `false` here
 				// used to flip an already-read chapter back to unread on the server
@@ -695,6 +713,7 @@
 					if (initialPage > 0 && initialPage < cached.length) {
 						currentPage = initialPage;
 					}
+					seedWebtoonProgress(cached.length);
 				} else {
 					error = e instanceof Error ? e.message : 'Gagal memuat reader';
 				}
