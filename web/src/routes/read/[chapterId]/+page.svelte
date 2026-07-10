@@ -290,6 +290,13 @@
 		return localData.history.find((h) => h.chapterId === id)?.isRead ?? false;
 	}
 
+	// Where to reopen a chapter: its saved position while still unfinished,
+	// page 0 once it's been read to the end (re-reads start at the beginning).
+	function resumePageFor(id: number): number {
+		const h = localData.history.find((x) => x.chapterId === id);
+		return h && !h.isRead ? h.lastPage : 0;
+	}
+
 	function reportPage(index: number) {
 		currentPage = index;
 		// Monotonic: never let scrolling back downgrade an already-read chapter
@@ -616,9 +623,12 @@
 				// hydration first; init() is a no-op once already hydrated.
 				await localData.init();
 				if (cancelled) return;
-				initialPage = untrack(
-					() => localData.history.find((h) => h.chapterId === id)?.lastPage ?? 0
-				);
+				// Resume only applies to a chapter someone is partway through. A
+				// FINISHED chapter stores lastPage = its final page, so resuming to it
+				// meant every re-open (next-chapter nav into an already-read chapter,
+				// "lanjutkan baca" from Riwayat) landed on the chapter's END instead
+				// of its start — re-reads must open at page 0.
+				initialPage = untrack(() => resumePageFor(id));
 
 				if (!isOnline()) {
 					const cached = await getCachedPageUrls(id);
@@ -664,16 +674,21 @@
 					for (const m of migrated) void queueChapterProgress(m.chapterId, m.lastPage, m.isRead);
 					if (cancelled) return;
 					if (!initialPage) {
-						initialPage = untrack(
-							() => localData.history.find((h) => h.chapterId === id)?.lastPage ?? 0
-						);
+						initialPage = untrack(() => resumePageFor(id));
 					}
 					current = chapters.find((c) => c.id === id) ?? null;
 					// This device may have no local history for the chapter (new
 					// device, cleared storage) — fall back to the server-side
-					// position other devices reported.
-					if (!initialPage && (current?.lastPageRead ?? 0) > 0) {
-						initialPage = current!.lastPageRead;
+					// position other devices reported. Same rule as resumePageFor:
+					// a finished chapter reopens at the start, not its end.
+					if (
+						!initialPage &&
+						current &&
+						!current.isRead &&
+						!untrack(() => localData.history.find((h) => h.chapterId === id)?.isRead) &&
+						(current.lastPageRead ?? 0) > 0
+					) {
+						initialPage = current.lastPageRead;
 					}
 					// Refresh latest snapshot without clearing badges (unless first seed).
 					if (chapters.length && mangaTitle) {
