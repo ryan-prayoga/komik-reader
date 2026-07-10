@@ -292,10 +292,26 @@
 	const maxWidth = $derived(`${48 * zoom * (readerSettings.cropBorders ? 1.03 : 1)}rem`);
 </script>
 
+<!-- Do NOT set overflow-anchor: none here. A page's placeholder is a guessed
+     2:3 box (see the container's inline style below); once its image decodes
+     — sometimes well after the reader has scrolled past it, on a slow
+     connection — the container resizes to the real aspect ratio. With
+     anchoring disabled that resize has nothing to correct it: it silently
+     shoves every page below (including whatever's on screen right now) up or
+     down. This was the actual cause of the "reader jumps to a random spot
+     mid-chapter" reports — not the chapter-prune logic below, which was
+     already flushSync-compensated and unaffected either way. Native scroll
+     anchoring is the only mechanism that can react before the browser paints
+     it: the resize happens synchronously inside the img's own layout
+     resolution, ahead of any JS 'load' handler, so no onload-driven
+     compensation can ever catch it in time — verified in-browser by forcing a
+     page far behind the reader to swap to a drastically different intrinsic
+     size: anchoring kept the visible position exactly stable, a hand-rolled
+     JS compensation did not (delta measured as 0 — already too late). -->
 <div
 	bind:this={rootEl}
 	class="mx-auto touch-pan-y {gap ? 'space-y-1' : ''}"
-	style="max-width: {maxWidth}; overflow-anchor: none;"
+	style="max-width: {maxWidth};"
 	ontouchstart={onTouchStart}
 	ontouchmove={onTouchMove}
 	ontouchend={onTouchEnd}
