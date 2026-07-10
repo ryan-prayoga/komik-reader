@@ -156,7 +156,8 @@ class LocalData {
 			isRead,
 			updatedAt: nowMs(),
 			deleted: false,
-			timeSpentMs: existing?.timeSpentMs
+			timeSpentMs: existing?.timeSpentMs,
+			totalPages: existing?.totalPages
 		};
 		await putItem('history', row);
 		this.history = [row, ...this.history.filter((h) => h.chapterId !== row.chapterId)].sort(
@@ -199,7 +200,8 @@ class LocalData {
 				isRead,
 				updatedAt: base + i,
 				deleted: false,
-				timeSpentMs: existing?.timeSpentMs
+				timeSpentMs: existing?.timeSpentMs,
+				totalPages: existing?.totalPages
 			};
 		});
 		await putMany('history', rows);
