@@ -59,6 +59,9 @@
 	let chapterOffline = $state(false);
 	let downloadProgress = $state<number | null>(null);
 	let isFullscreen = $state(false);
+	// The actual scroll surface for webtoon mode (position:fixed, self-scrolling —
+	// see the effect below for why this replaced scrolling the document itself).
+	let webtoonScrollEl = $state<HTMLDivElement | undefined>();
 
 	// Keep the screen awake while reading (especially auto-scroll) so the panel
 	// doesn't go black mid-chapter. Best-effort — ignored if unsupported/denied.
@@ -105,12 +108,16 @@
 				const delta = ((autoScrollSpeed * 60) / 1000) * (time - lastTime) + remainder;
 				const whole = Math.trunc(delta);
 				remainder = delta - whole;
-				if (whole !== 0) window.scrollBy(0, whole);
+				const el = webtoonScrollEl;
+				if (!el) {
+					lastTime = time;
+					rafId = requestAnimationFrame(step);
+					return;
+				}
+				if (whole !== 0) el.scrollBy(0, whole);
 
 				// Stop cleanly at end of content when there's nothing left to load.
-				const doc = document.documentElement;
-				const atEnd =
-					window.scrollY + window.innerHeight >= doc.scrollHeight - 8;
+				const atEnd = el.scrollTop + el.clientHeight >= el.scrollHeight - 8;
 				if (atEnd && !loadingNextChapter && !nextUnloadedChapter) {
 					autoScroll = false;
 					showToast('Sudah di akhir bacaan.', 'info');
@@ -169,8 +176,10 @@
 		if (id === chapterId) pages = fresh;
 	}
 
-	// Webtoon scrolls the document itself — hide the root scrollbar while in
-	// webtoon mode so infinite scroll reads as one seamless surface.
+	// Belt-and-suspenders: webtoon's real scroll surface is the fixed
+	// `webtoonScrollEl` container below (its own `.no-scrollbar` class hides its
+	// bar) — this just hides the document's own bar too, for the brief window
+	// before that container mounts.
 	$effect(() => {
 		if (typeof document === 'undefined' || isPaged) return;
 		document.documentElement.classList.add('no-scrollbar');
@@ -412,7 +421,7 @@
 			const topAfter = document.querySelector(anchorSelector)?.getBoundingClientRect().top;
 			if (topAfter === undefined) return;
 			const delta = topAfter - topBefore;
-			if (delta !== 0) window.scrollBy(0, delta);
+			if (delta !== 0) webtoonScrollEl?.scrollBy(0, delta);
 		});
 	});
 
@@ -514,16 +523,20 @@
 	});
 
 	// Idle heuristic in webtoon: any scroll/touch/keypress counts as activity so
-	// autoscroll doesn't trip the 5-min idle cutoff mid-stream.
+	// autoscroll doesn't trip the 5-min idle cutoff mid-stream. `scroll` is
+	// listened on webtoonScrollEl specifically — it's the actual scroll surface
+	// (position:fixed, self-scrolling) and scroll events on it don't bubble to
+	// window.
 	$effect(() => {
 		if (typeof window === 'undefined') return;
 		const onActivity = () => readingTimer.pingActivity();
-		window.addEventListener('scroll', onActivity, { passive: true });
+		const scrollTarget = webtoonScrollEl;
+		scrollTarget?.addEventListener('scroll', onActivity, { passive: true });
 		window.addEventListener('keydown', onActivity);
 		window.addEventListener('touchstart', onActivity, { passive: true });
 		window.addEventListener('pointerdown', onActivity);
 		return () => {
-			window.removeEventListener('scroll', onActivity);
+			scrollTarget?.removeEventListener('scroll', onActivity);
 			window.removeEventListener('keydown', onActivity);
 			window.removeEventListener('touchstart', onActivity);
 			window.removeEventListener('pointerdown', onActivity);
@@ -841,67 +854,79 @@
 				onrefreshpages={() => refreshChapterPages(chapterId)}
 			/>
 		{:else}
-			<!-- Tap toggles chrome only when the finger didn't scroll (avoids whole-page
-			     role=button fighting with intentional scroll / auto-scroll). -->
-			<!-- eslint-disable-next-line svelte/valid-compile -->
+			<!-- The real scroll surface for webtoon: position:fixed takes it out of
+			     document flow entirely, so html/body never grow tall and never
+			     accumulate a scroll offset of their own. That's what actually gets rid
+			     of the scrollbar on iOS Safari — hiding it via ::-webkit-scrollbar/
+			     scrollbar-width (see .no-scrollbar) has no effect on the document's own
+			     top-level scroll there, only on a div that owns its own scrolling. -->
 			<div
-				class="w-full cursor-default"
-				role="presentation"
-				onpointerdown={(e) => {
-					(e.currentTarget as HTMLElement).dataset.ptrY = String(e.clientY);
-					(e.currentTarget as HTMLElement).dataset.ptrX = String(e.clientX);
-				}}
-				onclick={(e) => {
-					if ((e.target as HTMLElement).closest('button, a')) return;
-					const el = e.currentTarget as HTMLElement;
-					const y0 = Number(el.dataset.ptrY ?? e.clientY);
-					const x0 = Number(el.dataset.ptrX ?? e.clientX);
-					if (Math.hypot(e.clientX - x0, e.clientY - y0) > 12) return;
-					toggleChrome();
-				}}
+				class="reader-webtoon-scroll no-scrollbar fixed inset-0 {reserveDock ? 'lg:right-72' : ''}"
+				data-reader-scroll
+				bind:this={webtoonScrollEl}
 			>
-				<WebtoonView
-					{sections}
-					zoom={readerSettings.zoom}
-					gap={readerSettings.gap}
-					onpage={reportWebtoonPage}
-					onnearend={handleNearEnd}
-					onzoom={(z) => readerSettings.set('zoom', z)}
-					{initialPage}
-					resetToken={`${chapterId}:${navNonce}`}
-					onrefreshpages={refreshChapterPages}
-				/>
+				<!-- Tap toggles chrome only when the finger didn't scroll (avoids whole-page
+				     role=button fighting with intentional scroll / auto-scroll). -->
+				<!-- eslint-disable-next-line svelte/valid-compile -->
+				<div
+					class="w-full cursor-default"
+					role="presentation"
+					onpointerdown={(e) => {
+						(e.currentTarget as HTMLElement).dataset.ptrY = String(e.clientY);
+						(e.currentTarget as HTMLElement).dataset.ptrX = String(e.clientX);
+					}}
+					onclick={(e) => {
+						if ((e.target as HTMLElement).closest('button, a')) return;
+						const el = e.currentTarget as HTMLElement;
+						const y0 = Number(el.dataset.ptrY ?? e.clientY);
+						const x0 = Number(el.dataset.ptrX ?? e.clientX);
+						if (Math.hypot(e.clientX - x0, e.clientY - y0) > 12) return;
+						toggleChrome();
+					}}
+				>
+					<WebtoonView
+						{sections}
+						zoom={readerSettings.zoom}
+						gap={readerSettings.gap}
+						onpage={reportWebtoonPage}
+						onnearend={handleNearEnd}
+						onzoom={(z) => readerSettings.set('zoom', z)}
+						{initialPage}
+						resetToken={`${chapterId}:${navNonce}`}
+						onrefreshpages={refreshChapterPages}
+					/>
+				</div>
+				{#if loadingNextChapter}
+					<div class="flex items-center justify-center py-8 text-white/50">
+						<Spinner size={20} />
+					</div>
+				{:else if nextChapterError}
+					<div class="flex flex-col items-center gap-2 px-4 py-8 text-center">
+						<p class="text-sm text-white/70">{nextChapterError}</p>
+						<button
+							type="button"
+							class="rounded-full bg-white/10 px-4 py-2 text-sm text-white/90 transition hover:bg-white/20"
+							onclick={() => {
+								nextChapterError = '';
+								void handleNearEnd();
+							}}
+						>
+							Coba lagi
+						</button>
+					</div>
+				{:else if !nextUnloadedChapter && sections.length > 0 && chapters.length > 0}
+					<div class="flex flex-col items-center gap-3 px-4 py-16 text-center text-white/70">
+						<CheckCircle size={28} class="text-success" />
+						<p class="text-sm font-medium text-white/80">Kamu sudah di chapter terbaru</p>
+						<a
+							href={backHref}
+							class="rounded-full bg-white/10 px-5 py-2 text-sm text-white/80 transition hover:bg-white/20"
+						>
+							Kembali ke detail
+						</a>
+					</div>
+				{/if}
 			</div>
-			{#if loadingNextChapter}
-				<div class="flex items-center justify-center py-8 text-white/50">
-					<Spinner size={20} />
-				</div>
-			{:else if nextChapterError}
-				<div class="flex flex-col items-center gap-2 px-4 py-8 text-center">
-					<p class="text-sm text-white/70">{nextChapterError}</p>
-					<button
-						type="button"
-						class="rounded-full bg-white/10 px-4 py-2 text-sm text-white/90 transition hover:bg-white/20"
-						onclick={() => {
-							nextChapterError = '';
-							void handleNearEnd();
-						}}
-					>
-						Coba lagi
-					</button>
-				</div>
-			{:else if !nextUnloadedChapter && sections.length > 0 && chapters.length > 0}
-				<div class="flex flex-col items-center gap-3 px-4 py-16 text-center text-white/70">
-					<CheckCircle size={28} class="text-success" />
-					<p class="text-sm font-medium text-white/80">Kamu sudah di chapter terbaru</p>
-					<a
-						href={backHref}
-						class="rounded-full bg-white/10 px-5 py-2 text-sm text-white/80 transition hover:bg-white/20"
-					>
-						Kembali ke detail
-					</a>
-				</div>
-			{/if}
 		{/if}
 
 		<ReaderControls

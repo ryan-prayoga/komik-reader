@@ -165,13 +165,22 @@ select {
 	background: var(--border);
 	border-radius: 9999px;
 }
-/* Reader (webtoon) toggles this on <html> to hide the document scrollbar. */
+/* Reader (webtoon) toggles this on <html> to hide the document scrollbar, and
+   it's also applied to .reader-webtoon-scroll below (the real scroll surface). */
 .no-scrollbar {
 	scrollbar-width: none;
 	-ms-overflow-style: none;
 }
 .no-scrollbar::-webkit-scrollbar {
 	display: none;
+}
+/* Webtoon's actual scroll surface (position:fixed, taken out of document flow
+   so html/body never grow tall). -webkit-overflow-scrolling gives it the
+   inertial/momentum scroll iOS otherwise only applies to the document. */
+.reader-webtoon-scroll {
+	overflow-y: auto;
+	overflow-x: hidden;
+	-webkit-overflow-scrolling: touch;
 }
 
 @media (prefers-reduced-motion: reduce) {
