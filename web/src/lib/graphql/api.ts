@@ -265,7 +265,7 @@ export async function fetchChapters(mangaId: number): Promise<Chapter[]> {
 		`mutation($mangaId: Int!) {
 			fetchChapters(input: { mangaId: $mangaId }) {
 				chapters {
-					id name chapterNumber isRead isDownloaded lastPageRead uploadDate sourceOrder
+					id name chapterNumber isRead isDownloaded lastPageRead uploadDate sourceOrder pageCount
 				}
 			}
 		}`,
@@ -311,7 +311,7 @@ export async function getMangaChapters(mangaId: number): Promise<Chapter[]> {
 			manga(id: $id) {
 				chapters {
 					nodes {
-						id name chapterNumber isRead isDownloaded lastPageRead uploadDate sourceOrder
+						id name chapterNumber isRead isDownloaded lastPageRead uploadDate sourceOrder pageCount
 					}
 				}
 			}

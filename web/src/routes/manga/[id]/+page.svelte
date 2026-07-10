@@ -4,6 +4,7 @@
 	import { goto, afterNavigate } from '$app/navigation';
 	import { apiUrl } from '$lib/graphql/client';
 	import { fetchChapters, fetchMangaDetail, markChapterRead, markChaptersRead } from '$lib/graphql/api';
+	import { queueChapterProgress } from '$lib/graphql/progress-queue';
 	import DownloadButton from '$lib/components/DownloadButton.svelte';
 	import CategoryPicker from '$lib/components/CategoryPicker.svelte';
 	import LibraryButton from '$lib/components/LibraryButton.svelte';
@@ -55,9 +56,26 @@
 
 	// Local read-state overrides the server `isRead` (works for guests, syncs if
 	// logged in). A chapter is "read" if a local history row says so, else server.
-	const readMap = $derived(new Map(localData.history.map((h) => [h.chapterId, h.isRead])));
+	const historyMap = $derived(new Map(localData.history.map((h) => [h.chapterId, h])));
+
+	// 1–99% for a chapter someone started but didn't finish; null otherwise.
+	// Local history is the freshest source; server lastPageRead/pageCount covers
+	// chapters read on other devices (pageCount is -1/0 until ever opened).
+	function progressOf(c: Chapter, read: boolean): number | null {
+		if (read) return null;
+		const h = historyMap.get(c.id);
+		const lastPage = h ? h.lastPage : c.lastPageRead;
+		const total = h?.totalPages ?? ((c.pageCount ?? 0) > 0 ? c.pageCount! : undefined);
+		if (!total || lastPage <= 0) return null;
+		return Math.max(1, Math.min(99, Math.round(((lastPage + 1) / total) * 100)));
+	}
+
 	const merged = $derived(
-		chapters.map((c) => ({ ...c, read: readMap.has(c.id) ? !!readMap.get(c.id) : c.isRead }))
+		chapters.map((c) => {
+			const h = historyMap.get(c.id);
+			const read = h ? h.isRead : c.isRead;
+			return { ...c, read, progress: progressOf(c, read) };
+		})
 	);
 
 	const unreadCount = $derived(merged.filter((c) => !c.read).length);
@@ -151,9 +169,21 @@
 		);
 	}
 
+	// fetchChapters re-scrapes the source, and Suwayomi re-creates chapter rows
+	// (new id, isRead reset) when a chapter's URL changed upstream — without
+	// this, every such re-create silently flips an already-read chapter back to
+	// unread. Re-key local history onto the new ids, then re-assert the read
+	// state / resume position on the server for those ids.
+	async function migrateOrphanedHistory() {
+		await localData.init();
+		const migrated = await localData.migrateChapterIds(mangaId, chapters);
+		for (const m of migrated) void queueChapterProgress(m.chapterId, m.lastPage, m.isRead);
+	}
+
 	async function load() {
 		manga = await fetchMangaDetail(mangaId);
 		chapters = await fetchChapters(mangaId);
+		await migrateOrphanedHistory();
 		// Opening detail = user has seen the current list; clears "update" badge.
 		await seedUpdates(true);
 	}
@@ -164,6 +194,7 @@
 		refreshing = true;
 		try {
 			chapters = await fetchChapters(mangaId);
+			await migrateOrphanedHistory();
 			// Refresh from source — update latest without auto-clearing if still unread?
 			// User explicitly refreshed while on detail → mark seen.
 			await seedUpdates(true);
@@ -397,7 +428,9 @@
 								<BookOpen size={18} class="shrink-0" />
 								<span class="flex min-w-0 flex-col leading-tight">
 									<span class="font-semibold">{startLabel}</span>
-									<span class="truncate text-xs font-normal text-white/80">{readTarget.name}</span>
+									<span class="truncate text-xs font-normal text-white/80">
+										{readTarget.name}{#if readTarget.progress != null}<span class="whitespace-nowrap">&nbsp;·&nbsp;dibaca {readTarget.progress}%</span>{/if}
+									</span>
 								</span>
 							</Button>
 						{/if}
@@ -564,6 +597,19 @@
 												<span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-success/15 text-success">
 													<Check size={13} />
 												</span>
+											{:else if chapter.progress != null}
+												<!-- Partial-read ring: stroke sweeps clockwise from 12 o'clock by progress %. -->
+												<span class="relative flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-warning/15">
+													<svg viewBox="0 0 24 24" class="h-6 w-6 -rotate-90" aria-hidden="true">
+														<circle cx="12" cy="12" r="10" fill="none" stroke="var(--warning)" stroke-opacity="0.25" stroke-width="2.5" />
+														<circle
+															cx="12" cy="12" r="10" fill="none"
+															stroke="var(--warning)" stroke-width="2.5" stroke-linecap="round"
+															stroke-dasharray="62.83"
+															stroke-dashoffset={62.83 * (1 - chapter.progress / 100)}
+														/>
+													</svg>
+												</span>
 											{:else}
 												<span class="h-2 w-2 shrink-0 rounded-full bg-accent"></span>
 											{/if}
@@ -571,8 +617,10 @@
 												<p class="truncate text-sm font-medium {chapter.read ? 'text-muted' : 'text-text'}">
 													{chapter.name}
 												</p>
-												{#if formatDate(chapter.uploadDate)}
-													<p class="text-xs text-muted">{formatDate(chapter.uploadDate)}</p>
+												{#if formatDate(chapter.uploadDate) || chapter.progress != null}
+													<p class="text-xs text-muted">
+														{formatDate(chapter.uploadDate)}{#if chapter.progress != null}{#if formatDate(chapter.uploadDate)}&nbsp;·&nbsp;{/if}<span class="font-medium text-warning">dibaca {chapter.progress}%</span>{/if}
+													</p>
 												{/if}
 											</div>
 										</a>
@@ -643,7 +691,9 @@
 					<BookOpen size={16} class="shrink-0" />
 					<span class="flex min-w-0 flex-col leading-tight">
 						<span class="text-sm font-semibold">{startLabel}</span>
-						<span class="truncate text-[11px] font-normal text-white/80">{readTarget.name}</span>
+						<span class="truncate text-[11px] font-normal text-white/80">
+							{readTarget.name}{#if readTarget.progress != null}<span class="whitespace-nowrap">&nbsp;·&nbsp;dibaca {readTarget.progress}%</span>{/if}
+						</span>
 					</span>
 				</Button>
 			</div>

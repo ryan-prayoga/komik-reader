@@ -77,6 +77,8 @@ export type Chapter = {
 	lastPageRead: number;
 	uploadDate: string;
 	sourceOrder: number;
+	/** Total pages known by the server; -1/0 until the chapter's pages were ever fetched. */
+	pageCount?: number;
 };
 
 export type FetchMangaType = 'POPULAR' | 'LATEST' | 'SEARCH';
