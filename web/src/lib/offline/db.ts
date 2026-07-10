@@ -14,18 +14,33 @@ const DB_NAME = 'komik-reader-offline';
 const DB_VERSION = 1;
 const STORE = 'chapters';
 
+// Reused across calls instead of opening a fresh connection per operation.
+let dbPromise: Promise<IDBDatabase> | null = null;
+
 function openDb(): Promise<IDBDatabase> {
-	return new Promise((resolve, reject) => {
-		const req = indexedDB.open(DB_NAME, DB_VERSION);
-		req.onerror = () => reject(req.error);
-		req.onsuccess = () => resolve(req.result);
-		req.onupgradeneeded = () => {
-			const db = req.result;
-			if (!db.objectStoreNames.contains(STORE)) {
-				db.createObjectStore(STORE, { keyPath: 'chapterId' });
-			}
-		};
-	});
+	if (!dbPromise) {
+		dbPromise = new Promise((resolve, reject) => {
+			const req = indexedDB.open(DB_NAME, DB_VERSION);
+			req.onerror = () => {
+				dbPromise = null;
+				reject(req.error);
+			};
+			req.onsuccess = () => {
+				const db = req.result;
+				db.onclose = () => {
+					dbPromise = null;
+				};
+				resolve(db);
+			};
+			req.onupgradeneeded = () => {
+				const db = req.result;
+				if (!db.objectStoreNames.contains(STORE)) {
+					db.createObjectStore(STORE, { keyPath: 'chapterId' });
+				}
+			};
+		});
+	}
+	return dbPromise;
 }
 
 export async function saveOfflineChapter(chapter: OfflineChapter): Promise<void> {

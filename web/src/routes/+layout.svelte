@@ -7,6 +7,7 @@
 	import { preferences } from '$lib/preferences.svelte';
 	import { localData } from '$lib/local/data.svelte';
 	import { syncEngine } from '$lib/local/sync.svelte';
+	import { replayQueuedProgress } from '$lib/graphql/progress-queue';
 	import { updates } from '$lib/updates/updates.svelte';
 	import InstallPrompt from '$lib/components/InstallPrompt.svelte';
 	import UpdatePrompt from '$lib/components/UpdatePrompt.svelte';
@@ -65,6 +66,11 @@
 		await localData.init();
 		await updates.init();
 		syncEngine.start(!!data.user);
+
+		// Failed chapter-progress writes (offline/timeout) are queued in
+		// localStorage — replay them once here and again on every reconnect.
+		void replayQueuedProgress();
+		window.addEventListener('online', () => void replayQueuedProgress());
 
 		// iOS/Android standalone PWAs reopen at whatever path the OS last saw
 		// (not the manifest start_url) — redirect that back to Home. But ONLY on a

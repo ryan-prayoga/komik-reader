@@ -3,7 +3,8 @@
 	import { goto } from '$app/navigation';
 	import { untrack, tick } from 'svelte';
 	import { apiUrl } from '$lib/graphql/client';
-	import { fetchChapterPages, getMangaChapters, updateChapterProgress } from '$lib/graphql/api';
+	import { fetchChapterPages, getMangaChapters } from '$lib/graphql/api';
+	import { queueChapterProgress } from '$lib/graphql/progress-queue';
 	import { isOnline } from '$lib/offline/connection.svelte';
 	import { cacheChapterToDevice, getCachedPageUrls } from '$lib/offline/cache';
 	import { getOfflineChapter } from '$lib/offline/db';
@@ -140,6 +141,42 @@
 		history.replaceState(history.state, '', `/read/${id}`);
 	}
 
+	// Because the sync above is a NATIVE replaceState, SvelteKit's
+	// $page.params.chapterId stays pinned to the chapter that was first opened.
+	// goto() back to that chapter is then a same-params no-op: the reset $effect
+	// never reruns and the reader looks frozen until a manual reload. All chapter
+	// navigation goes through here — a stale-param target forces the reset by
+	// bumping navNonce (which the reset $effect and resetToken both track).
+	let navNonce = $state(0);
+	function navigateToChapter(id: number) {
+		if (id === chapterId) {
+			history.replaceState(history.state, '', `/read/${id}`);
+			navNonce++;
+		} else {
+			void goto(`/read/${id}`);
+		}
+	}
+
+	// Suwayomi page URLs can expire; same-URL retries never recover from that.
+	// The views escalate here after repeated failures to swap in fresh URLs.
+	async function refreshChapterPages(id: number) {
+		if (!isOnline()) {
+			showToast('Butuh koneksi untuk memuat ulang halaman.', 'error');
+			throw new Error('offline');
+		}
+		const fresh = (await fetchChapterPages(id)).map((p) => apiUrl(p));
+		sections = sections.map((s) => (s.chapter.id === id ? { ...s, pages: fresh } : s));
+		if (id === chapterId) pages = fresh;
+	}
+
+	// Webtoon scrolls the document itself — hide the root scrollbar while in
+	// webtoon mode so infinite scroll reads as one seamless surface.
+	$effect(() => {
+		if (typeof document === 'undefined' || isPaged) return;
+		document.documentElement.classList.add('no-scrollbar');
+		return () => document.documentElement.classList.remove('no-scrollbar');
+	});
+
 	const bgClass = $derived(BG_CLASS[readerSettings.bg]);
 	const isPaged = $derived(readerSettings.mode !== 'webtoon');
 	// Double spreads need width; track viewport so we never render double on phones.
@@ -220,14 +257,23 @@
 		if (current?.id === id) current = { ...current, isRead: true };
 	}
 
+	// A chapter can be read-only-locally (guest, offline, another device that
+	// never synced to Suwayomi) — the `chapters` snapshot only reflects the
+	// SERVER's isRead. Checking local history too means a chapter read on this
+	// device never gets reported as unread again, even before any server sync.
+	function isChapterReadAnywhere(id: number): boolean {
+		if (chapters.find((c) => c.id === id)?.isRead) return true;
+		return localData.history.find((h) => h.chapterId === id)?.isRead ?? false;
+	}
+
 	function reportPage(index: number) {
 		currentPage = index;
 		// Monotonic: never let scrolling back downgrade an already-read chapter
 		// back to unread (isRead here is recomputed from raw page position on
 		// every call, so without this guard it would flip false again).
-		const alreadyRead = chapters.find((c) => c.id === chapterId)?.isRead ?? false;
+		const alreadyRead = isChapterReadAnywhere(chapterId);
 		const isRead = alreadyRead || index >= pages.length - 1;
-		updateChapterProgress(chapterId, index, isRead).catch(() => {});
+		void queueChapterProgress(chapterId, index, isRead);
 		if (isRead) markChapterReadLocally(chapterId);
 		if (mangaId) {
 			localData.recordHistory({
@@ -264,8 +310,8 @@
 		const idx = sections.findIndex((s) => s.chapter.id === sectionChapterId);
 		if (idx <= 0) return;
 		for (const s of sections.slice(0, idx)) {
-			if (chapters.find((c) => c.id === s.chapter.id)?.isRead) continue;
-			updateChapterProgress(s.chapter.id, s.pages.length - 1, true).catch(() => {});
+			if (isChapterReadAnywhere(s.chapter.id)) continue;
+			void queueChapterProgress(s.chapter.id, s.pages.length - 1, true);
 			markChapterReadLocally(s.chapter.id);
 			if (mangaId) {
 				localData.recordHistory({
@@ -310,9 +356,9 @@
 		lastReportedPageKey = pageKey;
 		// Monotonic: same guard as reportPage — don't downgrade a read chapter
 		// back to unread when re-scrolling an earlier page.
-		const alreadyRead = chapters.find((c) => c.id === section.chapter.id)?.isRead ?? false;
+		const alreadyRead = isChapterReadAnywhere(section.chapter.id);
 		const isRead = alreadyRead || pageIdx >= section.pages.length - 1;
-		updateChapterProgress(section.chapter.id, pageIdx, isRead).catch(() => {});
+		void queueChapterProgress(section.chapter.id, pageIdx, isRead);
 		if (isRead) markChapterReadLocally(section.chapter.id);
 		localData.recordHistory({
 			chapterId: section.chapter.id,
@@ -484,9 +530,11 @@
 		};
 	});
 
-	// $effect reruns whenever chapterId changes (client-side nav between chapters).
+	// $effect reruns whenever chapterId changes (client-side nav between chapters),
+	// or when navigateToChapter forces a reset for a stale-param target (navNonce).
 	$effect(() => {
 		const id = chapterId;
+		navNonce;
 		let cancelled = false;
 
 		// Start the reading timer for paged mode. The cleanup function runs when
@@ -516,6 +564,10 @@
 		currentPage = 0;
 		initialPage = 0;
 		currentChapterId = id;
+		// Namespaced by chapter id so leaving these stale is currently harmless,
+		// but resetting them here removes the latent coupling defensively.
+		lastReportedPageKey = '';
+		lastBackfilledChapterId = 0;
 		// Zero the scroll BEFORE the DOM collapses to the loading shimmer. If the
 		// user was deep in a long chapter, swapping to the (much shorter) shimmer
 		// while scrollTop is huge makes iOS clamp the position mid-momentum — a
@@ -560,9 +612,15 @@
 				if (cancelled) return;
 				pages = fetchedPages;
 
-				const resolvedMangaId = await resolveMangaId(id);
+				const meta = await fetchChapterMangaMeta(id);
 				if (cancelled) return;
-				mangaId = resolvedMangaId;
+				mangaId = meta.mangaId;
+				if (meta.manga) {
+					mangaTitle = meta.manga.title ?? '';
+					mangaThumb = meta.manga.thumbnailUrl ? apiUrl(meta.manga.thumbnailUrl) : null;
+					mangaSourceId = meta.manga.sourceId ?? null;
+				}
+				const resolvedMangaId = meta.mangaId;
 
 				if (resolvedMangaId) {
 					const fetchedChapters = await getMangaChapters(resolvedMangaId);
@@ -602,9 +660,12 @@
 				// persist the resume position (currentPage). Hardcoding `false` here
 				// used to flip an already-read chapter back to unread on the server
 				// the instant it was reopened (e.g. jumping back via the chapter
-				// list/dock), even before any scrolling happened.
+				// list/dock), even before any scrolling happened. `current?.isRead` is
+				// only the SERVER's flag though — merge in local history too, or a
+				// chapter read only on this device (guest/offline/unsynced) gets
+				// re-asserted unread on the server the moment it's reopened.
 				if (pages.length > 0) {
-					updateChapterProgress(id, currentPage, current?.isRead ?? false).catch(() => {});
+					void queueChapterProgress(id, currentPage, isChapterReadAnywhere(id));
 				}
 			} catch (e) {
 				if (cancelled) return;
@@ -638,7 +699,13 @@
 		};
 	});
 
-	async function resolveMangaId(id: number): Promise<number | null> {
+	// Pure fetch — the caller applies the result to component state. (Previously
+	// this function set mangaTitle/mangaThumb/mangaSourceId itself, a hidden side
+	// effect on something named/shaped like a plain resolver.)
+	async function fetchChapterMangaMeta(id: number): Promise<{
+		mangaId: number | null;
+		manga: { title?: string; thumbnailUrl?: string; sourceId?: string } | null;
+	}> {
 		const res = await fetch('/api/graphql', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
@@ -649,12 +716,7 @@
 		});
 		const json = await res.json();
 		const ch = json?.data?.chapter;
-		if (ch?.manga) {
-			mangaTitle = ch.manga.title ?? '';
-			mangaThumb = ch.manga.thumbnailUrl ? apiUrl(ch.manga.thumbnailUrl) : null;
-			mangaSourceId = ch.manga.sourceId ?? null;
-		}
-		return ch?.mangaId ?? null;
+		return { mangaId: ch?.mangaId ?? null, manga: ch?.manga ?? null };
 	}
 
 	const pageTitle = $derived.by(() => {
@@ -693,13 +755,13 @@
 		if (e.key === '[') {
 			if (!prevChapter) return;
 			e.preventDefault();
-			void goto(`/read/${prevChapter.id}`);
+			navigateToChapter(prevChapter.id);
 			return;
 		}
 		if (e.key === ']') {
 			if (!nextChapter) return;
 			e.preventDefault();
-			void goto(`/read/${nextChapter.id}`);
+			navigateToChapter(nextChapter.id);
 		}
 	}
 </script>
@@ -773,9 +835,10 @@
 				direction={readerSettings.direction}
 				onpage={reportPage}
 				ontoggle={toggleChrome}
-				onnext={() => nextChapter && goto(`/read/${nextChapter.id}`)}
-				onprev={() => prevChapter && goto(`/read/${prevChapter.id}`)}
+				onnext={() => nextChapter && navigateToChapter(nextChapter.id)}
+				onprev={() => prevChapter && navigateToChapter(prevChapter.id)}
 				onzoom={(z) => readerSettings.set('zoom', z)}
+				onrefreshpages={() => refreshChapterPages(chapterId)}
 			/>
 		{:else}
 			<!-- Tap toggles chrome only when the finger didn't scroll (avoids whole-page
@@ -805,7 +868,8 @@
 					onnearend={handleNearEnd}
 					onzoom={(z) => readerSettings.set('zoom', z)}
 					{initialPage}
-					resetToken={chapterId}
+					resetToken={`${chapterId}:${navNonce}`}
+					onrefreshpages={refreshChapterPages}
 				/>
 			</div>
 			{#if loadingNextChapter}
@@ -863,6 +927,7 @@
 			onfullscreen={toggleFullscreen}
 			onsettings={() => (settingsOpen = true)}
 			onseek={reportPage}
+			onnavigate={navigateToChapter}
 			autoScroll={!isPaged ? autoScroll : undefined}
 			{autoScrollSpeed}
 			onautoscroll={!isPaged ? () => { autoScroll = !autoScroll; if (autoScroll) chromeVisible = false; } : undefined}

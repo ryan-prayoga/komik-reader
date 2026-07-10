@@ -18,20 +18,37 @@ const STORES: Record<LocalStore, string> = {
 	meta: 'key'
 };
 
+// Reused across calls instead of opening a fresh connection per operation —
+// reading/webtoon scrolling can trigger many writes per minute. Cleared on
+// error/close so a later call reopens rather than reusing a dead handle.
+let dbPromise: Promise<IDBDatabase> | null = null;
+
 function openDb(): Promise<IDBDatabase> {
-	return new Promise((resolve, reject) => {
-		const req = indexedDB.open(DB_NAME, DB_VERSION);
-		req.onerror = () => reject(req.error);
-		req.onsuccess = () => resolve(req.result);
-		req.onupgradeneeded = () => {
-			const db = req.result;
-			for (const [store, keyPath] of Object.entries(STORES)) {
-				if (!db.objectStoreNames.contains(store)) {
-					db.createObjectStore(store, { keyPath });
+	if (!dbPromise) {
+		dbPromise = new Promise((resolve, reject) => {
+			const req = indexedDB.open(DB_NAME, DB_VERSION);
+			req.onerror = () => {
+				dbPromise = null;
+				reject(req.error);
+			};
+			req.onsuccess = () => {
+				const db = req.result;
+				db.onclose = () => {
+					dbPromise = null;
+				};
+				resolve(db);
+			};
+			req.onupgradeneeded = () => {
+				const db = req.result;
+				for (const [store, keyPath] of Object.entries(STORES)) {
+					if (!db.objectStoreNames.contains(store)) {
+						db.createObjectStore(store, { keyPath });
+					}
 				}
-			}
-		};
-	});
+			};
+		});
+	}
+	return dbPromise;
 }
 
 export async function putItem<T>(store: LocalStore, value: T): Promise<void> {
