@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import { untrack, tick } from 'svelte';
+	import { untrack, flushSync } from 'svelte';
 	import { apiUrl } from '$lib/graphql/client';
 	import { fetchChapterPages, getMangaChapters } from '$lib/graphql/api';
 	import { queueChapterProgress } from '$lib/graphql/progress-queue';
@@ -437,14 +437,28 @@
 		// which would pollute a scrollHeight diff and cause a bogus scroll jump.
 		const anchorSelector = `[data-page-key="${sections[dropCount].chapter.id}-0"]`;
 		const topBefore = document.querySelector(anchorSelector)?.getBoundingClientRect().top;
-		sections = sections.slice(dropCount);
-		tick().then(() => {
-			if (topBefore === undefined) return;
-			const topAfter = document.querySelector(anchorSelector)?.getBoundingClientRect().top;
-			if (topAfter === undefined) return;
-			const delta = topAfter - topBefore;
-			if (delta !== 0) webtoonScrollEl?.scrollBy(0, delta);
+		// flushSync (not tick().then) applies the DOM mutation and the scroll
+		// correction in the same synchronous pass. tick().then() left a gap of
+		// at least one browser paint between the prune landing and the
+		// correction running — with scroll anchoring disabled on this
+		// container (overflow-anchor: none), the browser had nothing to keep
+		// the visible position stable in that gap, so it painted a frame with
+		// the OLD scrollTop pointing into the NEW (shrunk) content: a visible
+		// jump forward by roughly one chapter's height, sometimes landing
+		// mid-chapter or at the very bottom, before snapping back once the
+		// correction finally ran. This only ever showed up from the SECOND
+		// chapter crossing onward — the very first (idx <= 1 above) never
+		// prunes anything, so chapter 1 → 2 was always smooth by accident.
+		flushSync(() => {
+			sections = sections.slice(dropCount);
 		});
+		if (topBefore !== undefined) {
+			const topAfter = document.querySelector(anchorSelector)?.getBoundingClientRect().top;
+			if (topAfter !== undefined) {
+				const delta = topAfter - topBefore;
+				if (delta !== 0) webtoonScrollEl?.scrollBy(0, delta);
+			}
+		}
 	});
 
 	function toggleChrome() {
