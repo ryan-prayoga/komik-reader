@@ -52,6 +52,8 @@ export type RecentChapter = {
 	mangaId: number;
 	lastPageRead: number;
 	totalPages?: number;
+	/** Set when built from local history; absent for server-sourced rows (always unread there). */
+	isRead?: boolean;
 	lastReadAt: string;
 	manga: {
 		id: number;

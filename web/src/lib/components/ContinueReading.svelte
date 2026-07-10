@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { apiUrl } from '$lib/graphql/client';
+	import { continueProgressPct } from '$lib/continue-reading';
 	import { imgFallback } from '$lib/utils/imgFallback';
 	import Play from '@lucide/svelte/icons/play';
+	import Check from '@lucide/svelte/icons/check';
 	import type { RecentChapter } from '$lib/graphql/types';
 
 	interface Props {
@@ -10,13 +12,6 @@
 		seeAllHref?: string;
 	}
 	let { chapters, title = 'Lanjut Baca', seeAllHref }: Props = $props();
-
-	function progressPct(ch: RecentChapter): number | null {
-		if (!ch.totalPages || ch.totalPages <= 1) return null;
-		if (ch.lastPageRead <= 0) return null;
-		if (ch.lastPageRead >= ch.totalPages - 1) return null;
-		return Math.round(((ch.lastPageRead + 1) / ch.totalPages) * 100);
-	}
 </script>
 
 {#if chapters.length > 0}
@@ -29,9 +24,9 @@
 		</div>
 		<div class="-mx-1 flex gap-3 overflow-x-auto px-1 pb-2">
 			{#each chapters as chapter (chapter.id)}
-				{@const pct = progressPct(chapter)}
+				{@const pct = continueProgressPct(chapter)}
 				<a
-					href="/read/{chapter.id}"
+					href={chapter.isRead ? `/manga/${chapter.mangaId}` : `/read/${chapter.id}`}
 					class="group relative w-32 shrink-0 overflow-hidden rounded-[var(--radius)] border border-border bg-surface shadow-(--shadow-card) transition hover:border-accent/40 sm:w-36"
 				>
 					<div class="relative aspect-[3/4] overflow-hidden bg-bg">
@@ -45,9 +40,12 @@
 							/>
 						{/if}
 						<span
-							class="absolute left-2 top-2 rounded-full bg-accent px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white shadow"
+							class="absolute left-2 top-2 flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white shadow {chapter.isRead
+								? 'bg-success'
+								: 'bg-accent'}"
 						>
-							Lanjut
+							{#if chapter.isRead}<Check size={10} />{/if}
+							{chapter.isRead ? 'Selesai' : 'Lanjut'}
 						</span>
 						<div class="absolute inset-0 flex items-center justify-center bg-black/0 transition group-hover:bg-black/30">
 							<span
@@ -67,7 +65,9 @@
 					</div>
 					<div class="p-2">
 						<p class="line-clamp-1 text-xs font-medium text-text">{chapter.manga.title}</p>
-						<p class="line-clamp-1 text-[11px] text-muted">{chapter.name}</p>
+						<p class="line-clamp-1 text-[11px] text-muted">
+							{chapter.isRead ? 'Lanjut ke chapter berikutnya' : chapter.name}
+						</p>
 					</div>
 				</a>
 			{/each}

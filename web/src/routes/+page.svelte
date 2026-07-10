@@ -4,6 +4,7 @@
 	import { getInstalledSources } from '$lib/graphql/api';
 	import { preferences } from '$lib/preferences.svelte';
 	import { localData } from '$lib/local/data.svelte';
+	import { buildContinueReading } from '$lib/continue-reading';
 	import { updates } from '$lib/updates/updates.svelte';
 	import { showToast } from '$lib/stores/toast.svelte';
 	import type { RecentChapter, Source } from '$lib/graphql/types';
@@ -35,30 +36,11 @@
 	);
 
 	// Continue-reading from local history — deduplicated per manga, latest chapter only.
-	const recent = $derived.by<RecentChapter[]>(() => {
-		if (!localData.ready) return [];
-		const seen = new Set<number>();
-		const out: RecentChapter[] = [];
-		for (const h of localData.history) {
-			// history is sorted by updatedAt desc, so the first row per manga is
-			// always the last-touched one — mark it seen before the read check,
-			// else a stale older unread row for the same manga leaks through.
-			if (seen.has(h.mangaId)) continue;
-			seen.add(h.mangaId);
-			if (h.isRead) continue;
-			out.push({
-				id: h.chapterId,
-				name: h.chapterName,
-				mangaId: h.mangaId,
-				lastPageRead: h.lastPage,
-				totalPages: h.totalPages,
-				lastReadAt: '',
-				manga: { id: h.mangaId, title: h.mangaTitle, thumbnailUrl: h.thumbnailUrl }
-			});
-			if (out.length >= 6) break;
-		}
-		return out;
-	});
+	// Kept even when that latest chapter was finished (see continue-reading.ts) so the
+	// card doesn't vanish the moment a chapter is completed.
+	const recent = $derived.by<RecentChapter[]>(() =>
+		localData.ready ? buildContinueReading(localData.history, 6) : []
+	);
 
 	// Recent library bookmarks for the home hub (newest first).
 	const libraryPreview = $derived(
