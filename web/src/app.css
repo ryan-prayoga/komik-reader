@@ -174,13 +174,21 @@ select {
 .no-scrollbar::-webkit-scrollbar {
 	display: none;
 }
-/* Webtoon's actual scroll surface (position:fixed, taken out of document flow
-   so html/body never grow tall). -webkit-overflow-scrolling gives it the
-   inertial/momentum scroll iOS otherwise only applies to the document. */
+/* iOS Safari's momentum-scroll pill indicator isn't a stylable scrollbar — it
+   renders for ANY scrolling element and ignores ::-webkit-scrollbar entirely.
+   The only thing that reliably hides it: make the scrolling element wider
+   than its visible box (the pill rides its right edge) so the extra strip —
+   pill included — lands past the viewport, then let the non-scrolling parent
+   (.overflow-hidden, in the markup) clip that strip away. .reader-webtoon-content
+   claws the width back so the actual page content still renders at the
+   original (non-widened) size. -webkit-overflow-scrolling gives the container
+   inertial/momentum scroll like the document normally gets. */
 .reader-webtoon-scroll {
-	overflow-y: auto;
-	overflow-x: hidden;
+	width: calc(100% + 20px);
 	-webkit-overflow-scrolling: touch;
+}
+.reader-webtoon-content {
+	width: calc(100% - 20px);
 }
 
 @media (prefers-reduced-motion: reduce) {
