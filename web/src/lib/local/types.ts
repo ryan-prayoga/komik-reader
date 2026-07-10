@@ -77,6 +77,11 @@ export type LocalUpdateMeta = {
 	/** Baseline when user last acknowledged the chapter list. */
 	seenChapterId: number | null;
 	seenChapterNumber: number;
+	/**
+	 * Publication status from source (ONGOING / COMPLETED / HIATUS / …).
+	 * Optional for older rows written before this field existed.
+	 */
+	mangaStatus?: string | null;
 	lastCheckedAt: number;
 	updatedAt: number;
 };

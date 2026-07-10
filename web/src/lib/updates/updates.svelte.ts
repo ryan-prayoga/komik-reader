@@ -93,6 +93,7 @@ class UpdatesEngine {
 	 * Record the latest chapter from a known chapter list (detail page / reader).
 	 * First seed always sets seen = latest (no false-positive "update").
 	 * Pass `markSeen: true` when the user opens the detail page so badges clear.
+	 * Pass `mangaStatus` when known so Lanjut Baca can distinguish SELESAI vs NUNGGU.
 	 */
 	async seedFromChapters(
 		manga: {
@@ -100,6 +101,7 @@ class UpdatesEngine {
 			title: string;
 			thumbnailUrl: string | null;
 			sourceId?: string | null;
+			mangaStatus?: string | null;
 		},
 		chapters: Chapter[],
 		opts: { markSeen?: boolean } = {}
@@ -123,6 +125,7 @@ class UpdatesEngine {
 			seenChapterNumber: applySeen
 				? latest.chapterNumber
 				: (existing?.seenChapterNumber ?? latest.chapterNumber),
+			mangaStatus: manga.mangaStatus ?? existing?.mangaStatus ?? null,
 			lastCheckedAt: ts,
 			updatedAt: ts
 		};
@@ -155,6 +158,7 @@ class UpdatesEngine {
 			title: string;
 			thumbnailUrl: string | null;
 			sourceId?: string | null;
+			mangaStatus?: string | null;
 		},
 		opts: { markSeenIfFirst?: boolean } = {}
 	): Promise<UpdateListItem | null> {
@@ -176,6 +180,7 @@ class UpdatesEngine {
 					latestChapterName: '',
 					seenChapterId: existing?.seenChapterId ?? null,
 					seenChapterNumber: existing?.seenChapterNumber ?? 0,
+					mangaStatus: manga.mangaStatus ?? existing?.mangaStatus ?? null,
 					lastCheckedAt: ts,
 					updatedAt: ts
 				};
@@ -195,6 +200,7 @@ class UpdatesEngine {
 				seenChapterNumber: first
 					? latest.chapterNumber
 					: (existing?.seenChapterNumber ?? latest.chapterNumber),
+				mangaStatus: manga.mangaStatus ?? existing?.mangaStatus ?? null,
 				lastCheckedAt: ts,
 				updatedAt: ts
 			};

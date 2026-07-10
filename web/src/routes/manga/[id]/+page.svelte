@@ -162,7 +162,9 @@
 				mangaId: manga.id,
 				title: manga.title,
 				thumbnailUrl: manga.thumbnailUrl ? apiUrl(manga.thumbnailUrl) : null,
-				sourceId: manga.sourceId
+				sourceId: manga.sourceId,
+				// Needed so Lanjut Baca can show SELESAI vs NUNGGU after catch-up.
+				mangaStatus: manga.status
 			},
 			chapters,
 			{ markSeen }

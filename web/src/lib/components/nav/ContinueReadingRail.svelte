@@ -1,8 +1,14 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { apiUrl } from '$lib/graphql/client';
+	import {
+		buildContinueReading,
+		continueProgressPct,
+		resolveContinueStatus,
+		type ContinueUpdateMeta
+	} from '$lib/continue-reading';
 	import { localData } from '$lib/local/data.svelte';
-	import { buildContinueReading, continueProgressPct } from '$lib/continue-reading';
+	import { updates } from '$lib/updates/updates.svelte';
 	import { formatDuration } from '$lib/reading-time';
 	import { imgFallback } from '$lib/utils/imgFallback';
 	import Clock from '@lucide/svelte/icons/clock';
@@ -21,6 +27,43 @@
 		const ms = localData.history.find((h) => h.chapterId === chapterId)?.timeSpentMs ?? 0;
 		return ms > 0 ? formatDuration(ms) : null;
 	}
+
+	function historyFor(mangaId: number) {
+		return localData.history
+			.filter((h) => h.mangaId === mangaId)
+			.map((h) => ({
+				chapterId: h.chapterId,
+				chapterNumber: h.chapterNumber,
+				isRead: h.isRead
+			}));
+	}
+
+	function updateMetaFor(mangaId: number): ContinueUpdateMeta | null {
+		const item = updates.get(mangaId);
+		if (!item) return null;
+		return {
+			latestChapterId: item.latestChapterId,
+			latestChapterNumber: item.latestChapterNumber,
+			latestChapterName: item.latestChapterName,
+			mangaStatus: item.mangaStatus,
+			hasUpdate: item.hasUpdate
+		};
+	}
+
+	function statusOf(chapter: RecentChapter) {
+		const lastHist = localData.history.find((h) => h.chapterId === chapter.id);
+		return resolveContinueStatus({
+			lastChapter: {
+				id: chapter.id,
+				name: chapter.name,
+				mangaId: chapter.mangaId,
+				isRead: chapter.isRead,
+				chapterNumber: lastHist?.chapterNumber
+			},
+			historyForManga: historyFor(chapter.mangaId),
+			updateMeta: updateMetaFor(chapter.mangaId)
+		});
+	}
 </script>
 
 {#if show && recent.length > 0}
@@ -33,8 +76,9 @@
 			{#each recent as chapter (chapter.id)}
 				{@const dur = chapterDuration(chapter.id)}
 				{@const pct = continueProgressPct(chapter)}
+				{@const status = statusOf(chapter)}
 				<a
-					href={chapter.isRead ? `/manga/${chapter.mangaId}` : `/read/${chapter.id}`}
+					href={status.href}
 					class="group flex items-center gap-3 rounded-[var(--radius)] p-2 transition hover:bg-surface"
 				>
 					<div class="relative h-14 w-10 shrink-0 overflow-hidden rounded-[var(--radius-sm)] bg-surface">
@@ -55,9 +99,16 @@
 					</div>
 					<div class="min-w-0 flex-1">
 						<p class="line-clamp-1 text-sm font-medium text-text">{chapter.manga.title}</p>
-						<p class="line-clamp-1 text-xs text-muted">{chapter.name}</p>
-						{#if chapter.isRead}
-							<p class="mt-0.5 text-[11px] text-success">Selesai · lanjut chapter berikutnya</p>
+						<p class="line-clamp-1 text-xs text-muted">{status.subtitle}</p>
+						{#if status.kind === 'tamat'}
+							<p class="mt-0.5 text-[11px] text-success">Tamat · semua chapter dibaca</p>
+						{:else if status.kind === 'selesai'}
+							<p class="mt-0.5 flex items-center gap-1 text-[11px] text-warning">
+								<Clock size={10} class="shrink-0" />
+								<span>{status.subtitle}</span>
+							</p>
+						{:else if status.kind === 'baru'}
+							<p class="mt-0.5 text-[11px] text-accent">Chapter baru</p>
 						{:else if pct != null}
 							<p class="mt-0.5 text-[11px] tabular-nums text-muted">{pct}%</p>
 						{:else if dur}
