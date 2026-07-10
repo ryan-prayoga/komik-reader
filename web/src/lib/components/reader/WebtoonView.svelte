@@ -24,6 +24,10 @@
 		// opposed to infinite-scroll appends which leave this untouched. Lets us
 		// tell "user jumped chapters" apart from "next chapter streamed in".
 		resetToken?: number | string;
+		// Re-fetch a chapter's page URLs from the server. Suwayomi page URLs can go
+		// stale, so retrying the same URL forever never recovers — after repeated
+		// failures the retry button escalates to this instead.
+		onrefreshpages?: (chapterId: number) => Promise<void>;
 	}
 
 	let {
@@ -34,7 +38,8 @@
 		zoom = 1,
 		gap = true,
 		initialPage = 0,
-		resetToken
+		resetToken,
+		onrefreshpages
 	}: Props = $props();
 
 	// Pinch-to-zoom (same model as PagedView — parent owns persisted zoom).
@@ -85,10 +90,34 @@
 	function markError(key: string) {
 		errorPages[key] = true;
 	}
-	function retryPage(key: string) {
+	// Chapters whose page URLs are being re-fetched — guards double taps while the
+	// refresh request is in flight.
+	const refreshingChapters = new Set<number>();
+	function clearChapterLoadState(chapterId: number) {
+		for (const rec of [loadedPages, errorPages, retryCounts]) {
+			for (const k of Object.keys(rec)) {
+				if (k.startsWith(`${chapterId}-`)) delete rec[k];
+			}
+		}
+	}
+	async function retryPage(key: string, chapterId: number) {
+		const attempts = (retryCounts[key] ?? 0) + 1;
 		errorPages[key] = false;
 		loadedPages[key] = false;
-		retryCounts[key] = (retryCounts[key] ?? 0) + 1;
+		retryCounts[key] = attempts;
+		// Same-URL retries only help for transient hiccups; after two failures the
+		// URL itself is likely stale — ask the parent for fresh ones instead.
+		if (attempts >= 2 && onrefreshpages && !refreshingChapters.has(chapterId)) {
+			refreshingChapters.add(chapterId);
+			try {
+				await onrefreshpages(chapterId);
+				clearChapterLoadState(chapterId);
+			} catch {
+				markError(key);
+			} finally {
+				refreshingChapters.delete(chapterId);
+			}
+		}
 	}
 
 	// Hard chapter nav (URL change) must drop the old chapter's tracking state
@@ -231,10 +260,15 @@
 					.get(`${firstChapterId}-${initialPage}`)
 					?.scrollIntoView({ block: 'start', behavior: 'instant' });
 			}
-			// Retry a few times as images above the target finish loading and establish height.
+			// Retry a few times as images above the target finish loading and establish
+			// height. The last retry is intentionally generous — a slow device/network
+			// (or the offline cache path, which serves pages already-downloaded but
+			// still decoded on-device) can take well over a second to lay out enough
+			// pages to make the target page's offset reachable.
 			scrollRafId = requestAnimationFrame(scrollToTarget);
 			retryTimers.push(setTimeout(scrollToTarget, 400));
 			retryTimers.push(setTimeout(scrollToTarget, 1200));
+			retryTimers.push(setTimeout(scrollToTarget, 3000));
 		}
 
 		let rafId: number;
@@ -278,21 +312,31 @@
 		{/if}
 		{#each section.pages as pageUrl, pi (pi)}
 			{@const key = `${section.chapter.id}-${pi}`}
+			<!-- Placeholder ratio lives on the CONTAINER, not just the img: a broken
+			     image collapses to near-zero height in most browsers (aspect-ratio
+			     only reliably applies while the image has layout), and with
+			     overflow-hidden that clipped the retry overlay into an untappable
+			     sliver. -->
 			<div
 				class="relative overflow-hidden"
+				style={loadedPages[key] ? '' : 'aspect-ratio: 2 / 3'}
 				data-page-key={key}
 				use:observePage={{ chapterId: section.chapter.id, pi }}
 			>
 				{#if errorPages[key]}
 					<div
-						class="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-white/[0.03]"
+						class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-white/[0.03]"
 					>
+						{#if retryCounts[key]}
+							<p class="text-xs text-white/50">Gagal dimuat ({retryCounts[key]}×)</p>
+						{/if}
 						<button
 							type="button"
-							class="rounded-full bg-white/10 px-4 py-2 text-sm text-white/80 hover:bg-white/20"
+							class="min-h-11 rounded-full bg-white/10 px-5 py-2.5 text-sm text-white/80 hover:bg-white/20"
+							onpointerdown={(e) => e.stopPropagation()}
 							onclick={(e) => {
 								e.stopPropagation();
-								retryPage(key);
+								void retryPage(key, section.chapter.id);
 							}}
 						>
 							Muat ulang

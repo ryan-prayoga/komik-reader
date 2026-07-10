@@ -47,6 +47,10 @@
 		onseek?: (index: number) => void;
 		onautoscroll?: () => void;
 		onautoscrollspeed?: (delta: number) => void;
+		/** Chapter navigation. Plain <a href> navigation is a same-params no-op for
+		 * the first-opened chapter once webtoon streaming has replaceState'd the URL
+		 * — the parent's handler forces a reset in that case. */
+		onnavigate?: (id: number) => void;
 	}
 
 	let {
@@ -75,8 +79,21 @@
 		onsettings,
 		onseek,
 		onautoscroll,
-		onautoscrollspeed
+		onautoscrollspeed,
+		onnavigate
 	}: Props = $props();
+
+	// Intercept left-clicks on chapter links; modified clicks (new tab etc.) keep
+	// native <a> behavior.
+	function navClick(e: MouseEvent, id: number) {
+		if (!onnavigate) return;
+		if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+		e.preventDefault();
+		onnavigate(id);
+	}
+	function chapterIdFromHref(href: string): number {
+		return Number(href.split('/').pop());
+	}
 
 	let pickerOpen = $state(false);
 	let pickerQuery = $state('');
@@ -294,6 +311,7 @@
 		{#if prevHref}
 			<a
 				href={prevHref}
+				onclick={(e) => navClick(e, chapterIdFromHref(prevHref))}
 				class="inline-flex items-center gap-1 rounded-full bg-black/40 px-3 py-2 text-xs transition hover:bg-black/60"
 			>
 				<ChevronLeft size={16} /> Sebelumnya
@@ -341,6 +359,7 @@
 		{#if nextHref}
 			<a
 				href={nextHref}
+				onclick={(e) => navClick(e, chapterIdFromHref(nextHref))}
 				class="inline-flex items-center gap-1 rounded-full bg-black/40 px-3 py-2 text-xs transition hover:bg-black/60"
 			>
 				Berikutnya <ChevronRight size={16} />
@@ -405,7 +424,10 @@
 				{#if firstUnread}
 					<a
 						href="/read/{firstUnread.id}"
-						onclick={() => (pickerOpen = false)}
+						onclick={(e) => {
+							pickerOpen = false;
+							navClick(e, firstUnread.id);
+						}}
 						class="inline-flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80 transition hover:bg-white/15"
 					>
 						Loncat ke unread
@@ -418,7 +440,10 @@
 				{@const isActive = ch.id === currentChapterId}
 				<a
 					href="/read/{ch.id}"
-					onclick={() => (pickerOpen = false)}
+					onclick={(e) => {
+						pickerOpen = false;
+						navClick(e, ch.id);
+					}}
 					use:scrollActiveTo={isActive}
 					class="flex items-center px-4 py-3 text-sm transition hover:bg-white/5 {isActive
 						? 'font-medium text-accent'
@@ -477,6 +502,7 @@
 				{#if firstUnread}
 					<a
 						href="/read/{firstUnread.id}"
+						onclick={(e) => navClick(e, firstUnread.id)}
 						class="inline-flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80 transition hover:bg-white/15"
 					>
 						Loncat unread
@@ -489,6 +515,7 @@
 				{@const isActive = ch.id === currentChapterId}
 				<a
 					href="/read/{ch.id}"
+					onclick={(e) => navClick(e, ch.id)}
 					use:scrollActiveTo={isActive}
 					class="flex items-center px-4 py-2.5 text-sm transition hover:bg-white/5 {isActive
 						? 'bg-white/10 font-medium text-accent'

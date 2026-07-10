@@ -16,6 +16,9 @@
 		onnext?: () => void; // advance past the last page (→ next chapter)
 		onprev?: () => void; // go back before the first page (→ prev chapter)
 		onzoom?: (zoom: number) => void; // pinch-to-zoom
+		// Re-fetch this chapter's page URLs (stale Suwayomi URLs) — escalation path
+		// for the retry button after repeated same-URL failures.
+		onrefreshpages?: () => Promise<void>;
 	}
 
 	let {
@@ -30,7 +33,8 @@
 		ontoggle,
 		onnext,
 		onprev,
-		onzoom
+		onzoom,
+		onrefreshpages
 	}: Props = $props();
 
 	const lastIndex = $derived(pages.length - 1);
@@ -45,10 +49,25 @@
 	function markError(i: number) {
 		errorPages[i] = true;
 	}
-	function retryPage(i: number) {
+	let refreshingPages = false;
+	async function retryPage(i: number) {
+		const attempts = (retryCounts[i] ?? 0) + 1;
 		errorPages[i] = false;
 		loadedPages[i] = false;
-		retryCounts[i] = (retryCounts[i] ?? 0) + 1;
+		retryCounts[i] = attempts;
+		// Same-URL retries only recover transient failures; after two the URL is
+		// likely stale — refresh the whole chapter's page URLs instead. The `pages`
+		// $effect below resets all load state once the fresh array lands.
+		if (attempts >= 2 && onrefreshpages && !refreshingPages) {
+			refreshingPages = true;
+			try {
+				await onrefreshpages();
+			} catch {
+				markError(i);
+			} finally {
+				refreshingPages = false;
+			}
+		}
 	}
 
 	// `pages` is index-keyed and this component never unmounts across a chapter
@@ -247,10 +266,17 @@
 			>
 				{#if errorPages[i]}
 					<div class="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2">
+						{#if retryCounts[i]}
+							<p class="text-xs text-white/50">Gagal dimuat ({retryCounts[i]}×)</p>
+						{/if}
 						<button
 							type="button"
-							class="rounded-full bg-white/10 px-4 py-2 text-sm text-white/80 hover:bg-white/20"
-							onclick={() => retryPage(i)}
+							class="min-h-11 rounded-full bg-white/10 px-5 py-2.5 text-sm text-white/80 hover:bg-white/20"
+							onpointerdown={(e) => e.stopPropagation()}
+							onclick={(e) => {
+								e.stopPropagation();
+								void retryPage(i);
+							}}
 						>
 							Muat ulang
 						</button>

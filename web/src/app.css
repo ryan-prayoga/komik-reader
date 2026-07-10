@@ -165,6 +165,14 @@ select {
 	background: var(--border);
 	border-radius: 9999px;
 }
+/* Reader (webtoon) toggles this on <html> to hide the document scrollbar. */
+.no-scrollbar {
+	scrollbar-width: none;
+	-ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+	display: none;
+}
 
 @media (prefers-reduced-motion: reduce) {
 	* {
