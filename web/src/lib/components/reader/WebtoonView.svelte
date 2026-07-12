@@ -83,7 +83,25 @@
 	// few screens before they scroll into view so the reader never shows a black
 	// placeholder void mid-scroll (native lazy loads too late on slow mobile links).
 	let eagerPages = $state<Record<string, boolean>>({});
-	function markLoaded(key: string) {
+
+	// Per-chapter real page ratio (height/width), learned from images as they
+	// load. Webtoon sources slice a chapter into uniform pieces, so the median
+	// of the loaded pages predicts the unloaded ones far better than the fixed
+	// 2:3 guess — a smaller placeholder error means smaller layout shifts (and
+	// smaller anchoring corrections) when late images stream in.
+	const chapterRatioSamples = new Map<number, number[]>();
+	let chapterRatioGuess = $state<Record<number, number>>({});
+	function noteRatio(chapterId: number, img: HTMLImageElement) {
+		if (!img.naturalWidth || !img.naturalHeight) return;
+		const samples = chapterRatioSamples.get(chapterId) ?? [];
+		samples.push(img.naturalHeight / img.naturalWidth);
+		chapterRatioSamples.set(chapterId, samples);
+		const sorted = [...samples].sort((a, b) => a - b);
+		chapterRatioGuess[chapterId] = sorted[Math.floor(sorted.length / 2)];
+	}
+
+	function markLoaded(key: string, chapterId: number, img: HTMLImageElement) {
+		noteRatio(chapterId, img);
 		loadedPages[key] = true;
 		errorPages[key] = false;
 	}
@@ -143,12 +161,85 @@
 		errorPages = {};
 		retryCounts = {};
 		eagerPages = {};
+		// A correction computed against the old chapter's layout must not land
+		// on the freshly-reset scroll position.
+		pendingAnchorDelta = 0;
 	});
 	function pageSrc(url: string, key: string): string {
 		const n = retryCounts[key];
 		if (!n) return url;
 		return `${url}${url.includes('?') ? '&' : '?'}_retry=${n}`;
 	}
+
+	// ── Manual scroll anchoring ─────────────────────────────────────────────
+	// iOS Safari has no native scroll anchoring at all (overflow-anchor is
+	// Chrome/Firefox only), so when a page ABOVE the viewport swaps its guessed
+	// placeholder height for the real image height, everything below shifts and
+	// the reading position jumps — the "suddenly mid-chapter after crossing
+	// into the next chapter" reports. Replicate anchoring by hand: a
+	// ResizeObserver callback runs after layout but BEFORE paint, so shifting
+	// scrollTop by the height delta inside it lands in the same frame as the
+	// resize and is never visible. Native anchoring is disabled on the scroll
+	// container (overflow-anchor: none, app.css) so Chrome doesn't stack its
+	// own correction on top of this one.
+	const pageHeights = new Map<string, number>();
+	let pendingAnchorDelta = 0;
+	let anchorRafId = 0;
+	let anchorRetries = 0;
+
+	function scrollerEl(): HTMLElement | null {
+		return (rootEl?.closest('[data-reader-scroll]') as HTMLElement | null) ?? null;
+	}
+
+	// iOS also ignores programmatic scrollTop writes while a momentum fling is
+	// in flight — keep reapplying the outstanding delta each frame until the
+	// scroller actually takes it, unless it would push past a scroll bound.
+	function applyAnchorDelta() {
+		cancelAnimationFrame(anchorRafId);
+		const scroller = scrollerEl();
+		if (!scroller || !pendingAnchorDelta) return;
+		const before = scroller.scrollTop;
+		scroller.scrollTop = before + pendingAnchorDelta;
+		const applied = scroller.scrollTop - before;
+		pendingAnchorDelta -= applied;
+		if (Math.abs(pendingAnchorDelta) < 0.5) {
+			pendingAnchorDelta = 0;
+			return;
+		}
+		const max = scroller.scrollHeight - scroller.clientHeight;
+		const atBound =
+			(pendingAnchorDelta > 0 && before >= max - 1) || (pendingAnchorDelta < 0 && before <= 1);
+		if (atBound || ++anchorRetries > 180) {
+			pendingAnchorDelta = 0;
+			return;
+		}
+		anchorRafId = requestAnimationFrame(applyAnchorDelta);
+	}
+
+	const resizeAnchor =
+		typeof ResizeObserver !== 'undefined'
+			? new ResizeObserver((entries) => {
+					const scrollerTop = scrollerEl()?.getBoundingClientRect().top ?? 0;
+					let delta = 0;
+					for (const entry of entries) {
+						const el = entry.target as HTMLElement;
+						const key = el.dataset.pageKey;
+						if (!key) continue;
+						const newH = entry.borderBoxSize?.[0]?.blockSize ?? entry.contentRect.height;
+						const oldH = pageHeights.get(key);
+						pageHeights.set(key, newH);
+						if (oldH === undefined || Math.abs(newH - oldH) < 0.5) continue;
+						// Only pages fully above the viewport shift the reading position —
+						// a page in view grows downward from its own (stable) top edge.
+						if (el.getBoundingClientRect().bottom <= scrollerTop + 1) delta += newH - oldH;
+					}
+					if (delta) {
+						pendingAnchorDelta += delta;
+						anchorRetries = 0;
+						applyAnchorDelta();
+					}
+				})
+			: null;
 
 	// Derive the active page from live geometry instead of trusting the last
 	// IntersectionObserver callback. Fast (momentum) scrolling coalesces IO
@@ -228,6 +319,8 @@
 	function observePage(node: HTMLElement, param: { chapterId: number; pi: number }) {
 		const key = `${param.chapterId}-${param.pi}`;
 		pageEls.set(key, node);
+		pageHeights.set(key, node.offsetHeight);
+		resizeAnchor?.observe(node);
 
 		const root = node.closest('[data-reader-scroll]');
 		const observer = new IntersectionObserver(
@@ -263,6 +356,8 @@
 			destroy() {
 				observer.disconnect();
 				preloader.disconnect();
+				resizeAnchor?.unobserve(node);
+				pageHeights.delete(key);
 				pageEls.delete(key);
 			}
 		};
@@ -326,29 +421,26 @@
 			scroller.removeEventListener('scroll', onScroll);
 			cancelAnimationFrame(rafId);
 			cancelAnimationFrame(scrollRafId);
+			cancelAnimationFrame(anchorRafId);
 			retryTimers.forEach(clearTimeout);
+			resizeAnchor?.disconnect();
 		};
 	});
 
 	const maxWidth = $derived(`${48 * zoom * (readerSettings.cropBorders ? 1.03 : 1)}rem`);
 </script>
 
-<!-- Do NOT set overflow-anchor: none here. A page's placeholder is a guessed
-     2:3 box (see the container's inline style below); once its image decodes
-     — sometimes well after the reader has scrolled past it, on a slow
-     connection — the container resizes to the real aspect ratio. With
-     anchoring disabled that resize has nothing to correct it: it silently
-     shoves every page below (including whatever's on screen right now) up or
-     down. This was the actual cause of the "reader jumps to a random spot
-     mid-chapter" reports — not the chapter-prune logic below, which was
-     already flushSync-compensated and unaffected either way. Native scroll
-     anchoring is the only mechanism that can react before the browser paints
-     it: the resize happens synchronously inside the img's own layout
-     resolution, ahead of any JS 'load' handler, so no onload-driven
-     compensation can ever catch it in time — verified in-browser by forcing a
-     page far behind the reader to swap to a drastically different intrinsic
-     size: anchoring kept the visible position exactly stable, a hand-rolled
-     JS compensation did not (delta measured as 0 — already too late). -->
+<!-- Layout stability when a placeholder swaps to its real image height is
+     handled by the manual ResizeObserver anchoring in the script above — NOT
+     by native scroll anchoring, which iOS Safari doesn't implement at all
+     (the earlier native-anchoring fix only ever worked on Chrome/Firefox;
+     iPhones kept jumping mid-chapter). An onload-driven compensation can't
+     work either — the resize happens synchronously inside the img's own
+     layout resolution, ahead of any 'load' handler — but ResizeObserver
+     callbacks run post-layout and PRE-PAINT, so the scrollTop correction
+     lands in the same frame as the resize on every engine. Native anchoring
+     is explicitly disabled on the scroll container (app.css) so Chrome
+     doesn't apply a second correction on top. -->
 <div
 	bind:this={rootEl}
 	class="mx-auto touch-pan-y {gap ? 'space-y-1' : ''}"
@@ -369,6 +461,7 @@
 		{/if}
 		{#each section.pages as pageUrl, pi (pi)}
 			{@const key = `${section.chapter.id}-${pi}`}
+			{@const ratio = chapterRatioGuess[section.chapter.id] ?? 1.5}
 			<!-- Placeholder ratio lives on the CONTAINER, not just the img: a broken
 			     image collapses to near-zero height in most browsers (aspect-ratio
 			     only reliably applies while the image has layout), and with
@@ -376,7 +469,7 @@
 			     sliver. -->
 			<div
 				class="relative overflow-hidden"
-				style={loadedPages[key] ? '' : 'aspect-ratio: 2 / 3'}
+				style={loadedPages[key] ? '' : `aspect-ratio: 1 / ${ratio}`}
 				data-page-key={key}
 				use:observePage={{ chapterId: section.chapter.id, pi }}
 			>
@@ -410,10 +503,10 @@
 					class="mx-auto block w-full transition-opacity duration-300 {loadedPages[key]
 						? 'opacity-100'
 						: 'opacity-0'} {readerSettings.cropBorders ? 'scale-[1.03]' : ''}"
-					style="aspect-ratio: auto 2 / 3"
+					style="aspect-ratio: auto 1 / {ratio}"
 					loading={eagerPages[key] || (si === 0 && pi <= initialPage) ? 'eager' : 'lazy'}
 					decoding="async"
-					onload={() => markLoaded(key)}
+					onload={(e) => markLoaded(key, section.chapter.id, e.currentTarget as HTMLImageElement)}
 					onerror={() => markError(key)}
 				/>
 			</div>

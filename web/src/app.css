@@ -189,6 +189,11 @@ select {
 .reader-webtoon-scroll {
 	width: calc(100% + 20px);
 	-webkit-overflow-scrolling: touch;
+	/* Layout-shift compensation is done manually via a ResizeObserver in
+	   WebtoonView — iOS Safari has no native scroll anchoring, so this keeps
+	   every engine on that single manual path instead of letting Chrome apply
+	   a second, stacked correction. */
+	overflow-anchor: none;
 }
 .reader-webtoon-content {
 	width: calc(100% - 20px);
