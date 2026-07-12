@@ -150,12 +150,53 @@
 		return `${url}${url.includes('?') ? '&' : '?'}_retry=${n}`;
 	}
 
+	// Derive the active page from live geometry instead of trusting the last
+	// IntersectionObserver callback. Fast (momentum) scrolling coalesces IO
+	// events — pages that enter AND leave the activation band between two
+	// observation frames never fire at all, including a chapter's LAST page.
+	// Progress then sticks at a stale mid-chapter position and isRead never
+	// latches, which is how finished chapters kept reopening at their "end".
+	// The active page is the deepest one whose top has crossed the activation
+	// line (top 40% of the viewport — same semantics as the IO rootMargin),
+	// with one extra rule: once the chapter's last page is fully scrolled in
+	// (its bottom within the viewport), the last page IS the active page even
+	// if a short page can never reach the 40% line at max scroll.
+	function geometricActivePage(): { chapterId: number; pi: number } | null {
+		const line = window.innerHeight * 0.4;
+		let best: { chapterId: number; pi: number; top: number } | null = null;
+		for (const section of sections) {
+			for (let pi = 0; pi < section.pages.length; pi++) {
+				const el = pageEls.get(`${section.chapter.id}-${pi}`);
+				if (!el) continue;
+				const top = el.getBoundingClientRect().top;
+				if (top <= line && (!best || top > best.top)) {
+					best = { chapterId: section.chapter.id, pi, top };
+				}
+			}
+		}
+		if (!best) return null;
+		const section = sections.find((s) => s.chapter.id === best.chapterId);
+		if (section) {
+			const lastIdx = section.pages.length - 1;
+			const lastEl = pageEls.get(`${best.chapterId}-${lastIdx}`);
+			if (lastEl && lastEl.getBoundingClientRect().bottom <= window.innerHeight + 1) {
+				return { chapterId: best.chapterId, pi: lastIdx };
+			}
+		}
+		return { chapterId: best.chapterId, pi: best.pi };
+	}
+
 	function reportCurrentProgress() {
 		// 0 is the "not tracking anything yet" sentinel (see the resetToken
 		// effect) — right after a hard chapter switch, before the new chapter's
 		// first page has intersected, a stray scroll tick must not report this
 		// up as real progress or it clobbers the parent's just-set chapter id.
 		if (!activeChapterId) return;
+		const geo = geometricActivePage();
+		if (geo) {
+			activeChapterId = geo.chapterId;
+			activePi = geo.pi;
+		}
 		const el = pageEls.get(`${activeChapterId}-${activePi}`);
 		if (!el) {
 			onpage(activeChapterId, activePi, 0, 0);

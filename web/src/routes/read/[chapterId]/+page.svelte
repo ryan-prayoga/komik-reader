@@ -292,9 +292,15 @@
 
 	// Where to reopen a chapter: its saved position while still unfinished,
 	// page 0 once it's been read to the end (re-reads start at the beginning).
+	// A row parked on the chapter's LAST page with isRead still false is a
+	// finished read whose read-mark never landed (the old webtoon recorder
+	// could skip the final page during fast scroll) — treat it as finished
+	// too, or the chapter reopens on its end instead of its start.
 	function resumePageFor(id: number): number {
 		const h = localData.history.find((x) => x.chapterId === id);
-		return h && !h.isRead ? h.lastPage : 0;
+		if (!h || h.isRead) return 0;
+		if (h.totalPages && h.lastPage >= h.totalPages - 1) return 0;
+		return h.lastPage;
 	}
 
 	function reportPage(index: number) {
@@ -386,12 +392,15 @@
 		if (pageKey === lastReportedPageKey) return;
 		lastReportedPageKey = pageKey;
 		// Monotonic: same guard as reportPage — don't downgrade a read chapter
-		// back to unread when re-scrolling an earlier page.
+		// back to unread when re-scrolling an earlier page. Scroll-extent
+		// progress ~1 also counts as read: it covers the case where the last
+		// page's own report got skipped but the chapter was scrolled to its end.
 		const alreadyRead = isChapterReadAnywhere(section.chapter.id);
-		const isRead = alreadyRead || pageIdx >= section.pages.length - 1;
+		const isRead =
+			alreadyRead || pageIdx >= section.pages.length - 1 || chapterProgress >= 0.995;
 		void queueChapterProgress(section.chapter.id, pageIdx, isRead);
 		if (isRead) markChapterReadLocally(section.chapter.id);
-		localData.recordHistory({
+		void localData.recordHistory({
 			chapterId: section.chapter.id,
 			mangaId,
 			mangaTitle,
@@ -694,13 +703,16 @@
 					// This device may have no local history for the chapter (new
 					// device, cleared storage) — fall back to the server-side
 					// position other devices reported. Same rule as resumePageFor:
-					// a finished chapter reopens at the start, not its end.
+					// a finished chapter reopens at the start, not its end — and a
+					// position parked on the last page counts as finished even with
+					// isRead false (stale footprint of the old webtoon recorder).
 					if (
 						!initialPage &&
 						current &&
 						!current.isRead &&
 						!untrack(() => localData.history.find((h) => h.chapterId === id)?.isRead) &&
-						(current.lastPageRead ?? 0) > 0
+						(current.lastPageRead ?? 0) > 0 &&
+						current.lastPageRead < pages.length - 1
 					) {
 						initialPage = current.lastPageRead;
 					}

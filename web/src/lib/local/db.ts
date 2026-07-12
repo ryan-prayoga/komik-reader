@@ -73,6 +73,31 @@ export async function putMany<T>(store: LocalStore, values: T[]): Promise<void> 
 	});
 }
 
+/**
+ * Atomic read-modify-write on a single row, inside ONE readwrite transaction.
+ * Use this when the new value derives from the current one (e.g. incrementing
+ * `timeSpentMs`) — deriving it from an in-memory snapshot instead races with
+ * concurrent writers and resurrects whatever stale fields the snapshot held.
+ */
+export async function updateItem<T>(
+	store: LocalStore,
+	key: IDBValidKey,
+	fn: (current: T | null) => T | null
+): Promise<void> {
+	const db = await openDb();
+	return new Promise((resolve, reject) => {
+		const tx = db.transaction(store, 'readwrite');
+		const os = tx.objectStore(store);
+		const req = os.get(key);
+		req.onsuccess = () => {
+			const next = fn((req.result as T) ?? null);
+			if (next !== null) os.put(next);
+		};
+		tx.oncomplete = () => resolve();
+		tx.onerror = () => reject(tx.error);
+	});
+}
+
 export async function getAll<T>(store: LocalStore): Promise<T[]> {
 	const db = await openDb();
 	return new Promise((resolve, reject) => {

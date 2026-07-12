@@ -1,5 +1,5 @@
 import { browser } from '$app/environment';
-import { getAll, getMeta, putItem, putMany, setMeta } from './db';
+import { getAll, getMeta, putItem, putMany, setMeta, updateItem } from './db';
 import { planChapterIdMigration, type LiveChapter } from './migrate';
 import type { LocalHistory, LocalLibrary, LocalCategory, LocalReadtime } from './types';
 
@@ -109,7 +109,7 @@ class LocalData {
 		totalPages?: number;
 	}) {
 		const existing = this.history.find((h) => h.chapterId === entry.chapterId);
-		const row: LocalHistory = {
+		let row: LocalHistory = {
 			...entry,
 			// Keep richer metadata if a later write lacks it.
 			mangaTitle: entry.mangaTitle || existing?.mangaTitle || '',
@@ -120,7 +120,14 @@ class LocalData {
 			updatedAt: nowMs(),
 			deleted: false
 		};
-		await putItem('history', row);
+		// Atomic against the DB row: progress fields come from `entry`
+		// (authoritative), but timeSpentMs belongs to addTimeSpent — take it from
+		// the row as it exists inside the transaction, or a concurrent time flush
+		// gets wiped (this write used to drop the field entirely).
+		await updateItem<LocalHistory>('history', entry.chapterId, (current) => {
+			row = { ...row, timeSpentMs: current?.timeSpentMs ?? existing?.timeSpentMs };
+			return row;
+		});
 		this.history = [row, ...this.history.filter((h) => h.chapterId !== row.chapterId)].sort(
 			(a, b) => b.updatedAt - a.updatedAt
 		);
@@ -219,18 +226,37 @@ class LocalData {
 	 * so the sync engine sees a new row version (and so per-row LWW works on
 	 * other fields too). Schedules a sync: the raw field stays device-local but
 	 * the engine mirrors it into a per-device `readtime` row (see sync.svelte.ts).
+	 *
+	 * MUST be an atomic read-modify-write against the DB row, not the in-memory
+	 * snapshot: reportWebtoonPage fires recordHistory() and readingTimer.flush()
+	 * back to back, and while recordHistory's write is still in flight the
+	 * memory snapshot holds the OLD lastPage/isRead — spreading that snapshot
+	 * into a plain put wrote the stale progress straight back over the fresh
+	 * row. That clobber is why finished webtoon chapters kept isRead=false with
+	 * a stale position and reopened at their end.
 	 */
 	async addTimeSpent(chapterId: number, deltaMs: number) {
 		if (deltaMs <= 0) return;
-		const row = this.history.find((h) => h.chapterId === chapterId);
-		if (!row) return; // no history yet — wait for first recordHistory
-		const next = {
-			...row,
-			timeSpentMs: (row.timeSpentMs ?? 0) + deltaMs,
-			updatedAt: nowMs()
-		};
-		await putItem('history', next);
-		this.history = this.history.map((h) => (h.chapterId === chapterId ? next : h));
+		if (!this.history.find((h) => h.chapterId === chapterId)) return; // no history yet
+		let written: LocalHistory | null = null;
+		await updateItem<LocalHistory>('history', chapterId, (current) => {
+			if (!current) return null; // row vanished (cleared) — nothing to add time to
+			written = {
+				...current,
+				timeSpentMs: (current.timeSpentMs ?? 0) + deltaMs,
+				updatedAt: nowMs()
+			};
+			return written;
+		});
+		if (written) {
+			// Merge only the fields this write owns into memory — the memory row
+			// may carry fresher progress than `written`'s base if recordHistory's
+			// own memory update raced in between.
+			const { timeSpentMs, updatedAt } = written as LocalHistory;
+			this.history = this.history.map((h) =>
+				h.chapterId === chapterId ? { ...h, timeSpentMs, updatedAt } : h
+			);
+		}
 		this.#changed();
 	}
 
