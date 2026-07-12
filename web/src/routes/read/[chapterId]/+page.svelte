@@ -436,7 +436,67 @@
 	// without bound the longer someone keeps scrolling through a series.
 	// Dropping content that's above the viewport shrinks scrollHeight, so we
 	// compensate scrollTop by the removed amount to avoid a visible jump.
+	//
+	// The prune is DEFERRED until the scroller is idle. It naturally triggers
+	// right as the reader crosses into a new chapter — i.e. exactly when a
+	// momentum fling is most likely still in flight — and iOS Safari IGNORES
+	// programmatic scrollTop/scrollBy while momentum scrolling is running. The
+	// flushSync compensation below then silently failed: the DOM shrank by the
+	// pruned chapter's height but the scroll position stayed, teleporting the
+	// reader roughly one chapter forward ("suddenly mid-chapter, had to scroll
+	// back up"). Chrome never showed this because its native scroll anchoring
+	// already corrects removals above the viewport (delta computes to 0 there).
+	let pruneTimer: ReturnType<typeof setInterval> | null = null;
+	let touchActive = false;
+
 	$effect(() => {
+		if (typeof window === 'undefined') return;
+		const down = () => (touchActive = true);
+		const up = () => (touchActive = false);
+		window.addEventListener('touchstart', down, { passive: true });
+		window.addEventListener('touchend', up, { passive: true });
+		window.addEventListener('touchcancel', up, { passive: true });
+		return () => {
+			window.removeEventListener('touchstart', down);
+			window.removeEventListener('touchend', up);
+			window.removeEventListener('touchcancel', up);
+		};
+	});
+
+	$effect(() => {
+		const idx = sections.findIndex((s) => s.chapter.id === currentChapterId);
+		if (idx <= 1) return;
+		schedulePrune();
+		return () => {
+			if (pruneTimer) {
+				clearInterval(pruneTimer);
+				pruneTimer = null;
+			}
+		};
+	});
+
+	// Wait until the scroll position has been stable for one 200ms tick with no
+	// finger down, then prune. Fallback: force it after 15s even without idle
+	// (e.g. auto-scroll never settles) — auto-scroll isn't momentum, so the
+	// compensation works there, and the verify-retry below covers stragglers.
+	function schedulePrune() {
+		if (pruneTimer) return;
+		let lastTop = webtoonScrollEl?.scrollTop ?? 0;
+		let waited = 0;
+		pruneTimer = setInterval(() => {
+			const el = webtoonScrollEl;
+			if (!el) return;
+			waited += 200;
+			const idle = Math.abs(el.scrollTop - lastTop) < 1 && !touchActive;
+			lastTop = el.scrollTop;
+			if (!idle && waited < 15000) return;
+			if (pruneTimer) clearInterval(pruneTimer);
+			pruneTimer = null;
+			pruneSections();
+		}, 200);
+	}
+
+	function pruneSections() {
 		const idx = sections.findIndex((s) => s.chapter.id === currentChapterId);
 		if (idx <= 1) return;
 		const dropCount = idx - 1;
@@ -447,28 +507,30 @@
 		const anchorSelector = `[data-page-key="${sections[dropCount].chapter.id}-0"]`;
 		const topBefore = document.querySelector(anchorSelector)?.getBoundingClientRect().top;
 		// flushSync (not tick().then) applies the DOM mutation and the scroll
-		// correction in the same synchronous pass. tick().then() left a gap of
-		// at least one browser paint between the prune landing and the
-		// correction running — with scroll anchoring disabled on this
-		// container (overflow-anchor: none), the browser had nothing to keep
-		// the visible position stable in that gap, so it painted a frame with
-		// the OLD scrollTop pointing into the NEW (shrunk) content: a visible
-		// jump forward by roughly one chapter's height, sometimes landing
-		// mid-chapter or at the very bottom, before snapping back once the
-		// correction finally ran. This only ever showed up from the SECOND
-		// chapter crossing onward — the very first (idx <= 1 above) never
-		// prunes anything, so chapter 1 → 2 was always smooth by accident.
+		// correction in the same synchronous pass — with a paint in between, the
+		// browser shows a frame of the OLD scrollTop against the shrunk content.
 		flushSync(() => {
 			sections = sections.slice(dropCount);
 		});
-		if (topBefore !== undefined) {
+		if (topBefore === undefined) return;
+		const correct = (): boolean => {
 			const topAfter = document.querySelector(anchorSelector)?.getBoundingClientRect().top;
-			if (topAfter !== undefined) {
-				const delta = topAfter - topBefore;
-				if (delta !== 0) webtoonScrollEl?.scrollBy(0, delta);
-			}
+			if (topAfter === undefined) return true;
+			const delta = topAfter - topBefore;
+			if (Math.abs(delta) < 1) return true;
+			webtoonScrollEl?.scrollBy(0, delta);
+			return false;
+		};
+		// Belt-and-suspenders for the same iOS quirk: verify the correction
+		// actually landed and reapply for a few frames if the browser ate it.
+		if (!correct()) {
+			let tries = 0;
+			const tick = () => {
+				if (!correct() && ++tries < 10) requestAnimationFrame(tick);
+			};
+			requestAnimationFrame(tick);
 		}
-	});
+	}
 
 	function toggleChrome() {
 		chromeVisible = !chromeVisible;
