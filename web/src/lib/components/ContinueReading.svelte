@@ -2,6 +2,7 @@
 	import { apiUrl } from '$lib/graphql/client';
 	import {
 		continueProgressPct,
+		isFinishedStale,
 		resolveContinueStatus,
 		type ContinueUpdateMeta
 	} from '$lib/continue-reading';
@@ -9,8 +10,6 @@
 	import { updates } from '$lib/updates/updates.svelte';
 	import { imgFallback } from '$lib/utils/imgFallback';
 	import Play from '@lucide/svelte/icons/play';
-	import Check from '@lucide/svelte/icons/check';
-	import Clock from '@lucide/svelte/icons/clock';
 	import type { RecentChapter } from '$lib/graphql/types';
 
 	interface Props {
@@ -56,9 +55,20 @@
 			updateMeta: updateMetaFor(chapter.mangaId)
 		});
 	}
+
+	// Drop cards that are fully read and haven't been touched in a while —
+	// "sudah baca semua" is a koleksi concern, Lanjut Baca is for active reading.
+	const visible = $derived.by(() =>
+		chapters.filter((chapter) => {
+			const status = statusOf(chapter);
+			const lastActivityAt =
+				localData.history.find((h) => h.chapterId === chapter.id)?.updatedAt ?? 0;
+			return !isFinishedStale(status.kind, lastActivityAt, Date.now());
+		})
+	);
 </script>
 
-{#if chapters.length > 0}
+{#if visible.length > 0}
 	<section class="mb-8">
 		<div class="mb-3 flex items-center justify-between">
 			<h2 class="text-lg font-semibold text-text">{title}</h2>
@@ -67,7 +77,7 @@
 			{/if}
 		</div>
 		<div class="-mx-1 flex gap-3 overflow-x-auto px-1 pb-2">
-			{#each chapters as chapter (chapter.id)}
+			{#each visible as chapter (chapter.id)}
 				{@const pct = continueProgressPct(chapter)}
 				{@const status = statusOf(chapter)}
 				<a
@@ -84,16 +94,13 @@
 								use:imgFallback
 							/>
 						{/if}
-						<span
-							class="absolute left-2 top-2 flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white shadow {status.badgeClass}"
-						>
-							{#if status.showCheck}
-								<Check size={10} />
-							{:else if status.kind === 'selesai'}
-								<Clock size={10} />
-							{/if}
-							{status.label}
-						</span>
+						{#if status.kind === 'lanjut' || status.kind === 'baru'}
+							<span
+								class="absolute left-2 top-2 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white shadow {status.badgeClass}"
+							>
+								{status.label}
+							</span>
+						{/if}
 						<div class="absolute inset-0 flex items-center justify-center bg-black/0 transition group-hover:bg-black/30">
 							<span
 								class="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-white opacity-90 shadow transition group-hover:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
@@ -112,7 +119,9 @@
 					</div>
 					<div class="p-2">
 						<p class="line-clamp-1 text-xs font-medium text-text">{chapter.manga.title}</p>
-						<p class="line-clamp-1 text-[11px] text-muted">{status.subtitle}</p>
+						<p class="line-clamp-1 text-[11px] text-muted">
+							{status.kind === 'selesai' || status.kind === 'tamat' ? chapter.name : status.subtitle}
+						</p>
 					</div>
 				</a>
 			{/each}

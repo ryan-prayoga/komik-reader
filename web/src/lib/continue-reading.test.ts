@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	buildContinueReading,
 	continueProgressPct,
+	isFinishedStale,
 	isLatestChapterRead,
 	resolveContinueStatus
 } from './continue-reading';
@@ -226,5 +227,24 @@ describe('resolveContinueStatus', () => {
 		// behindLatest (10 < 11) still surfaces as Baru so user sees the tip chapter
 		expect(s.kind).toBe('baru');
 		expect(s.subtitle).toContain('Chapter 11');
+	});
+});
+
+describe('isFinishedStale', () => {
+	const DAY = 24 * 60 * 60 * 1000;
+
+	it('never hides an active (lanjut/baru) card regardless of age', () => {
+		expect(isFinishedStale('lanjut', 0, 30 * DAY)).toBe(false);
+		expect(isFinishedStale('baru', 0, 30 * DAY)).toBe(false);
+	});
+
+	it('keeps a finished card visible within the 7-day grace window', () => {
+		expect(isFinishedStale('selesai', 0, 6 * DAY)).toBe(false);
+		expect(isFinishedStale('tamat', 0, 7 * DAY)).toBe(false);
+	});
+
+	it('hides a finished card once it is older than 7 days', () => {
+		expect(isFinishedStale('selesai', 0, 8 * DAY)).toBe(true);
+		expect(isFinishedStale('tamat', 0, 8 * DAY)).toBe(true);
 	});
 });

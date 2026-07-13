@@ -4,6 +4,7 @@
 	import { localData } from '$lib/local/data.svelte';
 	import { syncEngine } from '$lib/local/sync.svelte';
 	import { updates } from '$lib/updates/updates.svelte';
+	import { isLatestChapterRead } from '$lib/continue-reading';
 	import { showToast } from '$lib/stores/toast.svelte';
 	import MangaCard from '$lib/components/MangaCard.svelte';
 	import MangaGrid from '$lib/components/MangaGrid.svelte';
@@ -93,6 +94,16 @@
 
 	function lastRead(mangaId: number) {
 		return localData.history.find((h) => h.mangaId === mangaId) ?? null;
+	}
+
+	// "Sudah baca semua, nunggu chapter baru" — koleksi is where this check
+	// belongs; Lanjut Baca only cares about what's still unread.
+	function isFullyCaughtUp(mangaId: number, meta: ReturnType<typeof updates.get>) {
+		if (!meta || (meta.latestChapterId == null && !(meta.latestChapterNumber > 0))) return false;
+		const hist = localData.history
+			.filter((h) => h.mangaId === mangaId)
+			.map((h) => ({ chapterId: h.chapterId, chapterNumber: h.chapterNumber, isRead: h.isRead }));
+		return isLatestChapterRead(hist, meta);
 	}
 
 	let manageOpen = $state(false);
@@ -268,6 +279,13 @@
 					last && !last.isRead && last.totalPages
 						? Math.min(100, Math.round(((last.lastPage + 1) / last.totalPages) * 100))
 						: null}
+				{@const progressLabel = meta?.hasUpdate
+					? `Baru · ${meta.latestChapterName}`
+					: last && !last.isRead
+						? `Lanjut · ${last.chapterName}`
+						: last?.isRead && isFullyCaughtUp(manga.mangaId, meta)
+							? 'Selesai'
+							: null}
 				{#if selectMode}
 					<button
 						type="button"
@@ -295,11 +313,7 @@
 								}}
 								href="/manga/{manga.mangaId}"
 								hasUpdate={!!meta?.hasUpdate}
-								progressLabel={meta?.hasUpdate
-									? `Baru · ${meta.latestChapterName}`
-									: last && !last.isRead
-										? `Lanjut · ${last.chapterName}`
-										: null}
+								{progressLabel}
 								progressPercent={meta?.hasUpdate ? 100 : pct}
 								class="pointer-events-none"
 							/>
@@ -316,11 +330,7 @@
 						}}
 						href="/manga/{manga.mangaId}"
 						hasUpdate={!!meta?.hasUpdate}
-						progressLabel={meta?.hasUpdate
-							? `Baru · ${meta.latestChapterName}`
-							: last && !last.isRead
-								? `Lanjut · ${last.chapterName}`
-								: null}
+						{progressLabel}
 						progressPercent={meta?.hasUpdate ? 100 : pct}
 					/>
 				{/if}

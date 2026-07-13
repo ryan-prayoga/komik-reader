@@ -52,6 +52,23 @@ export function continueProgressPct(ch: RecentChapter): number | null {
 
 export type ContinueStatusKind = 'lanjut' | 'baru' | 'selesai' | 'tamat';
 
+/** Lanjut Baca is for active reading — "sudah baca semua" belongs to koleksi. */
+export const CONTINUE_READING_STALE_FINISHED_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * A finished (selesai/tamat) card older than the stale window drops out of
+ * Lanjut Baca — it stays reachable via /history, but no longer clutters the
+ * "what to continue" list once there's nothing left to continue.
+ */
+export function isFinishedStale(
+	kind: ContinueStatusKind,
+	lastActivityAt: number,
+	now: number
+): boolean {
+	if (kind !== 'selesai' && kind !== 'tamat') return false;
+	return now - lastActivityAt > CONTINUE_READING_STALE_FINISHED_MS;
+}
+
 export type ContinueStatus = {
 	kind: ContinueStatusKind;
 	/** Short badge text (LANJUT / BARU / SELESAI / TAMAT). */

@@ -4,6 +4,7 @@
 	import {
 		buildContinueReading,
 		continueProgressPct,
+		isFinishedStale,
 		resolveContinueStatus,
 		type ContinueUpdateMeta
 	} from '$lib/continue-reading';
@@ -21,6 +22,17 @@
 	// the entry doesn't vanish the moment a chapter is completed.
 	const recent = $derived.by<RecentChapter[]>(() =>
 		localData.ready ? buildContinueReading(localData.history, 5) : []
+	);
+
+	// Drop cards that are fully read and haven't been touched in a while —
+	// "sudah baca semua" is a koleksi concern, Lanjut Baca is for active reading.
+	const visible = $derived.by(() =>
+		recent.filter((chapter) => {
+			const status = statusOf(chapter);
+			const lastActivityAt =
+				localData.history.find((h) => h.chapterId === chapter.id)?.updatedAt ?? 0;
+			return !isFinishedStale(status.kind, lastActivityAt, Date.now());
+		})
 	);
 
 	function chapterDuration(chapterId: number): string | null {
@@ -66,14 +78,14 @@
 	}
 </script>
 
-{#if show && recent.length > 0}
+{#if show && visible.length > 0}
 	<aside
 		class="sticky top-0 hidden h-screen w-72 shrink-0 flex-col overflow-y-auto border-l border-border px-4 py-8 2xl:flex"
 		aria-label="Lanjut baca"
 	>
 		<h2 class="mb-3 text-xs font-semibold uppercase tracking-wide text-muted">Lanjut Baca</h2>
 		<div class="flex flex-col gap-2">
-			{#each recent as chapter (chapter.id)}
+			{#each visible as chapter (chapter.id)}
 				{@const dur = chapterDuration(chapter.id)}
 				{@const pct = continueProgressPct(chapter)}
 				{@const status = statusOf(chapter)}
@@ -99,15 +111,10 @@
 					</div>
 					<div class="min-w-0 flex-1">
 						<p class="line-clamp-1 text-sm font-medium text-text">{chapter.manga.title}</p>
-						<p class="line-clamp-1 text-xs text-muted">{status.subtitle}</p>
-						{#if status.kind === 'tamat'}
-							<p class="mt-0.5 text-[11px] text-success">Tamat · semua chapter dibaca</p>
-						{:else if status.kind === 'selesai'}
-							<p class="mt-0.5 flex items-center gap-1 text-[11px] text-warning">
-								<Clock size={10} class="shrink-0" />
-								<span>{status.subtitle}</span>
-							</p>
-						{:else if status.kind === 'baru'}
+						<p class="line-clamp-1 text-xs text-muted">
+							{status.kind === 'selesai' || status.kind === 'tamat' ? chapter.name : status.subtitle}
+						</p>
+						{#if status.kind === 'baru'}
 							<p class="mt-0.5 text-[11px] text-accent">Chapter baru</p>
 						{:else if pct != null}
 							<p class="mt-0.5 text-[11px] tabular-nums text-muted">{pct}%</p>
