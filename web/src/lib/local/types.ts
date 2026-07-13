@@ -15,6 +15,12 @@ export type LocalHistory = {
 	sourceId?: string | null;
 	chapterNumber?: number;
 	totalPages?: number;
+	/**
+	 * Scroll position WITHIN `lastPage` (0–1, webtoon mode only). Webtoon pages
+	 * are several screens tall, so resuming to just the page index landed up to
+	 * a few screens away from where the reader actually stopped.
+	 */
+	lastPageProgress?: number;
 	deleted?: boolean;
 	/**
 	 * Wall-clock ms spent actively reading this chapter on THIS device.

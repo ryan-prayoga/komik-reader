@@ -29,6 +29,9 @@
 	let pages = $state<string[]>([]);
 	let currentPage = $state(0);
 	let initialPage = $state(0);
+	// Webtoon: scroll fraction within initialPage to land exactly where the
+	// reader stopped, not at the top of a pages-tall panel.
+	let initialPageProgress = $state(0);
 
 	// Webtoon sections (each section = one chapter's pages)
 	type Section = { chapter: Chapter; pages: string[] };
@@ -303,6 +306,15 @@
 		return h.lastPage;
 	}
 
+	// Fraction within the resume page (webtoon): only meaningful when the local
+	// row is the one the page resume came from — a server-fallback resume has
+	// no fraction, and a finished chapter reopens at the top.
+	function resumeProgressFor(id: number, page: number): number {
+		const h = localData.history.find((x) => x.chapterId === id);
+		if (!h || h.isRead || h.lastPage !== page) return 0;
+		return Math.max(0, Math.min(1, h.lastPageProgress ?? 0));
+	}
+
 	function reportPage(index: number) {
 		currentPage = index;
 		// Monotonic: never let scrolling back downgrade an already-read chapter
@@ -334,6 +346,8 @@
 	}
 
 	let lastReportedPageKey = '';
+	let lastPersistedAt = 0;
+	let lastPersistedPageProgress = 0;
 	let lastBackfilledChapterId = 0;
 
 	// Fast/momentum scroll can carry the viewport past a chapter's last page
@@ -385,12 +399,21 @@
 		backfillPassedChapters(sectionChapterId);
 		const section = sections.find((s) => s.chapter.id === sectionChapterId);
 		if (!section || !mangaId) return;
-		// Persisting (GraphQL mutation + IndexedDB write) is only needed once per page,
-		// not on every scroll-driven progress tick — guard so autoscroll doesn't fire
-		// dozens of writes/sec and stutter the main thread.
+		// Persisting on every scroll-driven tick would fire dozens of writes/sec
+		// and stutter the main thread. The server write (GraphQL mutation) only
+		// carries a page index, so it goes out once per page change; the LOCAL
+		// row also stores the position within the page, so it additionally
+		// rewrites when that fraction has drifted — throttled — or resuming
+		// lands at the top of a pages-tall webtoon panel instead of where the
+		// reader actually stopped.
 		const pageKey = `${section.chapter.id}-${pageIdx}`;
-		if (pageKey === lastReportedPageKey) return;
+		const pageChanged = pageKey !== lastReportedPageKey;
+		const now = Date.now();
+		const fractionDrift = Math.abs(pageProgress - lastPersistedPageProgress);
+		if (!pageChanged && (fractionDrift < 0.05 || now - lastPersistedAt < 1500)) return;
 		lastReportedPageKey = pageKey;
+		lastPersistedAt = now;
+		lastPersistedPageProgress = pageProgress;
 		// Monotonic: same guard as reportPage — don't downgrade a read chapter
 		// back to unread when re-scrolling an earlier page. Scroll-extent
 		// progress ~1 also counts as read: it covers the case where the last
@@ -398,8 +421,10 @@
 		const alreadyRead = isChapterReadAnywhere(section.chapter.id);
 		const isRead =
 			alreadyRead || pageIdx >= section.pages.length - 1 || chapterProgress >= 0.995;
-		void queueChapterProgress(section.chapter.id, pageIdx, isRead);
-		if (isRead) markChapterReadLocally(section.chapter.id);
+		if (pageChanged) {
+			void queueChapterProgress(section.chapter.id, pageIdx, isRead);
+			if (isRead) markChapterReadLocally(section.chapter.id);
+		}
 		void localData.recordHistory({
 			chapterId: section.chapter.id,
 			mangaId,
@@ -407,6 +432,7 @@
 			thumbnailUrl: mangaThumb,
 			chapterName: section.chapter.name,
 			lastPage: pageIdx,
+			lastPageProgress: pageProgress,
 			isRead,
 			sourceId: mangaSourceId,
 			chapterNumber: section.chapter.chapterNumber,
@@ -683,10 +709,13 @@
 		void refreshOfflineFlag(id);
 		currentPage = 0;
 		initialPage = 0;
+		initialPageProgress = 0;
 		currentChapterId = id;
 		// Namespaced by chapter id so leaving these stale is currently harmless,
 		// but resetting them here removes the latent coupling defensively.
 		lastReportedPageKey = '';
+		lastPersistedAt = 0;
+		lastPersistedPageProgress = 0;
 		lastBackfilledChapterId = 0;
 		// Zero the scroll BEFORE the DOM collapses to the loading shimmer. If the
 		// user was deep in a long chapter, swapping to the (much shorter) shimmer
@@ -725,6 +754,7 @@
 						const stub = await hydrateOfflineMeta(id);
 						if (cancelled) return;
 						current = stub;
+						initialPageProgress = untrack(() => resumeProgressFor(id, initialPage));
 						sections = [{ chapter: stub, pages: cached }];
 						if (initialPage > 0 && initialPage < cached.length) currentPage = initialPage;
 						seedWebtoonProgress(cached.length);
@@ -795,6 +825,7 @@
 					readerSettings.applyForManga(resolvedMangaId);
 				}
 
+				initialPageProgress = untrack(() => resumeProgressFor(id, initialPage));
 				sections = [{ chapter: current ?? makeStubChapter(id), pages }];
 				if (initialPage > 0 && initialPage < pages.length) {
 					currentPage = initialPage;
@@ -824,6 +855,7 @@
 					const stub = await hydrateOfflineMeta(id);
 					if (cancelled) return;
 					current = stub;
+					initialPageProgress = untrack(() => resumeProgressFor(id, initialPage));
 					sections = [{ chapter: stub, pages: cached }];
 					if (initialPage > 0 && initialPage < cached.length) {
 						currentPage = initialPage;
@@ -1033,6 +1065,7 @@
 								onnearend={handleNearEnd}
 								onzoom={(z) => readerSettings.set('zoom', z)}
 								{initialPage}
+								initialProgress={initialPageProgress}
 								resetToken={`${chapterId}:${navNonce}`}
 								onrefreshpages={refreshChapterPages}
 							/>

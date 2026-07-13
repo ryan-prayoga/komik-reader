@@ -20,6 +20,9 @@
 		zoom?: number;
 		gap?: boolean;
 		initialPage?: number;
+		// Scroll fraction (0–1) within initialPage — webtoon pages are several
+		// screens tall, so page index alone lands screens away from the real spot.
+		initialProgress?: number;
 		// Bumped by the parent on every hard chapter navigation (URL change), as
 		// opposed to infinite-scroll appends which leave this untouched. Lets us
 		// tell "user jumped chapters" apart from "next chapter streamed in".
@@ -38,6 +41,7 @@
 		zoom = 1,
 		gap = true,
 		initialPage = 0,
+		initialProgress = 0,
 		resetToken,
 		onrefreshpages
 	}: Props = $props();
@@ -75,6 +79,11 @@
 	const pageEls = new Map<string, HTMLElement>();
 	let activeChapterId = 0;
 	let activePi = 0;
+	// Fraction (0–1) into the active page, kept in sync with reportCurrentProgress
+	// — the anchor correction below needs this to compensate the CURRENTLY
+	// VIEWED page's own resize without re-deriving it from getBoundingClientRect
+	// (which is unreliable mid-batch, see the anchor's comment).
+	let activeProgress = 0;
 
 	let loadedPages = $state<Record<string, boolean>>({});
 	let errorPages = $state<Record<string, boolean>>({});
@@ -157,6 +166,7 @@
 		appliedResetToken = resetToken;
 		activeChapterId = 0;
 		activePi = 0;
+		activeProgress = 0;
 		loadedPages = {};
 		errorPages = {};
 		retryCounts = {};
@@ -173,15 +183,26 @@
 
 	// ── Manual scroll anchoring ─────────────────────────────────────────────
 	// iOS Safari has no native scroll anchoring at all (overflow-anchor is
-	// Chrome/Firefox only), so when a page ABOVE the viewport swaps its guessed
-	// placeholder height for the real image height, everything below shifts and
-	// the reading position jumps — the "suddenly mid-chapter after crossing
-	// into the next chapter" reports. Replicate anchoring by hand: a
-	// ResizeObserver callback runs after layout but BEFORE paint, so shifting
-	// scrollTop by the height delta inside it lands in the same frame as the
-	// resize and is never visible. Native anchoring is disabled on the scroll
-	// container (overflow-anchor: none, app.css) so Chrome doesn't stack its
-	// own correction on top of this one.
+	// Chrome/Firefox only), so when a page swaps its guessed placeholder height
+	// for the real image height, everything below shifts and the reading
+	// position jumps — the "suddenly mid-chapter after crossing into the next
+	// chapter" reports, and (more subtly) the "resume lands close but not
+	// exact" imprecision. Replicate anchoring by hand: a ResizeObserver
+	// callback runs after layout but BEFORE paint, so shifting scrollTop by the
+	// height delta inside it lands in the same frame as the resize and is
+	// never visible. Native anchoring is disabled on the scroll container
+	// (overflow-anchor: none, app.css) so Chrome doesn't stack its own
+	// correction on top of this one.
+	//
+	// Classification of each resized page uses READING-ORDER INDEX (chapter +
+	// page position) against the current anchor (activeChapterId/activePi),
+	// NOT live getBoundingClientRect() reads. Pages that are eager-loaded
+	// together (the first ~10 of a chapter) resize in the SAME ResizeObserver
+	// batch, and the browser has already applied ALL their layout changes
+	// before the callback runs — so by the time entry #5 is processed, reading
+	// its rect reflects entries #1-4's growth too, double-counting/misclassifying
+	// which pages are "above" vs "at" the viewport. Index order is stable
+	// regardless of batching or which order entries happen to arrive in.
 	const pageHeights = new Map<string, number>();
 	let pendingAnchorDelta = 0;
 	let anchorRafId = 0;
@@ -189,6 +210,13 @@
 
 	function scrollerEl(): HTMLElement | null {
 		return (rootEl?.closest('[data-reader-scroll]') as HTMLElement | null) ?? null;
+	}
+
+	// Reading-order sort key: section index (chapter position in `sections`)
+	// times a stride bigger than any realistic page count, plus page index.
+	function pageOrderKey(chapterId: number, pi: number): number {
+		const si = sections.findIndex((s) => s.chapter.id === chapterId);
+		return si * 100000 + pi;
 	}
 
 	// iOS also ignores programmatic scrollTop writes while a momentum fling is
@@ -219,19 +247,37 @@
 	const resizeAnchor =
 		typeof ResizeObserver !== 'undefined'
 			? new ResizeObserver((entries) => {
-					const scrollerTop = scrollerEl()?.getBoundingClientRect().top ?? 0;
+					// No anchor established yet (before the first placement/intersection) —
+					// just record the new heights, nothing to correct against.
+					if (!activeChapterId) {
+						for (const entry of entries) {
+							const key = (entry.target as HTMLElement).dataset.pageKey;
+							if (key)
+								pageHeights.set(key, entry.borderBoxSize?.[0]?.blockSize ?? entry.contentRect.height);
+						}
+						return;
+					}
+					const anchorOrder = pageOrderKey(activeChapterId, activePi);
 					let delta = 0;
 					for (const entry of entries) {
-						const el = entry.target as HTMLElement;
-						const key = el.dataset.pageKey;
+						const key = (entry.target as HTMLElement).dataset.pageKey;
 						if (!key) continue;
+						const [chStr, piStr] = key.split('-');
 						const newH = entry.borderBoxSize?.[0]?.blockSize ?? entry.contentRect.height;
 						const oldH = pageHeights.get(key);
 						pageHeights.set(key, newH);
 						if (oldH === undefined || Math.abs(newH - oldH) < 0.5) continue;
-						// Only pages fully above the viewport shift the reading position —
-						// a page in view grows downward from its own (stable) top edge.
-						if (el.getBoundingClientRect().bottom <= scrollerTop + 1) delta += newH - oldH;
+						const order = pageOrderKey(Number(chStr), Number(piStr));
+						if (order < anchorOrder) {
+							// Fully above the anchor in reading order: shift by the whole delta.
+							delta += newH - oldH;
+						} else if (order === anchorOrder) {
+							// The page currently being read: keep the same FRACTION into it,
+							// using the fraction we already track (not a live rect re-derive,
+							// which is exactly what made this imprecise before).
+							delta += activeProgress * (newH - oldH);
+						}
+						// order > anchorOrder: below the fold, doesn't affect scroll position.
 					}
 					if (delta) {
 						pendingAnchorDelta += delta;
@@ -290,12 +336,14 @@
 		}
 		const el = pageEls.get(`${activeChapterId}-${activePi}`);
 		if (!el) {
+			activeProgress = 0;
 			onpage(activeChapterId, activePi, 0, 0);
 			return;
 		}
 		const { top, height } = el.getBoundingClientRect();
 		// progress 0 = top of page at viewport top, 1 = bottom of page at viewport top
 		const progress = height > 0 ? Math.max(0, Math.min(1, -top / height)) : 0;
+		activeProgress = progress;
 		onpage(activeChapterId, activePi, progress, chapterScrollProgress(activeChapterId));
 	}
 
@@ -386,25 +434,34 @@
 	let rootEl: HTMLElement;
 
 	onMount(() => {
-		let scrollRafId: number;
-		let retryTimers: ReturnType<typeof setTimeout>[] = [];
-
+		// Resume scroll runs ONCE, synchronously, before the first paint — the
+		// old version scheduled it on rAF plus 400/1200/3000ms retries to chase
+		// images resizing the layout, and every retry was a visible snap ("shows
+		// some page first, then jumps to the spot"). The manual ResizeObserver
+		// anchoring above now keeps the visual position pinned while images
+		// stream in, so one pre-paint placement is both flicker-free and stable.
 		if (initialPage > 0) {
-			function scrollToTarget() {
-				const firstChapterId = sections[0]?.chapter.id;
-				pageEls
-					.get(`${firstChapterId}-${initialPage}`)
-					?.scrollIntoView({ block: 'start', behavior: 'instant' });
+			const firstChapterId = sections[0]?.chapter.id;
+			const target = pageEls.get(`${firstChapterId}-${initialPage}`);
+			const scroller = scrollerEl();
+			if (target && scroller && firstChapterId) {
+				const clampedProgress = Math.min(1, Math.max(0, initialProgress));
+				const top =
+					target.getBoundingClientRect().top -
+					scroller.getBoundingClientRect().top +
+					scroller.scrollTop;
+				scroller.scrollTop = top + target.offsetHeight * clampedProgress;
+				// Establish the anchor synchronously, in the SAME task as the
+				// placement above — any placeholder→real-image resize that fires
+				// before the first natural IntersectionObserver callback (very
+				// likely, since eager images for the first ~10 pages start
+				// resolving immediately) needs a valid anchor to correct against
+				// from frame one, or the placement above drifts by exactly the
+				// placeholder-vs-real height error before anything can fix it.
+				activeChapterId = firstChapterId;
+				activePi = initialPage;
+				activeProgress = clampedProgress;
 			}
-			// Retry a few times as images above the target finish loading and establish
-			// height. The last retry is intentionally generous — a slow device/network
-			// (or the offline cache path, which serves pages already-downloaded but
-			// still decoded on-device) can take well over a second to lay out enough
-			// pages to make the target page's offset reachable.
-			scrollRafId = requestAnimationFrame(scrollToTarget);
-			retryTimers.push(setTimeout(scrollToTarget, 400));
-			retryTimers.push(setTimeout(scrollToTarget, 1200));
-			retryTimers.push(setTimeout(scrollToTarget, 3000));
 		}
 
 		let rafId: number;
@@ -420,9 +477,7 @@
 		return () => {
 			scroller.removeEventListener('scroll', onScroll);
 			cancelAnimationFrame(rafId);
-			cancelAnimationFrame(scrollRafId);
 			cancelAnimationFrame(anchorRafId);
-			retryTimers.forEach(clearTimeout);
 			resizeAnchor?.disconnect();
 		};
 	});
@@ -504,7 +559,7 @@
 						? 'opacity-100'
 						: 'opacity-0'} {readerSettings.cropBorders ? 'scale-[1.03]' : ''}"
 					style="aspect-ratio: auto 1 / {ratio}"
-					loading={eagerPages[key] || (si === 0 && pi <= initialPage) ? 'eager' : 'lazy'}
+					loading={eagerPages[key] || (si === 0 && pi <= initialPage + 1) ? 'eager' : 'lazy'}
 					decoding="async"
 					onload={(e) => markLoaded(key, section.chapter.id, e.currentTarget as HTMLImageElement)}
 					onerror={() => markError(key)}

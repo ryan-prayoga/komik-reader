@@ -107,6 +107,7 @@ class LocalData {
 		sourceId?: string | null;
 		chapterNumber?: number;
 		totalPages?: number;
+		lastPageProgress?: number;
 	}) {
 		const existing = this.history.find((h) => h.chapterId === entry.chapterId);
 		let row: LocalHistory = {
