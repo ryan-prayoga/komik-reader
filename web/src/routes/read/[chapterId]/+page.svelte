@@ -268,15 +268,20 @@
 	// resume-scroll settles and its own IntersectionObserver reports back — until
 	// then they're stuck at the reset defaults (0%, page 1), which for a chapter
 	// resumed deep in (e.g. page 80/100) visibly looks like it reopened from the
-	// start for as long as that settle takes. Seed them from initialPage right
-	// when pages are known so they're already approximately right; the
-	// observer's first real report only refines them (true scroll-extent
-	// progress vs this page-index estimate).
+	// start for as long as that settle takes. Seed them from initialPage/
+	// initialPageProgress right when pages are known so they're already
+	// accurate, not just page-index-close; the observer's first real report
+	// only refines them further (true scroll-extent progress vs this estimate).
 	function seedWebtoonProgress(pageCount: number) {
 		if (isPaged || pageCount <= 0) return;
 		const idx = Math.min(Math.max(initialPage, 0), pageCount - 1);
 		currentPageIdx = idx;
-		currentChapterProgress = pageCount > 1 ? idx / (pageCount - 1) : 0;
+		currentPageProgress = initialPageProgress;
+		// Blend the fraction WITHIN the page into the chapter-wide estimate so
+		// the top progress bar doesn't visibly hop backward once the real
+		// scroll-extent report lands a moment later.
+		currentChapterProgress =
+			pageCount > 1 ? Math.min(1, (idx + initialPageProgress) / (pageCount - 1)) : 0;
 	}
 
 	function markChapterReadLocally(id: number) {
@@ -381,36 +386,28 @@
 		}
 	}
 
-	function reportWebtoonPage(
+	// Persisting on every scroll-driven tick would fire dozens of writes/sec and
+	// stutter the main thread, so this is throttled — see the guard below. That
+	// throttle window means the very LAST position before the reader actually
+	// leaves (closes the tab, backgrounds the app, navigates away) can still be
+	// sitting unpersisted when it happens. `force` (used by flushWebtoonProgressNow)
+	// bypasses the throttle for exactly that moment, using whatever `currentPageIdx`/
+	// `currentPageProgress` were last tracked — those two are updated on EVERY
+	// report, never throttled, so they're always the true latest position.
+	function persistWebtoonProgress(
 		sectionChapterId: number,
 		pageIdx: number,
 		pageProgress: number,
-		chapterProgress: number
+		chapterProgress: number,
+		force = false
 	) {
-		// 0 is WebtoonView's "not tracking anything yet" sentinel (right after a
-		// hard chapter switch, before any page has intersected) — never let it
-		// overwrite the chapter id the URL/nav effect just set.
-		if (!sectionChapterId) return;
-		if (currentChapterId !== sectionChapterId) syncUrlToChapter(sectionChapterId);
-		currentChapterId = sectionChapterId;
-		currentPageIdx = pageIdx;
-		currentPageProgress = pageProgress;
-		currentChapterProgress = chapterProgress;
-		backfillPassedChapters(sectionChapterId);
 		const section = sections.find((s) => s.chapter.id === sectionChapterId);
 		if (!section || !mangaId) return;
-		// Persisting on every scroll-driven tick would fire dozens of writes/sec
-		// and stutter the main thread. The server write (GraphQL mutation) only
-		// carries a page index, so it goes out once per page change; the LOCAL
-		// row also stores the position within the page, so it additionally
-		// rewrites when that fraction has drifted — throttled — or resuming
-		// lands at the top of a pages-tall webtoon panel instead of where the
-		// reader actually stopped.
 		const pageKey = `${section.chapter.id}-${pageIdx}`;
 		const pageChanged = pageKey !== lastReportedPageKey;
 		const now = Date.now();
 		const fractionDrift = Math.abs(pageProgress - lastPersistedPageProgress);
-		if (!pageChanged && (fractionDrift < 0.05 || now - lastPersistedAt < 1500)) return;
+		if (!force && !pageChanged && (fractionDrift < 0.05 || now - lastPersistedAt < 1500)) return;
 		lastReportedPageKey = pageKey;
 		lastPersistedAt = now;
 		lastPersistedPageProgress = pageProgress;
@@ -421,7 +418,7 @@
 		const alreadyRead = isChapterReadAnywhere(section.chapter.id);
 		const isRead =
 			alreadyRead || pageIdx >= section.pages.length - 1 || chapterProgress >= 0.995;
-		if (pageChanged) {
+		if (pageChanged || force) {
 			void queueChapterProgress(section.chapter.id, pageIdx, isRead);
 			if (isRead) markChapterReadLocally(section.chapter.id);
 		}
@@ -438,6 +435,39 @@
 			chapterNumber: section.chapter.chapterNumber,
 			totalPages: section.pages.length
 		});
+	}
+
+	// Force-persist whatever position was last tracked, bypassing the throttle.
+	// Wired to visibilitychange/pagehide/unmount below — the moments the reader
+	// might never get another scroll tick to naturally flush through.
+	function flushWebtoonProgressNow() {
+		if (isPaged || !currentChapterId) return;
+		persistWebtoonProgress(
+			currentChapterId,
+			currentPageIdx,
+			currentPageProgress,
+			currentChapterProgress,
+			true
+		);
+	}
+
+	function reportWebtoonPage(
+		sectionChapterId: number,
+		pageIdx: number,
+		pageProgress: number,
+		chapterProgress: number
+	) {
+		// 0 is WebtoonView's "not tracking anything yet" sentinel (right after a
+		// hard chapter switch, before any page has intersected) — never let it
+		// overwrite the chapter id the URL/nav effect just set.
+		if (!sectionChapterId) return;
+		if (currentChapterId !== sectionChapterId) syncUrlToChapter(sectionChapterId);
+		currentChapterId = sectionChapterId;
+		currentPageIdx = pageIdx;
+		currentPageProgress = pageProgress;
+		currentChapterProgress = chapterProgress;
+		backfillPassedChapters(sectionChapterId);
+		persistWebtoonProgress(sectionChapterId, pageIdx, pageProgress, chapterProgress);
 		readingTimer.pingActivity();
 		void readingTimer.flush();
 	}
@@ -676,6 +706,26 @@
 		};
 	});
 
+	// The throttled persist in persistWebtoonProgress can leave the LAST scroll
+	// position unwritten for up to ~1.5s — fine while reading continues (the
+	// next tick catches up), but if the reader backgrounds the tab or closes it
+	// right after a big scroll, that position is lost for good. `pagehide` is
+	// the reliable "actually leaving" signal on mobile Safari (unlike
+	// `beforeunload`, which iOS often skips entirely); `visibilitychange` also
+	// catches app-switch/lock-screen without a full unload.
+	$effect(() => {
+		if (typeof document === 'undefined') return;
+		const onHide = () => {
+			if (document.visibilityState === 'hidden') flushWebtoonProgressNow();
+		};
+		document.addEventListener('visibilitychange', onHide);
+		window.addEventListener('pagehide', flushWebtoonProgressNow);
+		return () => {
+			document.removeEventListener('visibilitychange', onHide);
+			window.removeEventListener('pagehide', flushWebtoonProgressNow);
+		};
+	});
+
 	// $effect reruns whenever chapterId changes (client-side nav between chapters),
 	// or when navigateToChapter forces a reset for a stale-param target (navNonce).
 	$effect(() => {
@@ -873,6 +923,7 @@
 
 		return () => {
 			cancelled = true;
+			flushWebtoonProgressNow();
 			stopTimer();
 			readerSettings.clearActiveManga();
 		};
