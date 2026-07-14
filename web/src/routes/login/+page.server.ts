@@ -32,7 +32,8 @@ export const actions: Actions = {
 			String(form.get('redirectTo') ?? url.searchParams.get('redirectTo') ?? '/')
 		);
 
-		const limit = rateLimit(`login:${getClientAddress()}`, 10, 15 * 60_000);
+		const maxAttempts = process.env.NODE_ENV === 'production' ? 10 : 200;
+		const limit = rateLimit(`login:${getClientAddress()}`, maxAttempts, 15 * 60_000);
 		if (!limit.ok) {
 			return fail(429, {
 				error: `Terlalu banyak percobaan. Coba lagi dalam ${limit.retryAfter} detik.`,

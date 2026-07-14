@@ -8,10 +8,10 @@ import { rateLimit } from '$lib/server/ratelimit';
 
 const SUWAYOMI_URL = env.SUWAYOMI_URL || 'http://localhost:4567';
 
-// Each browse page fans out into many upstream scrape calls (enrichment), so the
-// per-IP ceiling is high — it's a runaway/abuse backstop, not a UX throttle.
-const PROXY_LIMIT = 600;
-const PROXY_WINDOW_MS = 60_000;
+	// Each browse page fans out into many upstream scrape calls (enrichment), so the
+	// per-IP ceiling is high — it's a runaway/abuse backstop, not a UX throttle.
+	const PROXY_LIMIT = process.env.NODE_ENV === 'production' ? 600 : 10_000;
+	const PROXY_WINDOW_MS = 60_000;
 // Match client GRAPHQL_TIMEOUT_MS so a hung Suwayomi scrape fails closed here too.
 const PROXY_TIMEOUT_MS = 30_000;
 
