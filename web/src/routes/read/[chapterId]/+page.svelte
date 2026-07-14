@@ -695,7 +695,9 @@
 	// right after a big scroll, that position is lost for good. `pagehide` is
 	// the reliable "actually leaving" signal on mobile Safari (unlike
 	// `beforeunload`, which iOS often skips entirely); `visibilitychange` also
-	// catches app-switch/lock-screen without a full unload.
+	// catches app-switch/lock-screen without a full unload. `freeze` (Page
+	// Lifecycle) covers Chrome discard / frozen background tabs where neither
+	// hide nor pagehide may fire before the JS heap is frozen.
 	$effect(() => {
 		if (typeof document === 'undefined') return;
 		const onHide = () => {
@@ -703,10 +705,33 @@
 		};
 		document.addEventListener('visibilitychange', onHide);
 		window.addEventListener('pagehide', flushWebtoonProgressNow);
+		// Page Lifecycle `freeze` fires on Document (Chrome discard / frozen bg).
+		// Not on every engine — add/remove is a silent no-op where unsupported.
+		document.addEventListener('freeze', flushWebtoonProgressNow);
 		return () => {
 			document.removeEventListener('visibilitychange', onHide);
 			window.removeEventListener('pagehide', flushWebtoonProgressNow);
+			document.removeEventListener('freeze', flushWebtoonProgressNow);
 		};
+	});
+
+	// Mode switch webtoon → paged/double: flushWebtoonProgressNow no-ops once
+	// `isPaged` is already true, so the last in-page fraction would stick only
+	// in memory. Force-persist via persistWebtoonProgress directly on leave.
+	// Paged leave does not need this path — reportPage writes on every page flip.
+	let prevWasWebtoon = readerSettings.mode === 'webtoon';
+	$effect(() => {
+		const webtoon = readerSettings.mode === 'webtoon';
+		if (prevWasWebtoon && !webtoon && currentChapterId) {
+			persistWebtoonProgress(
+				currentChapterId,
+				currentPageIdx,
+				currentPageProgress,
+				currentChapterProgress,
+				true
+			);
+		}
+		prevWasWebtoon = webtoon;
 	});
 
 	// $effect reruns whenever chapterId changes (client-side nav between chapters),
