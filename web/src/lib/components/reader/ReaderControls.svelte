@@ -171,40 +171,40 @@
 	></div>
 </div>
 
-<!-- Floating speed pill while auto-scroll is on and full chrome is hidden —
-     lets users change speed / pause without needing auto-pause-on-tap. -->
-{#if autoScroll && onautoscroll && !show}
-	<div
-		class="fixed right-4 z-40 hidden items-center gap-1 rounded-full border border-white/15 bg-black/70 px-2 py-1.5 shadow-(--shadow-float) backdrop-blur-sm md:flex {dockVisible &&
-		hasChapters
-			? 'lg:right-[19rem]'
-			: ''}"
-		style="bottom: calc(1rem + env(safe-area-inset-bottom))"
-		transition:fade={{ duration: motionDuration(150) }}
-	>
-		<button
-			type="button"
-			onclick={() => onautoscrollspeed?.(-0.5)}
-			aria-label="Perlambat auto-scroll"
-			class="flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold text-white/80 hover:bg-white/10"
-		>−</button>
-		<span class="min-w-8 text-center text-xs tabular-nums text-white">{autoScrollSpeed}×</span>
-		<button
-			type="button"
-			onclick={() => onautoscrollspeed?.(+0.5)}
-			aria-label="Percepat auto-scroll"
-			class="flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold text-white/80 hover:bg-white/10"
-		>+</button>
-		<button
-			type="button"
-			onclick={onautoscroll}
-			aria-label="Stop auto-scroll"
-			class="ml-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-accent text-white"
+	<!-- Floating speed pill while auto-scroll is on and full chrome is hidden —
+	     visible on mobile too (was md:flex only) so speed/pause work when chrome hidden. -->
+	{#if autoScroll && onautoscroll && !show}
+		<div
+			class="fixed right-4 z-40 flex items-center gap-0.5 rounded-full border border-white/15 bg-black/70 px-1.5 py-1 shadow-(--shadow-float) backdrop-blur-sm {dockVisible &&
+			hasChapters
+				? 'lg:right-[19rem]'
+				: ''}"
+			style="bottom: calc(1rem + env(safe-area-inset-bottom))"
+			transition:fade={{ duration: motionDuration(150) }}
 		>
-			<Pause size={14} />
-		</button>
-	</div>
-{/if}
+			<button
+				type="button"
+				onclick={() => onautoscrollspeed?.(-0.5)}
+				aria-label="Perlambat auto-scroll"
+				class="flex h-11 w-11 items-center justify-center rounded-full text-sm font-bold text-white/80 hover:bg-white/10"
+			>−</button>
+			<span class="min-w-8 text-center text-xs tabular-nums text-white">{autoScrollSpeed}×</span>
+			<button
+				type="button"
+				onclick={() => onautoscrollspeed?.(+0.5)}
+				aria-label="Percepat auto-scroll"
+				class="flex h-11 w-11 items-center justify-center rounded-full text-sm font-bold text-white/80 hover:bg-white/10"
+			>+</button>
+			<button
+				type="button"
+				onclick={onautoscroll}
+				aria-label="Stop auto-scroll"
+				class="ml-0.5 flex h-11 w-11 items-center justify-center rounded-full bg-accent text-white"
+			>
+				<Pause size={14} />
+			</button>
+		</div>
+	{/if}
 
 <!-- Top bar -->
 <div
@@ -216,85 +216,88 @@
 		class="flex items-center gap-2 bg-gradient-to-b from-black/45 via-black/15 to-transparent px-3 pb-6 text-white [&_button]:[text-shadow:none]"
 		style="padding-top: calc(env(safe-area-inset-top) + 0.75rem)"
 	>
-		<a
-			href={backHref}
-			aria-label="Kembali"
-			class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black/40 transition hover:bg-black/60"
-		>
-			<ArrowLeft size={20} />
-		</a>
-		<div class="min-w-0 flex-1 pl-0.5 [text-shadow:0_1px_3px_rgb(0_0_0/0.9)]">
-			<p class="truncate text-sm font-semibold leading-tight">{title}</p>
-			<p class="truncate text-xs text-white/70">
-				{chapterName}{#if offlineMode}
-					· <span class="text-accent">Offline</span>{/if}
-			</p>
-		</div>
-		{#if onautoscroll}
-			{#if autoScroll}
-				<!-- Active: compact speed control -->
-				<div class="flex items-center gap-0.5 rounded-full bg-black/50 px-1 py-1">
-					<button
-						onclick={() => onautoscrollspeed?.(-0.5)}
-						class="flex h-6 w-6 items-center justify-center rounded-full text-sm font-bold text-white/70 hover:bg-white/10"
-					>−</button>
-					<span class="w-7 text-center text-[11px] tabular-nums text-white/90">{autoScrollSpeed}×</span>
-					<button
-						onclick={() => onautoscrollspeed?.(+0.5)}
-						class="flex h-6 w-6 items-center justify-center rounded-full text-sm font-bold text-white/70 hover:bg-white/10"
-					>+</button>
-				</div>
+			<a
+				href={backHref}
+				aria-label="Kembali"
+				class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-black/40 transition hover:bg-black/60"
+			>
+				<ArrowLeft size={20} />
+			</a>
+			<div class="min-w-0 flex-1 pl-0.5 [text-shadow:0_1px_3px_rgb(0_0_0/0.9)]">
+				<p class="truncate text-sm font-semibold leading-tight">{title}</p>
+				<p class="truncate text-xs text-white/70">
+					{chapterName}{#if offlineMode}
+						· <span class="text-accent">Offline</span>{/if}
+				</p>
+			</div>
+			{#if onautoscroll}
+				{#if autoScroll}
+					<div class="flex items-center gap-0.5 rounded-full bg-black/50 px-0.5 py-0.5">
+						<button
+							type="button"
+							onclick={() => onautoscrollspeed?.(-0.5)}
+							aria-label="Perlambat auto-scroll"
+							class="flex h-11 w-11 items-center justify-center rounded-full text-sm font-bold text-white/70 hover:bg-white/10"
+						>−</button>
+						<span class="min-w-7 text-center text-[11px] tabular-nums text-white/90">{autoScrollSpeed}×</span>
+						<button
+							type="button"
+							onclick={() => onautoscrollspeed?.(+0.5)}
+							aria-label="Percepat auto-scroll"
+							class="flex h-11 w-11 items-center justify-center rounded-full text-sm font-bold text-white/70 hover:bg-white/10"
+						>+</button>
+					</div>
+				{/if}
+				<button
+					type="button"
+					onclick={onautoscroll}
+					aria-label={autoScroll ? 'Stop auto-scroll' : 'Auto-scroll'}
+					class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition
+						{autoScroll ? 'bg-accent text-white' : 'bg-black/40 hover:bg-black/60'}"
+				>
+					{#if autoScroll}<Pause size={16} />{:else}<Play size={16} />{/if}
+				</button>
+			{/if}
+			{#if ondownload}
+				<button
+					type="button"
+					onclick={ondownload}
+					disabled={chapterOffline || downloadProgress != null}
+					aria-label={chapterOffline ? 'Sudah offline' : 'Simpan offline'}
+					title={chapterOffline ? 'Sudah offline' : 'Simpan offline'}
+					class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition
+						{chapterOffline
+						? 'bg-success/25 text-success'
+						: 'bg-black/40 hover:bg-black/60 disabled:opacity-50'}"
+				>
+					{#if downloadProgress != null}
+						<span class="text-[10px] font-medium tabular-nums">{downloadProgress}%</span>
+					{:else if chapterOffline}
+						<Check size={16} />
+					{:else}
+						<Download size={16} />
+					{/if}
+				</button>
+			{/if}
+			{#if onfullscreen}
+				<button
+					type="button"
+					onclick={onfullscreen}
+					aria-label={fullscreen ? 'Keluar layar penuh' : 'Layar penuh'}
+					title={fullscreen ? 'Keluar layar penuh' : 'Layar penuh'}
+					class="hidden h-11 w-11 shrink-0 items-center justify-center rounded-full bg-black/40 transition hover:bg-black/60 md:inline-flex"
+				>
+					{#if fullscreen}<Minimize size={16} />{:else}<Maximize size={16} />{/if}
+				</button>
 			{/if}
 			<button
 				type="button"
-				onclick={onautoscroll}
-				aria-label={autoScroll ? 'Stop auto-scroll' : 'Auto-scroll'}
-				class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition
-					{autoScroll ? 'bg-accent text-white' : 'bg-black/40 hover:bg-black/60'}"
+				onclick={onsettings}
+				aria-label="Pengaturan reader"
+				class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-black/40 transition hover:bg-black/60"
 			>
-				{#if autoScroll}<Pause size={16} />{:else}<Play size={16} />{/if}
+				<SlidersHorizontal size={18} />
 			</button>
-		{/if}
-		{#if ondownload}
-			<button
-				type="button"
-				onclick={ondownload}
-				disabled={chapterOffline || downloadProgress != null}
-				aria-label={chapterOffline ? 'Sudah offline' : 'Simpan offline'}
-				title={chapterOffline ? 'Sudah offline' : 'Simpan offline'}
-				class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition
-					{chapterOffline
-					? 'bg-success/25 text-success'
-					: 'bg-black/40 hover:bg-black/60 disabled:opacity-50'}"
-			>
-				{#if downloadProgress != null}
-					<span class="text-[10px] font-medium tabular-nums">{downloadProgress}%</span>
-				{:else if chapterOffline}
-					<Check size={16} />
-				{:else}
-					<Download size={16} />
-				{/if}
-			</button>
-		{/if}
-		{#if onfullscreen}
-			<button
-				type="button"
-				onclick={onfullscreen}
-				aria-label={fullscreen ? 'Keluar layar penuh' : 'Layar penuh'}
-				title={fullscreen ? 'Keluar layar penuh' : 'Layar penuh'}
-				class="hidden h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black/40 transition hover:bg-black/60 md:inline-flex"
-			>
-				{#if fullscreen}<Minimize size={16} />{:else}<Maximize size={16} />{/if}
-			</button>
-		{/if}
-		<button
-			type="button"
-			onclick={onsettings}
-			aria-label="Pengaturan reader"
-			class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black/40 transition hover:bg-black/60"
-		>
-			<SlidersHorizontal size={18} />
-		</button>
 	</div>
 </div>
 
@@ -308,69 +311,69 @@
 		class="flex items-center gap-3 bg-gradient-to-t from-black/50 via-black/15 to-transparent px-3 pt-8 text-white"
 		style="padding-bottom: calc(0.75rem + env(safe-area-inset-bottom))"
 	>
-		{#if prevHref}
-			<a
-				href={prevHref}
-				onclick={(e) => navClick(e, chapterIdFromHref(prevHref))}
-				class="inline-flex items-center gap-1 rounded-full bg-black/40 px-3 py-2 text-xs transition hover:bg-black/60"
-			>
-				<ChevronLeft size={16} /> Sebelumnya
-			</a>
-		{:else}
-			<span
-				class="inline-flex items-center gap-1 rounded-full bg-black/20 px-3 py-2 text-xs text-white/40"
-			>
-				<ChevronLeft size={16} /> Sebelumnya
-			</span>
-		{/if}
-
-		{#if showSlider && max > 0}
-			<div class="flex flex-1 items-center gap-2">
-				<input
-					type="range"
-					min="0"
-					max={max}
-					bind:value={current}
-					onchange={() => onseek?.(current)}
-					class="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-white/25 accent-accent"
-					aria-label="Posisi halaman"
-				/>
-				<span class="w-12 shrink-0 text-right text-xs tabular-nums text-white/70">
-					{current + 1}/{max + 1}
+			{#if prevHref}
+				<a
+					href={prevHref}
+					onclick={(e) => navClick(e, chapterIdFromHref(prevHref))}
+					class="inline-flex min-h-11 items-center gap-1 rounded-full bg-black/40 px-3 py-2 text-xs transition hover:bg-black/60"
+				>
+					<ChevronLeft size={16} /> Sebelumnya
+				</a>
+			{:else}
+				<span
+					class="inline-flex min-h-11 items-center gap-1 rounded-full bg-black/20 px-3 py-2 text-xs text-white/40"
+				>
+					<ChevronLeft size={16} /> Sebelumnya
 				</span>
-			</div>
-		{:else}
-			<button
-				type="button"
-				onclick={() => {
-					if (chapters.length > 0) pickerOpen = true;
-				}}
-				class="flex flex-1 items-center justify-center gap-1.5 text-xs text-white/70 transition active:text-white {hasChapters ? 'lg:hidden' : ''}"
-			>
-				<BookOpen size={14} class="shrink-0" />
-				<span class="truncate">{chapterName || pageLabel}</span>
-				{#if chapterName}<span class="shrink-0 tabular-nums text-white/50">· {pageLabel}</span>{/if}
-				{#if chapters.length > 0}
-					<List size={12} class="shrink-0 opacity-50" />
-				{/if}
-			</button>
-		{/if}
+			{/if}
 
-		{#if nextHref}
-			<a
-				href={nextHref}
-				onclick={(e) => navClick(e, chapterIdFromHref(nextHref))}
-				class="inline-flex items-center gap-1 rounded-full bg-black/40 px-3 py-2 text-xs transition hover:bg-black/60"
-			>
-				Berikutnya <ChevronRight size={16} />
-			</a>
-		{:else}
-			<span
-				class="inline-flex items-center gap-1 rounded-full bg-black/20 px-3 py-2 text-xs text-white/40"
-			>
-				Berikutnya <ChevronRight size={16} />
-			</span>
-		{/if}
+			{#if showSlider && max > 0}
+				<div class="flex min-h-11 flex-1 items-center gap-2">
+					<input
+						type="range"
+						min="0"
+						max={max}
+						bind:value={current}
+						onchange={() => onseek?.(current)}
+						class="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-white/25 accent-accent"
+						aria-label="Posisi halaman"
+					/>
+					<span class="w-12 shrink-0 text-right text-xs tabular-nums text-white/70">
+						{current + 1}/{max + 1}
+					</span>
+				</div>
+			{:else}
+				<button
+					type="button"
+					onclick={() => {
+						if (chapters.length > 0) pickerOpen = true;
+					}}
+					class="flex min-h-11 flex-1 items-center justify-center gap-1.5 text-xs text-white/70 transition active:text-white {hasChapters ? 'lg:hidden' : ''}"
+				>
+					<BookOpen size={14} class="shrink-0" />
+					<span class="truncate">{chapterName || pageLabel}</span>
+					{#if chapterName}<span class="shrink-0 tabular-nums text-white/50">· {pageLabel}</span>{/if}
+					{#if chapters.length > 0}
+						<List size={12} class="shrink-0 opacity-50" />
+					{/if}
+				</button>
+			{/if}
+
+			{#if nextHref}
+				<a
+					href={nextHref}
+					onclick={(e) => navClick(e, chapterIdFromHref(nextHref))}
+					class="inline-flex min-h-11 items-center gap-1 rounded-full bg-black/40 px-3 py-2 text-xs transition hover:bg-black/60"
+				>
+					Berikutnya <ChevronRight size={16} />
+				</a>
+			{:else}
+				<span
+					class="inline-flex min-h-11 items-center gap-1 rounded-full bg-black/20 px-3 py-2 text-xs text-white/40"
+				>
+					Berikutnya <ChevronRight size={16} />
+				</span>
+			{/if}
 	</div>
 </div>
 
@@ -394,13 +397,14 @@
 			class="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3"
 		>
 			<span class="text-sm font-semibold text-white">Pilih Chapter</span>
-			<button
-				type="button"
-				onclick={() => (pickerOpen = false)}
-				class="inline-flex h-8 w-8 items-center justify-center rounded-full text-white/60 transition hover:bg-white/10"
-			>
-				<X size={16} />
-			</button>
+				<button
+					type="button"
+					onclick={() => (pickerOpen = false)}
+					aria-label="Tutup picker"
+					class="inline-flex h-11 w-11 items-center justify-center rounded-full text-white/60 transition hover:bg-white/10"
+				>
+					<X size={16} />
+				</button>
 		</div>
 		<div class="shrink-0 space-y-2 border-b border-white/10 px-3 py-2">
 			<div class="relative">
