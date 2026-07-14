@@ -12,6 +12,8 @@ const SUWAYOMI_URL = env.SUWAYOMI_URL || 'http://localhost:4567';
 // per-IP ceiling is high — it's a runaway/abuse backstop, not a UX throttle.
 const PROXY_LIMIT = 600;
 const PROXY_WINDOW_MS = 60_000;
+// Match client GRAPHQL_TIMEOUT_MS so a hung Suwayomi scrape fails closed here too.
+const PROXY_TIMEOUT_MS = 30_000;
 
 function unauthorized(message: string): Response {
 	return new Response(JSON.stringify({ errors: [{ message }] }), {
@@ -73,7 +75,8 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 		const init: RequestInit & { duplex?: 'half' } = {
 			method: event.request.method,
-			headers
+			headers,
+			signal: AbortSignal.timeout(PROXY_TIMEOUT_MS)
 		};
 
 		if (event.request.method !== 'GET' && event.request.method !== 'HEAD') {
@@ -85,7 +88,20 @@ export const handle: Handle = async ({ event, resolve }) => {
 			}
 		}
 
-		const upstream = await fetch(target, init);
+		let upstream: Response;
+		try {
+			upstream = await fetch(target, init);
+		} catch (e) {
+			const name = e instanceof Error ? e.name : '';
+			if (name === 'TimeoutError' || name === 'AbortError') {
+				return new Response(JSON.stringify({ errors: [{ message: 'Upstream timeout' }] }), {
+					status: 504,
+					headers: { 'content-type': 'application/json' }
+				});
+			}
+			throw e;
+		}
+
 		const body = await upstream.arrayBuffer();
 		const contentType = upstream.headers.get('content-type');
 
