@@ -1,6 +1,7 @@
 <script lang="ts">
-	import { fade, fly } from 'svelte/transition';
-	import { motionDuration } from '$lib/utils/motion';
+		import { fade, fly } from 'svelte/transition';
+		import { trapFocus } from '$lib/utils/focusTrap';
+		import { motionDuration } from '$lib/utils/motion';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import ChevronLeft from '@lucide/svelte/icons/chevron-left';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
@@ -388,24 +389,28 @@
 		onclick={() => (pickerOpen = false)}
 		onkeydown={(e) => e.key === 'Escape' && (pickerOpen = false)}
 	></div>
-	<div
-		transition:fly={{ y: 320, duration: motionDuration(260), opacity: 1 }}
-		class="fixed inset-x-0 bottom-0 z-50 flex max-h-[65vh] flex-col rounded-t-2xl bg-neutral-900 shadow-(--shadow-float)"
-		style="padding-bottom: env(safe-area-inset-bottom)"
-	>
 		<div
-			class="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3"
+			use:trapFocus
+			transition:fly={{ y: 320, duration: motionDuration(260), opacity: 1 }}
+			class="fixed inset-x-0 bottom-0 z-50 flex max-h-[65vh] flex-col rounded-t-2xl bg-neutral-900 shadow-(--shadow-float)"
+			style="padding-bottom: env(safe-area-inset-bottom)"
+			role="dialog"
+			aria-modal="true"
+			aria-label="Pilih Chapter"
 		>
-			<span class="text-sm font-semibold text-white">Pilih Chapter</span>
-				<button
-					type="button"
-					onclick={() => (pickerOpen = false)}
-					aria-label="Tutup picker"
-					class="inline-flex h-11 w-11 items-center justify-center rounded-full text-white/60 transition hover:bg-white/10"
-				>
-					<X size={16} />
-				</button>
-		</div>
+			<div
+				class="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3"
+			>
+				<span class="text-sm font-semibold text-white">Pilih Chapter</span>
+					<button
+						type="button"
+						onclick={() => (pickerOpen = false)}
+						aria-label="Tutup"
+						class="inline-flex h-11 w-11 items-center justify-center rounded-full text-white/60 transition hover:bg-white/10"
+					>
+						<X size={16} />
+					</button>
+			</div>
 		<div class="shrink-0 space-y-2 border-b border-white/10 px-3 py-2">
 			<div class="relative">
 				<Search size={14} class="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" />
