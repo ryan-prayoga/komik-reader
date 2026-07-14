@@ -320,6 +320,23 @@
 		return Math.max(0, Math.min(1, h.lastPageProgress ?? 0));
 	}
 
+	// A source re-scrape/re-upload can change a chapter's page count between
+	// visits — the stored resume index can then point PAST the freshly fetched
+	// chapter's last page. WebtoonView's onMount scroll-to-target looks up the
+	// page element by index and silently does nothing when it doesn't exist,
+	// so an unclamped initialPage here landed the reader on page 0 (0%) even
+	// though "Lanjut Baca" still showed the old, correct-at-the-time
+	// percentage. Rescale by the overall fraction through the chapter instead
+	// of clamping to the very last page, so a 66%-through position still
+	// resumes near 66% of the NEW page count rather than jumping to 100%.
+	function clampResumeToFreshPageCount(id: number, page: number, freshCount: number): number {
+		if (freshCount <= 0) return 0;
+		if (page < freshCount) return page;
+		const storedTotal = localData.history.find((h) => h.chapterId === id)?.totalPages;
+		const total = storedTotal && storedTotal > 1 ? storedTotal : freshCount;
+		return Math.min(freshCount - 1, Math.round((page / (total - 1)) * (freshCount - 1)));
+	}
+
 	function reportPage(index: number) {
 		currentPage = index;
 		// Monotonic: never let scrolling back downgrade an already-read chapter
@@ -805,6 +822,9 @@
 						if (cancelled) return;
 						current = stub;
 						initialPageProgress = untrack(() => resumeProgressFor(id, initialPage));
+						initialPage = untrack(() =>
+							clampResumeToFreshPageCount(id, initialPage, cached.length)
+						);
 						sections = [{ chapter: stub, pages: cached }];
 						if (initialPage > 0 && initialPage < cached.length) currentPage = initialPage;
 						seedWebtoonProgress(cached.length);
@@ -876,6 +896,7 @@
 				}
 
 				initialPageProgress = untrack(() => resumeProgressFor(id, initialPage));
+				initialPage = untrack(() => clampResumeToFreshPageCount(id, initialPage, pages.length));
 				sections = [{ chapter: current ?? makeStubChapter(id), pages }];
 				if (initialPage > 0 && initialPage < pages.length) {
 					currentPage = initialPage;
@@ -906,6 +927,9 @@
 					if (cancelled) return;
 					current = stub;
 					initialPageProgress = untrack(() => resumeProgressFor(id, initialPage));
+					initialPage = untrack(() =>
+						clampResumeToFreshPageCount(id, initialPage, cached.length)
+					);
 					sections = [{ chapter: stub, pages: cached }];
 					if (initialPage > 0 && initialPage < cached.length) {
 						currentPage = initialPage;
