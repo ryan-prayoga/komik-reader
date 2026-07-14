@@ -11,11 +11,13 @@ const PUBLIC_PREFIXES = [
 ];
 
 /**
- * Server-backed owner routes that require a session even in guest mode.
- * History/library/categories are local-first (client-side) so they are absent —
- * they sync to the account only when logged in.
+ * Unused helper — kept for potential future use.
+ * Product decision: `/downloads` stays guest-accessible (local-first offline
+ * chapters in IndexedDB; no server session required). Guest page gate in
+ * hooks.server.ts only hard-redirects `/admin`. Do not wire this into hooks
+ * to re-enforce login on downloads without an explicit product change.
  */
-const LOGIN_REQUIRED_PREFIXES = ['/downloads', '/admin'];
+const LOGIN_REQUIRED_PREFIXES = ['/admin'];
 
 export function isPublicPath(pathname: string): boolean {
 	if (pathname === '/health' || pathname.startsWith('/health/')) return true;
@@ -23,7 +25,10 @@ export function isPublicPath(pathname: string): boolean {
 	return PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(p));
 }
 
-/** A page that requires a logged-in user even when guests are allowed to read. */
+/**
+ * Unused; guest OK for `/downloads`. Not imported by hooks.server.ts.
+ * Admin gate is inline (`pathname.startsWith('/admin')`) in hooks instead.
+ */
 export function requiresLogin(pathname: string): boolean {
 	return LOGIN_REQUIRED_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }

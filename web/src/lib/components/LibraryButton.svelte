@@ -18,6 +18,7 @@
 		$props();
 
 	const saved = $derived(localData.isInLibrary(mangaId));
+	let saving = $state(false);
 
 	const cls = $derived(
 		size === 'md'
@@ -27,18 +28,25 @@
 	const iconSize = $derived(size === 'md' ? 16 : 13);
 
 	async function toggle() {
-		const inLibrary = await localData.toggleLibrary({ mangaId, title, thumbnailUrl, sourceId });
-		if (!inLibrary) void updates.remove(mangaId);
-		showToast(inLibrary ? 'Ditambahkan ke koleksi.' : 'Dihapus dari koleksi.', 'success');
-		onchange?.(inLibrary);
+		if (saving) return;
+		saving = true;
+		try {
+			const inLibrary = await localData.toggleLibrary({ mangaId, title, thumbnailUrl, sourceId });
+			if (!inLibrary) void updates.remove(mangaId);
+			showToast(inLibrary ? 'Ditambahkan ke koleksi.' : 'Dihapus dari koleksi.', 'success');
+			onchange?.(inLibrary);
+		} finally {
+			saving = false;
+		}
 	}
 </script>
 
 <button
 	type="button"
+	disabled={saving}
 	class="inline-flex items-center {cls} border transition active:scale-95 {saved
 		? 'border-accent bg-accent/15 text-accent hover:bg-accent/25'
-		: 'border-border bg-surface-hover hover:border-accent'}"
+		: 'border-border bg-surface-hover hover:border-accent'} {saving ? 'pointer-events-none opacity-60' : ''}"
 	onclick={toggle}
 >
 	{#if saved}

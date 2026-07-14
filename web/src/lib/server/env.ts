@@ -5,10 +5,11 @@ export function authEnabled(): boolean {
 }
 
 /**
- * Optional-auth mode: when true, guests may browse/read without logging in,
- * while save-features (library/history/downloads/categories/extensions) and any
- * write mutation still require a session. Default ON; disable with
- * AUTH_ALLOW_GUEST=false to force login on every page.
+ * Optional-auth mode: when true, guests may browse/read without logging in.
+ * Server-side write mutations still require a session. Local-first features
+ * (library/history in client storage, /downloads offline chapters) stay
+ * guest-accessible. Default ON; disable with AUTH_ALLOW_GUEST=false to force
+ * login on every page.
  */
 export function allowGuest(): boolean {
 	return authEnabled() && env.AUTH_ALLOW_GUEST !== 'false';
