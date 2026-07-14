@@ -826,12 +826,17 @@
 					throw new Error('Offline — chapter belum disimpan di perangkat.');
 				}
 
-				const fetchedPages = (await fetchChapterPages(id)).map((p) => apiUrl(p));
+				// Cold-open: pages + chapter/manga meta are independent — fetch in
+				// parallel. Chapter list still needs mangaId from meta, so it stays
+				// sequential after this join.
+				const [fetchedPagesRaw, meta] = await Promise.all([
+					fetchChapterPages(id),
+					fetchChapterMangaMeta(id)
+				]);
 				if (cancelled) return;
+				const fetchedPages = fetchedPagesRaw.map((p) => apiUrl(p));
 				pages = fetchedPages;
 
-				const meta = await fetchChapterMangaMeta(id);
-				if (cancelled) return;
 				mangaId = meta.mangaId;
 				if (meta.manga) {
 					mangaTitle = meta.manga.title ?? '';
