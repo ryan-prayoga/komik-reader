@@ -52,6 +52,8 @@ export type RecentChapter = {
 	mangaId: number;
 	lastPageRead: number;
 	totalPages?: number;
+	/** Scroll fraction within lastPageRead (0–1, webtoon); from local history only. */
+	lastPageProgress?: number;
 	/** Set when built from local history; absent for server-sourced rows (always unread there). */
 	isRead?: boolean;
 	lastReadAt: string;

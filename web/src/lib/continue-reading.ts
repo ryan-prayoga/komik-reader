@@ -25,6 +25,7 @@ export function buildContinueReading(history: LocalHistory[], limit: number): Re
 			mangaId: h.mangaId,
 			lastPageRead: h.lastPage,
 			totalPages: h.totalPages,
+			lastPageProgress: h.lastPageProgress,
 			isRead: h.isRead,
 			lastReadAt: '',
 			manga: { id: h.mangaId, title: h.mangaTitle, thumbnailUrl: h.thumbnailUrl }
@@ -38,8 +39,14 @@ export function buildContinueReading(history: LocalHistory[], limit: number): Re
 export function continueProgressPct(ch: RecentChapter): number | null {
 	if (ch.isRead) return null;
 	if (!ch.totalPages || ch.totalPages <= 1) return null;
-	if (ch.lastPageRead <= 0) return null;
 	if (ch.lastPageRead >= ch.totalPages - 1) return null;
+
+	if (typeof ch.lastPageProgress === 'number') {
+		const pct = Math.round(((ch.lastPageRead + ch.lastPageProgress) / ch.totalPages) * 100);
+		return Math.min(99, Math.max(1, pct));
+	}
+
+	if (ch.lastPageRead <= 0) return null;
 	return Math.round(((ch.lastPageRead + 1) / ch.totalPages) * 100);
 }
 

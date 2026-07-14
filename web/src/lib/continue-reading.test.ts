@@ -45,49 +45,123 @@ describe('buildContinueReading', () => {
 	});
 });
 
-describe('continueProgressPct', () => {
-	it('is null once the chapter is finished', () => {
-		const pct = continueProgressPct({
+	describe('continueProgressPct', () => {
+		const base = {
 			id: 1,
 			name: 'c',
 			mangaId: 1,
-			lastPageRead: 5,
-			totalPages: 10,
-			isRead: true,
 			lastReadAt: '',
-			manga: { id: 1, title: '', thumbnailUrl: null }
-		});
-		expect(pct).toBeNull();
-	});
+			manga: { id: 1, title: '', thumbnailUrl: null as string | null }
+		};
 
-	it('is null before any page has been scrolled past', () => {
-		const pct = continueProgressPct({
-			id: 1,
-			name: 'c',
-			mangaId: 1,
-			lastPageRead: 0,
-			totalPages: 10,
-			isRead: false,
-			lastReadAt: '',
-			manga: { id: 1, title: '', thumbnailUrl: null }
+		it('is null once the chapter is finished', () => {
+			const pct = continueProgressPct({
+				...base,
+				lastPageRead: 5,
+				totalPages: 10,
+				isRead: true
+			});
+			expect(pct).toBeNull();
 		});
-		expect(pct).toBeNull();
-	});
 
-	it('computes a mid-chapter percentage', () => {
-		const pct = continueProgressPct({
-			id: 1,
-			name: 'c',
-			mangaId: 1,
-			lastPageRead: 4,
-			totalPages: 20,
-			isRead: false,
-			lastReadAt: '',
-			manga: { id: 1, title: '', thumbnailUrl: null }
+		it('is null before any page has been scrolled past (legacy, no lastPageProgress)', () => {
+			const pct = continueProgressPct({
+				...base,
+				lastPageRead: 0,
+				totalPages: 10,
+				isRead: false
+			});
+			expect(pct).toBeNull();
 		});
-		expect(pct).toBe(25);
+
+		it('computes a mid-chapter percentage via page-index formula when lastPageProgress is absent', () => {
+			// (4 + 1) / 20 * 100 = 25
+			const pct = continueProgressPct({
+				...base,
+				lastPageRead: 4,
+				totalPages: 20,
+				isRead: false
+			});
+			expect(pct).toBe(25);
+		});
+
+		it('uses lastPageProgress fractional formula when defined', () => {
+			// (4 + 0.5) / 20 * 100 = 22.5 → 23
+			const pct = continueProgressPct({
+				...base,
+				lastPageRead: 4,
+				lastPageProgress: 0.5,
+				totalPages: 20,
+				isRead: false
+			});
+			expect(pct).toBe(23);
+		});
+
+		it('clamps lastPageProgress branch to 1..99', () => {
+			// tiny progress on first page → would be 0 without clamp
+			expect(
+				continueProgressPct({
+					...base,
+					lastPageRead: 0,
+					lastPageProgress: 0,
+					totalPages: 100,
+					isRead: false
+				})
+			).toBe(1);
+
+			// almost finished last-but-one page → would be 100 without clamp
+			// lastPageRead=9, total=10 → lastPageRead >= total-1 would null; use mid
+			// (9 + 0.99) / 20 * 100 = 49.95 → 50, within range
+			expect(
+				continueProgressPct({
+					...base,
+					lastPageRead: 0,
+					lastPageProgress: 0.001,
+					totalPages: 1000,
+					isRead: false
+				})
+			).toBe(1);
+
+			// high progress: (0 + 0.999) / 1 would be 100 but totalPages<=1 → null;
+			// (18 + 0.9) / 20 * 100 = 94.5 → 95
+			expect(
+				continueProgressPct({
+					...base,
+					lastPageRead: 18,
+					lastPageProgress: 0.9,
+					totalPages: 20,
+					isRead: false
+				})
+			).toBe(95);
+		});
+
+		it('is null when on the last page index even if lastPageProgress is set', () => {
+			const pct = continueProgressPct({
+				...base,
+				lastPageRead: 9,
+				lastPageProgress: 0.3,
+				totalPages: 10,
+				isRead: false
+			});
+			expect(pct).toBeNull();
+		});
+
+		it('buildContinueReading copies lastPageProgress from LocalHistory', () => {
+			const history = [
+				row({
+					chapterId: 5,
+					mangaId: 1,
+					lastPage: 3,
+					lastPageProgress: 0.4,
+					totalPages: 20,
+					updatedAt: 100
+				})
+			];
+			const out = buildContinueReading(history, 6);
+			expect(out[0].lastPageProgress).toBe(0.4);
+			expect(continueProgressPct(out[0])).toBe(17); // (3+0.4)/20*100 = 17
+		});
 	});
-});
 
 describe('isLatestChapterRead', () => {
 	it('matches by chapter id', () => {
