@@ -20,20 +20,17 @@
 	import LibraryBig from '@lucide/svelte/icons/library-big';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 
-	// Non-admin users (including guests) use per-device active extension preferences.
-	const filterByActive = $derived($page.data.authEnabled && !$page.data.user?.is_admin);
+		const filterByActive = $derived($page.data.authEnabled && !$page.data.user?.is_admin);
 
-	let allSources = $state<Source[]>([]);
-	let loading = $state(true);
-	let error = $state('');
+		let allSources = $state<Source[]>([]);
+		let loading = $state(true);
+		let error = $state('');
 
-	const sources = $derived(
-		filterByActive && preferences.activePkgNames.length > 0
-			? allSources.filter((s) => preferences.activePkgNames.includes(s.extension.pkgName))
-			: filterByActive
-				? []
+		const sources = $derived(
+			filterByActive && preferences.activePkgNames.length > 0
+				? allSources.filter((s) => preferences.activePkgNames.includes(s.extension.pkgName))
 				: allSources
-	);
+		);
 
 	// Continue-reading from local history — deduplicated per manga, latest chapter only.
 	// Kept even when that latest chapter was finished (see continue-reading.ts) so the

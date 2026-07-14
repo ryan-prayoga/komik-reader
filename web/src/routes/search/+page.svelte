@@ -17,38 +17,36 @@
 	const RECENT_KEY = 'komik-search-recent';
 	const RECENT_MAX = 8;
 
-	const filterByActive = $derived($page.data.authEnabled && !$page.data.user?.is_admin);
+		const filterByActive = $derived($page.data.authEnabled && !$page.data.user?.is_admin);
 
-	// sourceId === '' means "Semua source" — fan out the search across every
-	// active source instead of hitting Suwayomi's per-source SEARCH endpoint
-	// (there is no server-side global search to call).
-	let allSources = $state<Source[]>([]);
-	let sourceId = $state('');
-	let query = $state('');
-	let mangas = $state<BrowseManga[]>([]);
-	let loading = $state(false);
-	let loadingMore = $state(false);
-	let searched = $state(false);
-	let error = $state('');
-	let pageNum = $state(1);
-	let hasNext = $state(false);
-	let activeQuery = $state('');
-	let sentinel = $state<HTMLElement | null>(null);
-	let multiProgress = $state({ done: 0, total: 0 });
-	let recent = $state<string[]>([]);
-	let searchGen = 0;
+		// sourceId === '' means "Semua source" — fan out the search across every
+		// active source instead of hitting Suwayomi's per-source SEARCH endpoint
+		// (there is no server-side global search to call).
+		let allSources = $state<Source[]>([]);
+		let sourceId = $state('');
+		let query = $state('');
+		let mangas = $state<BrowseManga[]>([]);
+		let loading = $state(false);
+		let loadingMore = $state(false);
+		let searched = $state(false);
+		let error = $state('');
+		let pageNum = $state(1);
+		let hasNext = $state(false);
+		let activeQuery = $state('');
+		let sentinel = $state<HTMLElement | null>(null);
+		let multiProgress = $state({ done: 0, total: 0 });
+		let recent = $state<string[]>([]);
+		let searchGen = 0;
 
-	type SourceResult = { source: Source; mangas: BrowseManga[] };
-	let multiResults = $state<SourceResult[]>([]);
-	let multiMode = $state(true);
+		type SourceResult = { source: Source; mangas: BrowseManga[] };
+		let multiResults = $state<SourceResult[]>([]);
+		let multiMode = $state(true);
 
-	const sources = $derived(
-		filterByActive && preferences.activePkgNames.length > 0
-			? allSources.filter((s) => preferences.activePkgNames.includes(s.extension.pkgName))
-			: filterByActive
-				? []
+		const sources = $derived(
+			filterByActive && preferences.activePkgNames.length > 0
+				? allSources.filter((s) => preferences.activePkgNames.includes(s.extension.pkgName))
 				: allSources
-	);
+		);
 
 	function loadRecent(): string[] {
 		if (!browser) return [];
