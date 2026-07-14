@@ -6,12 +6,11 @@
 	import MangaGrid from '$lib/components/MangaGrid.svelte';
 	import GridSkeleton from '$lib/components/GridSkeleton.svelte';
 	import { Tabs, Button, EmptyState, Select, Badge, Chip, Sheet, Spinner } from '$lib/components/ui';
-	import { fetchBrowseManga, fetchChapters, fetchMangaDetail, getMangasDetail, getSourceById, getSourceFilters } from '$lib/graphql/api';
+	import { fetchBrowseManga, getMangasDetail, getSourceById, getSourceFilters } from '$lib/graphql/api';
 	import { getCached, getMissingIds, setCache } from '$lib/stores/mangaDetailCache';
 	import { getBrowseSnapshot, saveBrowseSnapshot } from '$lib/stores/browseCache';
 	import { apiUrl } from '$lib/graphql/client';
 	import { localData } from '$lib/local/data.svelte';
-	import { preferences } from '$lib/preferences.svelte';
 	import type {
 		BrowseManga,
 		FetchMangaType,
@@ -113,63 +112,23 @@
 		});
 	}
 
-	function needsSourceFetch(id: number): boolean {
-		const c = getCached(id);
-		if (!c) return true;
-		const missingContent = !c.genre.length && (!c.status || c.status === 'UNKNOWN');
-		const missingChapters = !c.chaptersChecked;
-		return missingContent || missingChapters;
-	}
-
+	/** DB-only polish for genre/status/latest chapter. Never scrapes source
+	 *  (no fetchChapters / fetchMangaDetail) — avoids N+1 Suwayomi source hits. */
 	async function enrichInBackground(list: BrowseManga[], gen: number) {
-		// Pass 1 — query Suwayomi DB (no source hit)
 		const notCached = getMissingIds(list.map((m) => m.id));
-		if (notCached.length) {
-			const dbResults = await getMangasDetail(notCached);
-			for (const d of dbResults) {
-				setCache(d.id, {
-					status: d.status,
-					genre: d.genre,
-					latestUploadedChapter: d.latestUploadedChapter,
-					chaptersChecked: d.latestUploadedChapter !== null
-				});
-			}
-			if (gen !== enrichGen) return;
-			mangas = applyEnrichment(mangas);
-		}
+		if (!notCached.length) return;
 
-		// Pass 2 — fetch from source for missing content or chapters
-		const needsFetch = list.filter((m) => needsSourceFetch(m.id));
-		if (!needsFetch.length) return;
-
-		const BATCH = 3;
-		for (let i = 0; i < needsFetch.length; i += BATCH) {
-			if (gen !== enrichGen) return;
-			const batch = needsFetch.slice(i, i + BATCH);
-			await Promise.all(
-				batch.map(async (m) => {
-					try {
-						const existing = getCached(m.id);
-						const needsDetail = !existing?.genre.length && (!existing?.status || existing.status === 'UNKNOWN');
-						const [detail, chapters] = await Promise.all([
-							needsDetail ? fetchMangaDetail(m.id) : Promise.resolve(null),
-							fetchChapters(m.id)
-						]);
-						const latest = chapters[0] ?? null;
-						setCache(m.id, {
-							status: detail?.status ?? existing?.status ?? 'UNKNOWN',
-							genre: detail?.genre ?? existing?.genre ?? [],
-							latestUploadedChapter: latest
-								? { name: latest.name, chapterNumber: latest.chapterNumber, uploadDate: latest.uploadDate }
-								: null,
-							chaptersChecked: true
-						});
-					} catch { /* silent */ }
-				})
-			);
-			if (gen !== enrichGen) return;
-			mangas = applyEnrichment(mangas);
+		const dbResults = await getMangasDetail(notCached);
+		for (const d of dbResults) {
+			setCache(d.id, {
+				status: d.status,
+				genre: d.genre,
+				latestUploadedChapter: d.latestUploadedChapter,
+				chaptersChecked: d.latestUploadedChapter !== null
+			});
 		}
+		if (gen !== enrichGen) return;
+		mangas = applyEnrichment(mangas);
 	}
 
 	async function load(reset = true) {
@@ -199,8 +158,8 @@
 				pageNum += 1;
 			}
 			hasNext = result.hasNextPage;
-			// Data saver skips source hits that only polish genre/status/latest chapter.
-			if (!preferences.dataSaver) enrichInBackground(result.mangas, gen);
+				// Batch Suwayomi DB only — no per-card source scrape (dataSaver-safe).
+				void enrichInBackground(result.mangas, gen);
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Gagal memuat manga';
 		} finally {
