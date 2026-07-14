@@ -1,15 +1,15 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { getDb } from './db';
 import { authSecret } from './env';
+import { toSqliteDatetime } from './sqlite-datetime';
 
 function hashToken(token: string): string {
 	return createHash('sha256').update(`${token}:reset:${authSecret()}`).digest('hex');
 }
 
 function expiresAt(): string {
-	const d = new Date();
-	d.setHours(d.getHours() + 1);
-	return d.toISOString();
+	const d = new Date(Date.now() + 60 * 60 * 1000);
+	return toSqliteDatetime(d);
 }
 
 export function createPasswordReset(userId: number): string {

@@ -3,6 +3,7 @@ import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { bootstrapAdmin, dbPath } from './env';
 import { hashPassword } from './password';
+import { normalizeExpiresAt } from './sqlite-datetime';
 
 let db: Database.Database | null = null;
 
@@ -94,21 +95,45 @@ function migrate(database: Database.Database) {
 	}
 }
 
-// One-shot housekeeping on boot: drop rows that only ever accumulate. Cheap
-// (indexed / small tables) and bounds unbounded growth over the app's lifetime.
-function cleanup(database: Database.Database) {
-	database.prepare("DELETE FROM sessions WHERE expires_at <= datetime('now')").run();
-	database
-		.prepare("DELETE FROM password_resets WHERE used_at IS NOT NULL OR expires_at <= datetime('now')")
-		.run();
-	// Tombstoned sync rows are only needed until every device has pulled them.
-	// 30 days is well past any realistic offline gap between a user's devices.
-	database
-		.prepare(
-			"DELETE FROM user_sync WHERE deleted = 1 AND updated_at < (strftime('%s','now') - 2592000) * 1000"
-		)
-		.run();
-}
+	/**
+	 * Rewrite legacy ISO-8601 `expires_at` rows (`…T…Z`) to SQLite
+	 * `YYYY-MM-DD HH:MM:SS` so lexical compares with `datetime('now')` work.
+	 * Does NOT delete live sessions — only normalizes format.
+	 */
+	function softMigrateExpiresAt(database: Database.Database, table: 'sessions' | 'password_resets') {
+		const rows = database
+			.prepare(`SELECT id, expires_at FROM ${table} WHERE expires_at LIKE '%T%'`)
+			.all() as { id: number; expires_at: string }[];
+		if (rows.length === 0) return;
+		const update = database.prepare(`UPDATE ${table} SET expires_at = ? WHERE id = ?`);
+		const tx = database.transaction(() => {
+			for (const row of rows) {
+				update.run(normalizeExpiresAt(row.expires_at), row.id);
+			}
+		});
+		tx();
+	}
+
+	// One-shot housekeeping on boot: drop rows that only ever accumulate. Cheap
+	// (indexed / small tables) and bounds unbounded growth over the app's lifetime.
+	function cleanup(database: Database.Database) {
+		// Soft-migrate before DELETE so same-day-past ISO rows are not kept alive
+		// by the T-vs-space lexical bug, and future ISO sessions stay valid.
+		softMigrateExpiresAt(database, 'sessions');
+		softMigrateExpiresAt(database, 'password_resets');
+
+		database.prepare("DELETE FROM sessions WHERE expires_at <= datetime('now')").run();
+		database
+			.prepare("DELETE FROM password_resets WHERE used_at IS NOT NULL OR expires_at <= datetime('now')")
+			.run();
+		// Tombstoned sync rows are only needed until every device has pulled them.
+		// 30 days is well past any realistic offline gap between a user's devices.
+		database
+			.prepare(
+				"DELETE FROM user_sync WHERE deleted = 1 AND updated_at < (strftime('%s','now') - 2592000) * 1000"
+			)
+			.run();
+	}
 
 function seedAdmin(database: Database.Database) {
 	const count = database.prepare('SELECT COUNT(*) AS c FROM users').get() as { c: number };

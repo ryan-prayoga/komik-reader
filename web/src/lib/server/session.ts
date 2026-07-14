@@ -2,6 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import type { Cookies } from '@sveltejs/kit';
 import { getDb, type UserRow } from './db';
 import { authSecret } from './env';
+import { toSqliteDatetime } from './sqlite-datetime';
 
 const COOKIE_NAME = 'komik_session';
 const SESSION_DAYS = 7;
@@ -19,8 +20,8 @@ function hashToken(token: string): string {
 
 function expiresAt(): string {
 	const d = new Date();
-	d.setDate(d.getDate() + SESSION_DAYS);
-	return d.toISOString();
+	d.setUTCDate(d.getUTCDate() + SESSION_DAYS);
+	return toSqliteDatetime(d);
 }
 
 export function createSession(userId: number): string {
