@@ -96,6 +96,13 @@
 	// few screens before they scroll into view so the reader never shows a black
 	// placeholder void mid-scroll (native lazy loads too late on slow mobile links).
 	let eagerPages = $state<Record<string, boolean>>({});
+	// Height-locked unload window around activePi (±KEEP_IMAGE_RADIUS). Nodes stay
+	// mounted; only img src is cleared after locking container min-height so the
+	// scroller does not collapse and ResizeObserver anchor stays valid.
+	const KEEP_IMAGE_RADIUS = 8;
+	let unloadEnabled = $state(false);
+	let liveImages = $state<Record<string, boolean>>({});
+	let heightLocks = $state<Record<string, number>>({});
 
 	// Per-chapter real page ratio (height/width), learned from images as they
 	// load. Webtoon sources slice a chapter into uniform pieces, so the median
@@ -117,19 +124,34 @@
 		noteRatio(chapterId, img);
 		loadedPages[key] = true;
 		errorPages[key] = false;
+		// Drop height lock only after the re-loaded image has real layout again.
+		if (heightLocks[key] != null) {
+			const next = { ...heightLocks };
+			delete next[key];
+			heightLocks = next;
+		}
 	}
 	function markError(key: string) {
+		// Intentional unload clears src — do not treat that as a load failure.
+		if (unloadEnabled && !liveImages[key]) return;
 		errorPages[key] = true;
 	}
 	// Chapters whose page URLs are being re-fetched — guards double taps while the
 	// refresh request is in flight.
 	const refreshingChapters = new Set<number>();
 	function clearChapterLoadState(chapterId: number) {
-		for (const rec of [loadedPages, errorPages, retryCounts]) {
+		for (const rec of [loadedPages, errorPages, retryCounts, eagerPages, liveImages, heightLocks]) {
 			for (const k of Object.keys(rec)) {
 				if (k.startsWith(`${chapterId}-`)) delete rec[k];
 			}
 		}
+		// Trigger Svelte reactivity after in-place deletes on $state objects.
+		loadedPages = { ...loadedPages };
+		errorPages = { ...errorPages };
+		retryCounts = { ...retryCounts };
+		eagerPages = { ...eagerPages };
+		liveImages = { ...liveImages };
+		heightLocks = { ...heightLocks };
 	}
 	async function retryPage(key: string, chapterId: number) {
 		const attempts = (retryCounts[key] ?? 0) + 1;
@@ -175,6 +197,9 @@
 		errorPages = {};
 		retryCounts = {};
 		eagerPages = {};
+		unloadEnabled = false;
+		liveImages = {};
+		heightLocks = {};
 		// A correction computed against the old chapter's layout must not land
 		// on the freshly-reset scroll position.
 		pendingAnchorDelta = 0;
@@ -507,6 +532,50 @@
 		return fb ? { chapterId: fb.chapterId, pi: fb.pi } : null;
 	}
 
+	/**
+	 * Keep decoded bitmaps only within ±KEEP_IMAGE_RADIUS of activePi in the
+	 * active chapter. Far pages: lock container height from pageHeights /
+	 * offsetHeight, then clear img src (node stays mounted). Near pages: put
+	 * src back. Called after every active-page update on the scroll path.
+	 */
+	function syncImageWindow() {
+		if (!activeChapterId) return;
+		unloadEnabled = true;
+		const nextLive: Record<string, boolean> = {};
+		const nextLocks = { ...heightLocks };
+		let loadedDirty = false;
+		const nextLoaded = { ...loadedPages };
+		for (const section of sections) {
+			const cid = section.chapter.id;
+			for (let pi = 0; pi < section.pages.length; pi++) {
+				const key = `${cid}-${pi}`;
+				const keep =
+					cid === activeChapterId && Math.abs(pi - activePi) <= KEEP_IMAGE_RADIUS;
+				if (keep) {
+					nextLive[key] = true;
+					// min-height stays until markLoaded after re-decode.
+				} else {
+					// Height lock BEFORE src clear (same render): prefer measured map,
+					// fall back to live offsetHeight so layout never collapses to 0.
+					if (nextLocks[key] == null) {
+						const measured =
+							pageHeights.get(key) ?? pageEls.get(key)?.offsetHeight ?? 0;
+						if (measured > 0) nextLocks[key] = measured;
+					}
+					if (nextLoaded[key]) {
+						delete nextLoaded[key];
+						loadedDirty = true;
+					}
+				}
+			}
+		}
+		if (loadedDirty) loadedPages = nextLoaded;
+		// Assign locks before live so the template can apply min-height in the
+		// same update that empties img src.
+		heightLocks = nextLocks;
+		liveImages = nextLive;
+	}
+
 	function reportCurrentProgress() {
 		// 0 is the "not tracking anything yet" sentinel (see the resetToken
 		// effect) — right after a hard chapter switch, before the new chapter's
@@ -518,6 +587,7 @@
 			activeChapterId = geo.chapterId;
 			activePi = geo.pi;
 		}
+		syncImageWindow();
 		const el = pageEls.get(`${activeChapterId}-${activePi}`);
 		if (!el) {
 			activeProgress = 0;
@@ -570,9 +640,10 @@
 		);
 		observer.observe(node);
 
-		// Preload observer: taller margin (or short when data-saver) flips the page to
-		// an eager fetch before viewport. One-shot — disconnects once armed.
-		const margin = preferences.dataSaver ? '400px 0px 400px 0px' : '2500px 0px 2500px 0px';
+		// Preload observer: ~½–1 viewport ahead (tighter when data-saver) flips the
+		// page to eager fetch before it enters view. One-shot — disconnects once armed.
+		// Was 2500/400; tightened to cut decoded-image budget on long webtoon chapters.
+		const margin = preferences.dataSaver ? '200px 0px 200px 0px' : '800px 0px 800px 0px';
 		const preloader = new IntersectionObserver(
 			(entries) => {
 				if (entries[0]?.isIntersecting) {
@@ -701,14 +772,21 @@
 		{#each section.pages as pageUrl, pi (pi)}
 			{@const key = `${section.chapter.id}-${pi}`}
 			{@const ratio = chapterRatioGuess[section.chapter.id] ?? 1.5}
+			{@const imageLive = !unloadEnabled || !!liveImages[key]}
+			{@const lockH = heightLocks[key]}
 			<!-- Placeholder ratio lives on the CONTAINER, not just the img: a broken
 			     image collapses to near-zero height in most browsers (aspect-ratio
 			     only reliably applies while the image has layout), and with
 			     overflow-hidden that clipped the retry overlay into an untappable
-			     sliver. -->
+			     sliver. Unloaded far pages also lock min-height so clearing img src
+			     cannot collapse the reading-order height map. -->
 			<div
 				class="relative overflow-hidden"
-				style={loadedPages[key] ? '' : `aspect-ratio: 1 / ${ratio}`}
+				style={lockH
+					? `min-height: ${lockH}px`
+					: loadedPages[key]
+						? ''
+						: `aspect-ratio: 1 / ${ratio}`}
 				data-page-key={key}
 				use:observePage={{ chapterId: section.chapter.id, pi }}
 			>
@@ -731,15 +809,16 @@
 							Muat ulang
 						</button>
 					</div>
-				{:else if !loadedPages[key]}
+				{:else if imageLive && !loadedPages[key]}
 					<div class="absolute inset-0 flex items-center justify-center bg-white/[0.03]">
 						<Spinner size={24} class="text-white/40" />
 					</div>
 				{/if}
 				<img
-					src={pageSrc(pageUrl, key)}
+					src={imageLive ? pageSrc(pageUrl, key) : ''}
 					alt="Halaman {pi + 1}"
-					class="mx-auto block w-full transition-opacity duration-300 {loadedPages[key]
+					class="mx-auto block w-full transition-opacity duration-300 {loadedPages[key] &&
+					imageLive
 						? 'opacity-100'
 						: 'opacity-0'} {readerSettings.cropBorders ? 'scale-[1.03]' : ''}"
 					style="aspect-ratio: auto 1 / {ratio}"
