@@ -3,6 +3,7 @@
 	import Download from '@lucide/svelte/icons/download';
 	import Share from '@lucide/svelte/icons/share';
 	import Button from '$lib/components/ui/Button.svelte';
+	import { isUpdatePromptActive } from '$lib/stores/prompt-slot.svelte';
 
 	interface BeforeInstallPromptEvent extends Event {
 		prompt(): Promise<void>;
@@ -14,6 +15,9 @@
 	let deferred = $state<BeforeInstallPromptEvent | null>(null);
 	let visible = $state(false);
 	let isIos = $state(false);
+
+	/** Queued while UpdatePrompt owns the shared bottom slot. */
+	const show = $derived(visible && !isUpdatePromptActive());
 
 	function alreadyDismissed(): boolean {
 		try {
@@ -67,9 +71,11 @@
 	}
 </script>
 
-{#if visible}
+{#if show}
 	<div
-		class="fixed bottom-20 left-4 right-4 z-[60] mx-auto flex max-w-lg items-center justify-between gap-4 rounded-[var(--radius)] border border-border bg-surface px-4 py-3 shadow-(--shadow-float) sm:bottom-4 sm:left-auto"
+		class="fixed bottom-[calc(5rem+env(safe-area-inset-bottom,0px))] left-4 right-4 z-[60] mx-auto flex max-w-lg items-center justify-between gap-4 rounded-[var(--radius)] border border-border bg-surface px-4 py-3 shadow-(--shadow-float) sm:left-auto lg:bottom-4"
+		role="status"
+		aria-live="polite"
 	>
 		<div class="flex items-center gap-3">
 			<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent/15 text-accent">

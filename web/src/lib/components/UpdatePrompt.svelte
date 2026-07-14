@@ -5,6 +5,7 @@
 	import { readable } from 'svelte/store';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import Button from '$lib/components/ui/Button.svelte';
+	import { setUpdatePromptActive } from '$lib/stores/prompt-slot.svelte';
 
 	// In autoUpdate mode vite-pwa force-reloads the page the moment a new SW
 	// activates — with the hourly poll below that meant a deploy could reload the
@@ -43,6 +44,12 @@
 
 	let reloading = $state(false);
 
+	// Claim the shared bottom slot so InstallPrompt stays hidden while update is up.
+	$effect(() => {
+		setUpdatePromptActive($needRefresh);
+		return () => setUpdatePromptActive(false);
+	});
+
 	async function reload() {
 		reloading = true;
 		await updateServiceWorker(true);
@@ -51,7 +58,9 @@
 
 {#if $needRefresh}
 	<div
-		class="fixed bottom-36 left-4 right-4 z-[60] mx-auto flex max-w-lg items-center justify-between gap-4 rounded-[var(--radius)] border border-border bg-surface px-4 py-3 shadow-(--shadow-float) sm:bottom-24 sm:left-auto"
+		class="fixed bottom-[calc(5rem+env(safe-area-inset-bottom,0px))] left-4 right-4 z-[60] mx-auto flex max-w-lg items-center justify-between gap-4 rounded-[var(--radius)] border border-border bg-surface px-4 py-3 shadow-(--shadow-float) sm:left-auto lg:bottom-4"
+		role="status"
+		aria-live="polite"
 	>
 		<div class="flex items-center gap-3">
 			<div
