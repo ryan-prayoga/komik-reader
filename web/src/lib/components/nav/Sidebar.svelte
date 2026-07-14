@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/stores';
-	import { primaryNav, manageNav, adminNav, isActive, type NavItem } from '$lib/nav';
+	import { primaryNav, manageNav, adminNav, isActive } from '$lib/nav';
 	import { preferences } from '$lib/preferences.svelte';
 	import ThemeToggle from '$lib/components/ui/ThemeToggle.svelte';
 	import PanelLeftClose from '@lucide/svelte/icons/panel-left-close';
@@ -17,10 +17,9 @@
 	const collapsed = $derived(preferences.sidebarCollapsed);
 	const manage = $derived(user?.is_admin ? [...manageNav, adminNav] : manageNav);
 
-	function linkCls(item: NavItem): string {
-		const active = isActive($page.url.pathname, item.href);
+	function linkCls(active: boolean): string {
 		const shape = active ? 'panel-cut [--panel-cut:8px]' : 'rounded-[var(--radius)]';
-		return `flex items-center gap-3 ${shape} px-3 py-2 text-sm font-medium transition ${
+		return `flex min-h-11 items-center gap-3 ${shape} px-3 py-2 text-sm font-medium transition ${
 			active ? 'bg-accent/15 text-accent' : 'text-muted hover:bg-surface hover:text-text'
 		} ${collapsed ? 'justify-center' : ''}`;
 	}
@@ -45,9 +44,15 @@
 		</a>
 	</div>
 
-	<nav class="flex-1 space-y-1 overflow-y-auto px-3 py-2">
+	<nav class="flex-1 space-y-1 overflow-y-auto px-3 py-2" aria-label="Navigasi utama">
 		{#each primaryNav as item}
-			<a href={item.href} class={linkCls(item)} title={collapsed ? item.label : undefined}>
+			{@const active = isActive($page.url.pathname, item.href)}
+			<a
+				href={item.href}
+				class={linkCls(active)}
+				title={collapsed ? item.label : undefined}
+				aria-current={active ? 'page' : undefined}
+			>
 				<item.icon size={18} class="shrink-0" />
 				{#if !collapsed}
 					<span class="truncate">{item.label}</span>
@@ -66,7 +71,13 @@
 			<p class="px-3 pb-1 text-xs font-medium uppercase tracking-wide text-muted">Kelola</p>
 		{/if}
 		{#each manage as item}
-			<a href={item.href} class={linkCls(item)} title={collapsed ? item.label : undefined}>
+			{@const active = isActive($page.url.pathname, item.href)}
+			<a
+				href={item.href}
+				class={linkCls(active)}
+				title={collapsed ? item.label : undefined}
+				aria-current={active ? 'page' : undefined}
+			>
 				<item.icon size={18} class="shrink-0" />
 				{#if !collapsed}<span class="truncate">{item.label}</span>{/if}
 			</a>
@@ -81,7 +92,7 @@
 				onclick={() => preferences.toggleSidebar()}
 				aria-label={collapsed ? 'Lebarkan sidebar' : 'Ciutkan sidebar'}
 				title={collapsed ? 'Lebarkan' : 'Ciutkan'}
-				class="inline-flex h-10 w-10 items-center justify-center rounded-[var(--radius)] text-muted transition hover:bg-surface hover:text-text"
+				class="inline-flex h-11 w-11 items-center justify-center rounded-[var(--radius)] text-muted transition hover:bg-surface hover:text-text"
 			>
 				{#if collapsed}<PanelLeftOpen size={18} />{:else}<PanelLeftClose size={18} />{/if}
 			</button>
@@ -89,7 +100,9 @@
 
 		{#if user}
 			<div class="mt-3 flex items-center gap-2 {collapsed ? 'justify-center' : ''}">
-				<span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-hover text-xs font-semibold uppercase text-text">
+				<span
+					class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-hover text-xs font-semibold uppercase text-text"
+				>
 					{user.username.slice(0, 1)}
 				</span>
 				{#if !collapsed}

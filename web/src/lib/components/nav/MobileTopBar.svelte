@@ -10,7 +10,8 @@
 	style="padding-top: calc(env(safe-area-inset-top) + 0.5rem)"
 >
 	<a href="/" class="flex items-center gap-2">
-		<span class="panel-cut [--panel-cut:5px] flex h-7 w-7 items-center justify-center bg-accent text-xs font-bold text-white"
+		<span
+			class="panel-cut [--panel-cut:5px] flex h-7 w-7 items-center justify-center bg-accent text-xs font-bold text-white"
 			>K</span
 		>
 		<span class="font-display text-base font-bold uppercase tracking-tight"
@@ -21,7 +22,7 @@
 		<a
 			href="/search"
 			aria-label="Cari"
-			class="inline-flex h-9 w-9 items-center justify-center rounded-[var(--radius)] text-muted transition hover:bg-surface hover:text-text"
+			class="inline-flex h-11 w-11 items-center justify-center rounded-[var(--radius)] text-muted transition hover:bg-surface hover:text-text"
 		>
 			<Search size={18} />
 		</a>

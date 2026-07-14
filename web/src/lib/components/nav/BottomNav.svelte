@@ -40,9 +40,9 @@
 			{@const active = isActive($page.url.pathname, item.href)}
 			<a
 				href={item.href}
-				class="flex flex-col items-center justify-center gap-0.5 font-medium transition active:scale-95 {compact
-					? 'min-h-11 py-2'
-					: 'py-2 text-[0.7rem]'} {active ? 'text-accent' : 'text-muted'}"
+				class="flex min-h-11 flex-col items-center justify-center gap-0.5 py-2 font-medium transition active:scale-95 {compact
+					? ''
+					: 'text-[0.7rem]'} {active ? 'text-accent' : 'text-muted'}"
 				aria-label={item.label}
 				aria-current={active ? 'page' : undefined}
 			>
@@ -54,9 +54,9 @@
 			type="button"
 			onclick={onmore}
 			aria-label="Lainnya"
-			class="flex flex-col items-center justify-center gap-0.5 font-medium transition active:scale-95 {compact
-				? 'min-h-11 py-2'
-				: 'py-2 text-[0.7rem]'} {moreActive ? 'text-accent' : 'text-muted'}"
+			class="flex min-h-11 flex-col items-center justify-center gap-0.5 py-2 font-medium transition active:scale-95 {compact
+				? ''
+				: 'text-[0.7rem]'} {moreActive ? 'text-accent' : 'text-muted'}"
 		>
 			<Menu size={20} />
 			{#if !compact}<span>Lainnya</span>{/if}

@@ -16,7 +16,7 @@
 	onclick={() => preferences.toggleTheme()}
 	aria-label={isDark ? 'Mode terang' : 'Mode gelap'}
 	title={isDark ? 'Mode terang' : 'Mode gelap'}
-	class="inline-flex h-9 w-9 items-center justify-center rounded-[var(--radius)] text-muted transition hover:bg-surface hover:text-text {klass}"
+	class="inline-flex h-11 w-11 items-center justify-center rounded-[var(--radius)] text-muted transition hover:bg-surface hover:text-text {klass}"
 >
 	{#if isDark}
 		<Sun size={18} />
