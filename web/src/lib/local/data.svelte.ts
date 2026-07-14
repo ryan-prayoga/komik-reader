@@ -49,6 +49,8 @@ class LocalData {
 
 	#readyPromise: Promise<void> | null = null;
 	#syncTrigger: (() => void) | null = null;
+	/** Write-through index of `history` by chapterId (not $state; array drives UI). */
+	#historyByChapterId = new Map<number, LocalHistory>();
 
 	/** The sync engine registers itself here; mutations schedule a sync. */
 	setSyncTrigger(fn: () => void) {
@@ -56,6 +58,25 @@ class LocalData {
 	}
 	#changed() {
 		this.#syncTrigger?.();
+	}
+
+	#rebuildHistoryIndex() {
+		this.#historyByChapterId = new Map(this.history.map((h) => [h.chapterId, h]));
+	}
+
+	/** Front-insert newest row; keeps map+array aligned without a full sort. */
+	#setHistoryRow(row: LocalHistory) {
+		this.#historyByChapterId.set(row.chapterId, row);
+		this.history = [row, ...this.history.filter((h) => h.chapterId !== row.chapterId)];
+	}
+
+	#setHistoryList(next: LocalHistory[]) {
+		this.history = next;
+		this.#rebuildHistoryIndex();
+	}
+
+	getHistory(chapterId: number): LocalHistory | undefined {
+		return this.#historyByChapterId.get(chapterId);
 	}
 
 	// Callers that need hydrated data (e.g. the reader resolving a resume
@@ -89,7 +110,9 @@ class LocalData {
 			getAll<LocalCategory>('categories'),
 			getAll<LocalReadtime>('readtime')
 		]);
-		this.history = h.filter((x) => !x.deleted).sort((a, b) => b.updatedAt - a.updatedAt);
+		this.#setHistoryList(
+			h.filter((x) => !x.deleted).sort((a, b) => b.updatedAt - a.updatedAt)
+		);
 		this.library = l.filter((x) => !x.deleted).sort((a, b) => b.addedAt - a.addedAt);
 		this.categories = c.filter((x) => !x.deleted).sort((a, b) => a.order - b.order);
 		this.readtime = rt;
@@ -109,7 +132,7 @@ class LocalData {
 		totalPages?: number;
 		lastPageProgress?: number;
 	}) {
-		const existing = this.history.find((h) => h.chapterId === entry.chapterId);
+		const existing = this.getHistory(entry.chapterId);
 		let row: LocalHistory = {
 			...entry,
 			// Keep richer metadata if a later write lacks it.
@@ -129,9 +152,7 @@ class LocalData {
 			row = { ...row, timeSpentMs: current?.timeSpentMs ?? existing?.timeSpentMs };
 			return row;
 		});
-		this.history = [row, ...this.history.filter((h) => h.chapterId !== row.chapterId)].sort(
-			(a, b) => b.updatedAt - a.updatedAt
-		);
+		this.#setHistoryRow(row);
 		this.#changed();
 	}
 
@@ -152,7 +173,7 @@ class LocalData {
 		},
 		isRead: boolean
 	) {
-		const existing = this.history.find((h) => h.chapterId === entry.chapterId);
+		const existing = this.getHistory(entry.chapterId);
 		const row: LocalHistory = {
 			chapterId: entry.chapterId,
 			mangaId: entry.mangaId,
@@ -169,9 +190,7 @@ class LocalData {
 			totalPages: existing?.totalPages
 		};
 		await putItem('history', row);
-		this.history = [row, ...this.history.filter((h) => h.chapterId !== row.chapterId)].sort(
-			(a, b) => b.updatedAt - a.updatedAt
-		);
+		this.#setHistoryRow(row);
 		this.#changed();
 	}
 
@@ -196,7 +215,7 @@ class LocalData {
 			(a, b) => (a.chapterNumber ?? 0) - (b.chapterNumber ?? 0)
 		);
 		const rows: LocalHistory[] = ordered.map((entry, i) => {
-			const existing = this.history.find((h) => h.chapterId === entry.chapterId);
+			const existing = this.getHistory(entry.chapterId);
 			return {
 				chapterId: entry.chapterId,
 				mangaId: entry.mangaId,
@@ -215,10 +234,11 @@ class LocalData {
 		});
 		await putMany('history', rows);
 		const byId = new Map(rows.map((r) => [r.chapterId, r]));
-		this.history = [
-			...rows,
-			...this.history.filter((h) => !byId.has(h.chapterId))
-		].sort((a, b) => b.updatedAt - a.updatedAt);
+		this.#setHistoryList(
+			[...rows, ...this.history.filter((h) => !byId.has(h.chapterId))].sort(
+				(a, b) => b.updatedAt - a.updatedAt
+			)
+		);
 		this.#changed();
 	}
 
@@ -238,7 +258,7 @@ class LocalData {
 	 */
 	async addTimeSpent(chapterId: number, deltaMs: number) {
 		if (deltaMs <= 0) return;
-		if (!this.history.find((h) => h.chapterId === chapterId)) return; // no history yet
+		if (!this.getHistory(chapterId)) return; // no history yet
 		let written: LocalHistory | null = null;
 		await updateItem<LocalHistory>('history', chapterId, (current) => {
 			if (!current) return null; // row vanished (cleared) — nothing to add time to
@@ -254,9 +274,14 @@ class LocalData {
 			// may carry fresher progress than `written`'s base if recordHistory's
 			// own memory update raced in between.
 			const { timeSpentMs, updatedAt } = written as LocalHistory;
-			this.history = this.history.map((h) =>
-				h.chapterId === chapterId ? { ...h, timeSpentMs, updatedAt } : h
-			);
+			const prev = this.getHistory(chapterId);
+			if (prev) {
+				const merged: LocalHistory = { ...prev, timeSpentMs, updatedAt };
+				this.#historyByChapterId.set(chapterId, merged);
+				this.history = this.history.map((h) =>
+					h.chapterId === chapterId ? merged : h
+				);
+			}
 		}
 		this.#changed();
 	}
@@ -277,9 +302,11 @@ class LocalData {
 		);
 		if (!migrated.length) return [];
 		await putMany('history', writes);
-		this.history = this.history
-			.map((h) => remap.get(h.chapterId) ?? h)
-			.sort((a, b) => b.updatedAt - a.updatedAt);
+		this.#setHistoryList(
+			this.history
+				.map((h) => remap.get(h.chapterId) ?? h)
+				.sort((a, b) => b.updatedAt - a.updatedAt)
+		);
 		this.#changed();
 		return migrated;
 	}
@@ -293,6 +320,7 @@ class LocalData {
 			'history',
 			rows.map((r) => ({ ...r, deleted: true, updatedAt: ts }))
 		);
+		for (const r of rows) this.#historyByChapterId.delete(r.chapterId);
 		this.history = this.history.filter((h) => h.mangaId !== mangaId);
 		this.#changed();
 	}
@@ -306,7 +334,7 @@ class LocalData {
 			'history',
 			rows.map((r) => ({ ...r, deleted: true, updatedAt: ts }))
 		);
-		this.history = [];
+		this.#setHistoryList([]);
 		this.#changed();
 	}
 
