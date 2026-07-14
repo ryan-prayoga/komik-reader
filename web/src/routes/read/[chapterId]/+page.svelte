@@ -10,6 +10,11 @@
 	import { getOfflineChapter } from '$lib/offline/db';
 	import { readerSettings, BG_CLASS } from '$lib/reader-settings.svelte';
 	import { localData } from '$lib/local/data.svelte';
+	import {
+		clampResumeToFreshPageCount,
+		resumePageFor,
+		resumeProgressFor
+	} from '$lib/reader/resume';
 	import { updates } from '$lib/updates/updates.svelte';
 	import { readingTimer } from '$lib/reading-time';
 	import WebtoonView from '$lib/components/reader/WebtoonView.svelte';
@@ -298,46 +303,7 @@
 		return localData.history.find((h) => h.chapterId === id)?.isRead ?? false;
 	}
 
-	// Where to reopen a chapter: its saved position while still unfinished,
-	// page 0 once it's been read to the end (re-reads start at the beginning).
-	// A row parked on the chapter's LAST page with isRead still false is a
-	// finished read whose read-mark never landed (the old webtoon recorder
-	// could skip the final page during fast scroll) — treat it as finished
-	// too, or the chapter reopens on its end instead of its start.
-	function resumePageFor(id: number): number {
-		const h = localData.history.find((x) => x.chapterId === id);
-		if (!h || h.isRead) return 0;
-		if (h.totalPages && h.lastPage >= h.totalPages - 1) return 0;
-		return h.lastPage;
-	}
-
-	// Fraction within the resume page (webtoon): only meaningful when the local
-	// row is the one the page resume came from — a server-fallback resume has
-	// no fraction, and a finished chapter reopens at the top.
-	function resumeProgressFor(id: number, page: number): number {
-		const h = localData.history.find((x) => x.chapterId === id);
-		if (!h || h.isRead || h.lastPage !== page) return 0;
-		return Math.max(0, Math.min(1, h.lastPageProgress ?? 0));
-	}
-
-	// A source re-scrape/re-upload can change a chapter's page count between
-	// visits — the stored resume index can then point PAST the freshly fetched
-	// chapter's last page. WebtoonView's onMount scroll-to-target looks up the
-	// page element by index and silently does nothing when it doesn't exist,
-	// so an unclamped initialPage here landed the reader on page 0 (0%) even
-	// though "Lanjut Baca" still showed the old, correct-at-the-time
-	// percentage. Rescale by the overall fraction through the chapter instead
-	// of clamping to the very last page, so a 66%-through position still
-	// resumes near 66% of the NEW page count rather than jumping to 100%.
-	function clampResumeToFreshPageCount(id: number, page: number, freshCount: number): number {
-		if (freshCount <= 0) return 0;
-		if (page < freshCount) return page;
-		const storedTotal = localData.history.find((h) => h.chapterId === id)?.totalPages;
-		const total = storedTotal && storedTotal > 1 ? storedTotal : freshCount;
-		return Math.min(freshCount - 1, Math.round((page / (total - 1)) * (freshCount - 1)));
-	}
-
-	function reportPage(index: number) {
+		function reportPage(index: number) {
 		currentPage = index;
 		// Monotonic: never let scrolling back downgrade an already-read chapter
 		// back to unread (isRead here is recomputed from raw page position on
@@ -809,7 +775,7 @@
 				// meant every re-open (next-chapter nav into an already-read chapter,
 				// "lanjutkan baca" from Riwayat) landed on the chapter's END instead
 				// of its start — re-reads must open at page 0.
-				initialPage = untrack(() => resumePageFor(id));
+				initialPage = untrack(() => resumePageFor(localData.history, id));
 
 				if (!isOnline()) {
 					const cached = await getCachedPageUrls(id);
@@ -821,9 +787,11 @@
 						const stub = await hydrateOfflineMeta(id);
 						if (cancelled) return;
 						current = stub;
-						initialPageProgress = untrack(() => resumeProgressFor(id, initialPage));
+						initialPageProgress = untrack(() =>
+							resumeProgressFor(localData.history, id, initialPage)
+						);
 						initialPage = untrack(() =>
-							clampResumeToFreshPageCount(id, initialPage, cached.length)
+							clampResumeToFreshPageCount(localData.history, id, initialPage, cached.length)
 						);
 						sections = [{ chapter: stub, pages: cached }];
 						if (initialPage > 0 && initialPage < cached.length) currentPage = initialPage;
@@ -859,8 +827,8 @@
 					for (const m of migrated) void queueChapterProgress(m.chapterId, m.lastPage, m.isRead);
 					if (cancelled) return;
 					if (!initialPage) {
-						initialPage = untrack(() => resumePageFor(id));
-					}
+							initialPage = untrack(() => resumePageFor(localData.history, id));
+						}
 					current = chapters.find((c) => c.id === id) ?? null;
 					// This device may have no local history for the chapter (new
 					// device, cleared storage) — fall back to the server-side
@@ -895,15 +863,19 @@
 					readerSettings.applyForManga(resolvedMangaId);
 				}
 
-				initialPageProgress = untrack(() => resumeProgressFor(id, initialPage));
-				initialPage = untrack(() => clampResumeToFreshPageCount(id, initialPage, pages.length));
-				sections = [{ chapter: current ?? makeStubChapter(id), pages }];
-				if (initialPage > 0 && initialPage < pages.length) {
-					currentPage = initialPage;
-				} else {
-					document.documentElement.scrollTop = 0;
-				}
-				seedWebtoonProgress(pages.length);
+				initialPageProgress = untrack(() =>
+						resumeProgressFor(localData.history, id, initialPage)
+					);
+					initialPage = untrack(() =>
+						clampResumeToFreshPageCount(localData.history, id, initialPage, pages.length)
+					);
+					sections = [{ chapter: current ?? makeStubChapter(id), pages }];
+					if (initialPage > 0 && initialPage < pages.length) {
+						currentPage = initialPage;
+					} else {
+						document.documentElement.scrollTop = 0;
+					}
+					seedWebtoonProgress(pages.length);
 				// Preserve the already-known read state — this call's job is only to
 				// persist the resume position (currentPage). Hardcoding `false` here
 				// used to flip an already-read chapter back to unread on the server
@@ -926,18 +898,20 @@
 					const stub = await hydrateOfflineMeta(id);
 					if (cancelled) return;
 					current = stub;
-					initialPageProgress = untrack(() => resumeProgressFor(id, initialPage));
-					initialPage = untrack(() =>
-						clampResumeToFreshPageCount(id, initialPage, cached.length)
-					);
-					sections = [{ chapter: stub, pages: cached }];
-					if (initialPage > 0 && initialPage < cached.length) {
-						currentPage = initialPage;
+						initialPageProgress = untrack(() =>
+							resumeProgressFor(localData.history, id, initialPage)
+						);
+						initialPage = untrack(() =>
+							clampResumeToFreshPageCount(localData.history, id, initialPage, cached.length)
+						);
+						sections = [{ chapter: stub, pages: cached }];
+						if (initialPage > 0 && initialPage < cached.length) {
+							currentPage = initialPage;
+						}
+						seedWebtoonProgress(cached.length);
+					} else {
+						error = e instanceof Error ? e.message : 'Gagal memuat reader';
 					}
-					seedWebtoonProgress(cached.length);
-				} else {
-					error = e instanceof Error ? e.message : 'Gagal memuat reader';
-				}
 			} finally {
 				if (!cancelled) loading = false;
 			}
