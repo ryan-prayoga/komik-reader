@@ -3,6 +3,10 @@
 	import type { Chapter } from '$lib/graphql/types';
 	import { preferences } from '$lib/preferences.svelte';
 	import { readerSettings } from '$lib/reader-settings.svelte';
+	import {
+		activePageFromPrefixHeights,
+		buildAnchoredPrefixStarts
+	} from '$lib/reader/active-page';
 	import Spinner from '$lib/components/ui/Spinner.svelte';
 
 	type Section = { chapter: Chapter; pages: string[] };
@@ -293,34 +297,214 @@
 	// observation frames never fire at all, including a chapter's LAST page.
 	// Progress then sticks at a stale mid-chapter position and isRead never
 	// latches, which is how finished chapters kept reopening at their "end".
-	// The active page is the deepest one whose top has crossed the activation
-	// line (top 40% of the viewport — same semantics as the IO rootMargin),
-	// with one extra rule: once the chapter's last page is fully scrolled in
-	// (its bottom within the viewport), the last page IS the active page even
-	// if a short page can never reach the 40% line at max scroll.
-	function geometricActivePage(): { chapterId: number; pi: number } | null {
-		const line = window.innerHeight * 0.4;
-		let best: { chapterId: number; pi: number; top: number } | null = null;
+	// Hot path: O(log n) binary search over pageHeights prefix (content Y),
+	// not O(n) getBoundingClientRect over every section. Fallback: rect scan
+	// only around activePi±5 when the height map is incomplete. Activation
+	// line = 40% of the scroller viewport (same as IO rootMargin -60%).
+	// Extra rule: once the chapter's last page is fully in view (≤3 rects),
+	// that last page wins even if a short page never reaches the 40% line.
+	const ACTIVATION_FRAC = 0.4;
+
+	type PageRef = { chapterId: number; pi: number; key: string };
+
+	function readingOrderEntries(): PageRef[] {
+		const out: PageRef[] = [];
 		for (const section of sections) {
+			const cid = section.chapter.id;
 			for (let pi = 0; pi < section.pages.length; pi++) {
-				const el = pageEls.get(`${section.chapter.id}-${pi}`);
-				if (!el) continue;
-				const top = el.getBoundingClientRect().top;
-				if (top <= line && (!best || top > best.top)) {
-					best = { chapterId: section.chapter.id, pi, top };
+				out.push({ chapterId: cid, pi, key: `${cid}-${pi}` });
+			}
+		}
+		return out;
+	}
+
+	function scrollerMetrics(): {
+		scrollTop: number;
+		clientHeight: number;
+		scrollerTop: number;
+		viewBottom: number;
+	} {
+		const scroller = scrollerEl();
+		if (scroller) {
+			const r = scroller.getBoundingClientRect();
+			return {
+				scrollTop: scroller.scrollTop,
+				clientHeight: scroller.clientHeight,
+				scrollerTop: r.top,
+				viewBottom: r.top + scroller.clientHeight
+			};
+		}
+		const scrollTop = window.scrollY || document.documentElement.scrollTop;
+		const clientHeight = window.innerHeight;
+		return { scrollTop, clientHeight, scrollerTop: 0, viewBottom: clientHeight };
+	}
+
+	/** Content-space Y of an element's top edge relative to the scroller. */
+	function contentTopOf(el: HTMLElement, scrollTop: number, scrollerTop: number): number {
+		return el.getBoundingClientRect().top - scrollerTop + scrollTop;
+	}
+
+	function applyLastPageRule(best: PageRef, viewBottom: number): PageRef {
+		const section = sections.find((s) => s.chapter.id === best.chapterId);
+		if (!section) return best;
+		const lastIdx = section.pages.length - 1;
+		if (lastIdx <= best.pi) return best;
+		const lastEl = pageEls.get(`${best.chapterId}-${lastIdx}`);
+		if (lastEl && lastEl.getBoundingClientRect().bottom <= viewBottom + 1) {
+			return { chapterId: best.chapterId, pi: lastIdx, key: `${best.chapterId}-${lastIdx}` };
+		}
+		return best;
+	}
+
+	/** Prefer pure lastBottom for the active chapter; ≤1 rect if height missing. */
+	function applyLastPageRuleFromHeights(
+		best: PageRef,
+		entries: PageRef[],
+		heights: number[],
+		prefix: number[],
+		scrollTop: number,
+		clientHeight: number,
+		viewBottom: number
+	): PageRef {
+		const section = sections.find((s) => s.chapter.id === best.chapterId);
+		if (!section) return best;
+		const lastIdx = section.pages.length - 1;
+		if (lastIdx <= best.pi) return best;
+		const lastFlat = entries.findIndex(
+			(e) => e.chapterId === best.chapterId && e.pi === lastIdx
+		);
+		if (lastFlat >= 0) {
+			const top = prefix[lastFlat];
+			const h = heights[lastFlat];
+			if (top != null && h != null && h > 0) {
+				if (top + h <= scrollTop + clientHeight + 1) {
+					return {
+						chapterId: best.chapterId,
+						pi: lastIdx,
+						key: `${best.chapterId}-${lastIdx}`
+					};
 				}
+				return best;
+			}
+		}
+		return applyLastPageRule(best, viewBottom);
+	}
+
+	/** Bounded fallback: rect-scan only active flat index ±5 (not full sections). */
+	function geometricActivePageWindowFallback(
+		entries: PageRef[],
+		clientHeight: number,
+		scrollerTop: number,
+		viewBottom: number
+	): PageRef | null {
+		const line = scrollerTop + clientHeight * ACTIVATION_FRAC;
+		let center = entries.findIndex(
+			(e) => e.chapterId === activeChapterId && e.pi === activePi
+		);
+		if (center < 0) center = 0;
+		const from = Math.max(0, center - 5);
+		const to = Math.min(entries.length - 1, center + 5);
+		let best: { ref: PageRef; top: number } | null = null;
+		for (let i = from; i <= to; i++) {
+			const ref = entries[i];
+			if (!ref) continue;
+			const el = pageEls.get(ref.key);
+			if (!el) continue;
+			const top = el.getBoundingClientRect().top;
+			if (top <= line && (!best || top > best.top)) {
+				best = { ref, top };
 			}
 		}
 		if (!best) return null;
-		const section = sections.find((s) => s.chapter.id === best.chapterId);
-		if (section) {
-			const lastIdx = section.pages.length - 1;
-			const lastEl = pageEls.get(`${best.chapterId}-${lastIdx}`);
-			if (lastEl && lastEl.getBoundingClientRect().bottom <= window.innerHeight + 1) {
-				return { chapterId: best.chapterId, pi: lastIdx };
+		return applyLastPageRule(best.ref, viewBottom);
+	}
+
+	function geometricActivePage(): { chapterId: number; pi: number } | null {
+		const entries = readingOrderEntries();
+		if (entries.length === 0) return null;
+
+		const { scrollTop, clientHeight, scrollerTop, viewBottom } = scrollerMetrics();
+
+		const heights: number[] = [];
+		let complete = true;
+		for (const e of entries) {
+			const h = pageHeights.get(e.key);
+			if (h == null || !(h > 0)) {
+				complete = false;
+				break;
 			}
+			heights.push(h);
 		}
-		return { chapterId: best.chapterId, pi: best.pi };
+
+		if (complete && heights.length === entries.length) {
+			// 1 rect on a near-viewport page as anchor → prefix O(n) + search O(log n).
+			// Re-anchoring keeps CSS gaps/dividers from drifting from document start.
+			let anchorI = entries.findIndex(
+				(e) => e.chapterId === activeChapterId && e.pi === activePi
+			);
+			if (anchorI < 0 || !pageEls.get(entries[anchorI]!.key)) {
+				anchorI = entries.findIndex((e) => pageEls.get(e.key));
+			}
+			const anchorEl =
+				anchorI >= 0 ? pageEls.get(entries[anchorI]!.key) : undefined;
+			if (!anchorEl || anchorI < 0) {
+				const fb = geometricActivePageWindowFallback(
+					entries,
+					clientHeight,
+					scrollerTop,
+					viewBottom
+				);
+				return fb ? { chapterId: fb.chapterId, pi: fb.pi } : null;
+			}
+			const anchorTop = contentTopOf(anchorEl, scrollTop, scrollerTop);
+			const prefix = buildAnchoredPrefixStarts(heights, anchorI, anchorTop);
+			// Do not pass lastBottom into the pure search: multi-section prefixes would
+			// force global n-1. Chapter-scoped last-page rule is applied after.
+			const flat = activePageFromPrefixHeights(
+				prefix,
+				scrollTop,
+				clientHeight,
+				ACTIVATION_FRAC
+			);
+			if (flat == null) {
+				const first = entries[0];
+				if (first) {
+					const forced = applyLastPageRuleFromHeights(
+						first,
+						entries,
+						heights,
+						prefix,
+						scrollTop,
+						clientHeight,
+						viewBottom
+					);
+					if (forced.pi !== first.pi || forced.chapterId !== first.chapterId) {
+						return { chapterId: forced.chapterId, pi: forced.pi };
+					}
+				}
+				return null;
+			}
+			const ref = entries[flat];
+			if (!ref) return null;
+			const final = applyLastPageRuleFromHeights(
+				ref,
+				entries,
+				heights,
+				prefix,
+				scrollTop,
+				clientHeight,
+				viewBottom
+			);
+			return { chapterId: final.chapterId, pi: final.pi };
+		}
+
+		const fb = geometricActivePageWindowFallback(
+			entries,
+			clientHeight,
+			scrollerTop,
+			viewBottom
+		);
+		return fb ? { chapterId: fb.chapterId, pi: fb.pi } : null;
 	}
 
 	function reportCurrentProgress() {
