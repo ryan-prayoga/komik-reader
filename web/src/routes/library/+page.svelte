@@ -275,17 +275,19 @@
 			{#each items as manga (manga.mangaId)}
 				{@const last = lastRead(manga.mangaId)}
 				{@const meta = updates.get(manga.mangaId)}
+				{@const isReading = !!last && !last.isRead}
 				{@const pct =
-					last && !last.isRead && last.totalPages
+					isReading && last.totalPages
 						? Math.min(100, Math.round(((last.lastPage + 1) / last.totalPages) * 100))
 						: null}
-				{@const progressLabel = meta?.hasUpdate
-					? `Baru · ${meta.latestChapterName}`
-					: last && !last.isRead
-						? `Lanjut · ${last.chapterName}`
+				{@const progressLabel = isReading
+					? `Lanjut · ${last.chapterName}`
+					: meta?.hasUpdate
+						? `Baru · ${meta.latestChapterName}`
 						: last?.isRead && isFullyCaughtUp(manga.mangaId, meta)
 							? 'Selesai'
 							: null}
+				{@const progressPercent = isReading ? pct : meta?.hasUpdate ? 100 : null}
 				{#if selectMode}
 					<button
 						type="button"
@@ -314,7 +316,7 @@
 								href="/manga/{manga.mangaId}"
 								hasUpdate={!!meta?.hasUpdate}
 								{progressLabel}
-								progressPercent={meta?.hasUpdate ? 100 : pct}
+								{progressPercent}
 								class="pointer-events-none"
 							/>
 						</div>
@@ -331,7 +333,7 @@
 						href="/manga/{manga.mangaId}"
 						hasUpdate={!!meta?.hasUpdate}
 						{progressLabel}
-						progressPercent={meta?.hasUpdate ? 100 : pct}
+						{progressPercent}
 					/>
 				{/if}
 			{/each}
