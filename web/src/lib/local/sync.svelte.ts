@@ -66,7 +66,6 @@ class SyncEngine {
 		]);
 
 		const local: SyncChange[] = [];
-		let maxCursor = pushCursor;
 		const collect = (
 			entity: SyncEntity,
 			rows: { updatedAt: number; deleted?: boolean }[],
@@ -85,7 +84,6 @@ class SyncEngine {
 						updatedAt: r.updatedAt,
 						deleted: !!r.deleted
 					});
-					if (r.updatedAt > maxCursor) maxCursor = r.updatedAt;
 				}
 			}
 		};
@@ -113,10 +111,15 @@ class SyncEngine {
 			}
 		}
 
+		// Cap outbound batch; remainder stays above pushCursor for the next sync.
+		const MAX_PUSH = 500;
+		local.sort((a, b) => a.updatedAt - b.updatedAt);
+		const batch = local.slice(0, MAX_PUSH);
+
 		const res = await fetch('/api/sync', {
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ since: pullCursor, changes: local })
+			body: JSON.stringify({ since: pullCursor, changes: batch })
 		});
 		if (res.status === 401) {
 			this.loggedIn = false;
@@ -124,7 +127,12 @@ class SyncEngine {
 		}
 		if (!res.ok) throw new Error('sync failed');
 
-		const result = (await res.json()) as { changes: SyncChange[]; cursor: number };
+		const result = (await res.json()) as {
+			changes: SyncChange[];
+			cursor: number;
+			acceptedMaxUpdatedAt?: number;
+			acceptedCount?: number;
+		};
 
 		let applied = false;
 		for (const ch of result.changes) {
@@ -169,16 +177,25 @@ class SyncEngine {
 					}
 					await putItem(store, finalRow);
 					applied = true;
-					// Do NOT advance push cursor from remote updatedAt — a future
-					// clock on another device would freeze all subsequent local pushes.
 				}
 			}
 
-			// Push cursor only reflects what we successfully collected to send.
-			await setMeta(PUSH_KEY, maxCursor);
+			// Advance push cursor only to what the server accepted (not remote
+			// clocks, not unsent remainder past MAX_PUSH).
+			const accepted = Number(result.acceptedMaxUpdatedAt ?? 0);
+			if (accepted > pushCursor) {
+				await setMeta(PUSH_KEY, accepted);
+			} else if (batch.length === 0) {
+				// Nothing to push; leave cursor as-is.
+			}
 			await setMeta(PULL_KEY, result.cursor);
-		if (applied) await localData.reload();
-	}
+			if (applied) await localData.reload();
+
+			// More dirty rows remain — schedule another push soon.
+			if (local.length > batch.length) {
+				this.schedule(300);
+			}
+		}
 }
 
 export const syncEngine = new SyncEngine();
