@@ -3,11 +3,16 @@
 	import type { Chapter } from '$lib/graphql/types';
 	import { preferences } from '$lib/preferences.svelte';
 	import { readerSettings } from '$lib/reader-settings.svelte';
-	import {
-		activePageFromPrefixHeights,
-		buildAnchoredPrefixStarts
-	} from '$lib/reader/active-page';
-	import Spinner from '$lib/components/ui/Spinner.svelte';
+	import { activePageFromPrefixHeights } from '$lib/reader/active-page';
+		import {
+			WEBTOON_PAGE_GAP_PX,
+			buildAnchoredPrefixWithGaps,
+			chapterProgressFromRects,
+			pageProgressFromRects,
+			readingOrderGaps,
+			shouldEmitWebtoonProgress
+		} from '$lib/reader/webtoon-progress';
+		import Spinner from '$lib/components/ui/Spinner.svelte';
 
 	type Section = { chapter: Chapter; pages: string[] };
 
@@ -189,21 +194,23 @@
 	let appliedResetToken = resetToken;
 	$effect(() => {
 		if (resetToken === appliedResetToken) return;
-		appliedResetToken = resetToken;
-		activeChapterId = 0;
-		activePi = 0;
-		activeProgress = 0;
-		loadedPages = {};
-		errorPages = {};
-		retryCounts = {};
-		eagerPages = {};
-		unloadEnabled = false;
-		liveImages = {};
-		heightLocks = {};
-		// A correction computed against the old chapter's layout must not land
-		// on the freshly-reset scroll position.
-		pendingAnchorDelta = 0;
-	});
+			appliedResetToken = resetToken;
+			activeChapterId = 0;
+			activePi = 0;
+			activeProgress = 0;
+			loadedPages = {};
+			errorPages = {};
+			retryCounts = {};
+			eagerPages = {};
+			unloadEnabled = false;
+			liveImages = {};
+			heightLocks = {};
+			chapterRatioSamples.clear();
+			chapterRatioGuess = {};
+			// A correction computed against the old chapter's layout must not land
+			// on the freshly-reset scroll position.
+			pendingAnchorDelta = 0;
+		});
 	function pageSrc(url: string, key: string): string {
 		const n = retryCounts[key];
 		if (!n) return url;
@@ -243,10 +250,12 @@
 
 	// Reading-order sort key: section index (chapter position in `sections`)
 	// times a stride bigger than any realistic page count, plus page index.
-	function pageOrderKey(chapterId: number, pi: number): number {
-		const si = sections.findIndex((s) => s.chapter.id === chapterId);
-		return si * 100000 + pi;
-	}
+		function pageOrderKey(chapterId: number, pi: number): number | null {
+			const si = sections.findIndex((s) => s.chapter.id === chapterId);
+			// Pruned / unmounted chapter — never treat as "above anchor" or scroll jumps.
+			if (si < 0) return null;
+			return si * 100000 + pi;
+		}
 
 	// iOS also ignores programmatic scrollTop writes while a momentum fling is
 	// in flight — keep reapplying the outstanding delta each frame until the
@@ -286,28 +295,40 @@
 						}
 						return;
 					}
-					const anchorOrder = pageOrderKey(activeChapterId, activePi);
-					let delta = 0;
-					for (const entry of entries) {
-						const key = (entry.target as HTMLElement).dataset.pageKey;
-						if (!key) continue;
-						const [chStr, piStr] = key.split('-');
-						const newH = entry.borderBoxSize?.[0]?.blockSize ?? entry.contentRect.height;
-						const oldH = pageHeights.get(key);
-						pageHeights.set(key, newH);
-						if (oldH === undefined || Math.abs(newH - oldH) < 0.5) continue;
-						const order = pageOrderKey(Number(chStr), Number(piStr));
-						if (order < anchorOrder) {
-							// Fully above the anchor in reading order: shift by the whole delta.
-							delta += newH - oldH;
-						} else if (order === anchorOrder) {
-							// The page currently being read: keep the same FRACTION into it,
-							// using the fraction we already track (not a live rect re-derive,
-							// which is exactly what made this imprecise before).
-							delta += activeProgress * (newH - oldH);
+						const anchorOrder = pageOrderKey(activeChapterId, activePi);
+						if (anchorOrder == null) {
+							for (const entry of entries) {
+								const key = (entry.target as HTMLElement).dataset.pageKey;
+								if (key)
+									pageHeights.set(
+										key,
+										entry.borderBoxSize?.[0]?.blockSize ?? entry.contentRect.height
+									);
+							}
+							return;
 						}
-						// order > anchorOrder: below the fold, doesn't affect scroll position.
-					}
+						let delta = 0;
+						for (const entry of entries) {
+							const key = (entry.target as HTMLElement).dataset.pageKey;
+							if (!key) continue;
+							const [chStr, piStr] = key.split('-');
+							const newH = entry.borderBoxSize?.[0]?.blockSize ?? entry.contentRect.height;
+							const oldH = pageHeights.get(key);
+							pageHeights.set(key, newH);
+							if (oldH === undefined || Math.abs(newH - oldH) < 0.5) continue;
+							const order = pageOrderKey(Number(chStr), Number(piStr));
+							if (order == null) continue;
+							if (order < anchorOrder) {
+								// Fully above the anchor in reading order: shift by the whole delta.
+								delta += newH - oldH;
+							} else if (order === anchorOrder) {
+								// The page currently being read: keep the same FRACTION into it,
+								// using the fraction we already track (not a live rect re-derive,
+								// which is exactly what made this imprecise before).
+								delta += activeProgress * (newH - oldH);
+							}
+							// order > anchorOrder: below the fold, doesn't affect scroll position.
+						}
 					if (delta) {
 						pendingAnchorDelta += delta;
 						anchorRetries = 0;
@@ -481,16 +502,17 @@
 				);
 				return fb ? { chapterId: fb.chapterId, pi: fb.pi } : null;
 			}
-			const anchorTop = contentTopOf(anchorEl, scrollTop, scrollerTop);
-			const prefix = buildAnchoredPrefixStarts(heights, anchorI, anchorTop);
-			// Do not pass lastBottom into the pure search: multi-section prefixes would
-			// force global n-1. Chapter-scoped last-page rule is applied after.
-			const flat = activePageFromPrefixHeights(
-				prefix,
-				scrollTop,
-				clientHeight,
-				ACTIVATION_FRAC
-			);
+				const anchorTop = contentTopOf(anchorEl, scrollTop, scrollerTop);
+				const gapAfter = readingOrderGaps(entries, gap ? WEBTOON_PAGE_GAP_PX : 0);
+				const prefix = buildAnchoredPrefixWithGaps(heights, anchorI, anchorTop, gapAfter);
+				// Do not pass lastBottom into the pure search: multi-section prefixes would
+				// force global n-1. Chapter-scoped last-page rule is applied after.
+				const flat = activePageFromPrefixHeights(
+					prefix,
+					scrollTop,
+					clientHeight,
+					ACTIVATION_FRAC
+				);
 			if (flat == null) {
 				const first = entries[0];
 				if (first) {
@@ -576,47 +598,44 @@
 		liveImages = nextLive;
 	}
 
-	function reportCurrentProgress() {
-		// 0 is the "not tracking anything yet" sentinel (see the resetToken
-		// effect) — right after a hard chapter switch, before the new chapter's
-		// first page has intersected, a stray scroll tick must not report this
-		// up as real progress or it clobbers the parent's just-set chapter id.
-		if (!activeChapterId) return;
-		const geo = geometricActivePage();
-		if (geo) {
-			activeChapterId = geo.chapterId;
-			activePi = geo.pi;
+		function reportCurrentProgress() {
+			// 0 is the "not tracking anything yet" sentinel (see the resetToken
+			// effect) — right after a hard chapter switch, before the new chapter's
+			// first page has intersected, a stray scroll tick must not report this
+			// up as real progress or it clobbers the parent's just-set chapter id.
+			if (!activeChapterId) return;
+			const geo = geometricActivePage();
+			if (geo) {
+				activeChapterId = geo.chapterId;
+				activePi = geo.pi;
+			}
+			syncImageWindow();
+			const el = pageEls.get(`${activeChapterId}-${activePi}`);
+			// Missing node mid-prune/remount: never emit zeros — that used to wipe
+			// lastPageProgress in IndexedDB on visibility flush races.
+			if (!shouldEmitWebtoonProgress(activeChapterId, !!el) || !el) return;
+			const { top, height } = el.getBoundingClientRect();
+			const { scrollerTop } = scrollerMetrics();
+			const progress = pageProgressFromRects(top, height, scrollerTop);
+			activeProgress = progress;
+			onpage(activeChapterId, activePi, progress, chapterScrollProgress(activeChapterId));
 		}
-		syncImageWindow();
-		const el = pageEls.get(`${activeChapterId}-${activePi}`);
-		if (!el) {
-			activeProgress = 0;
-			onpage(activeChapterId, activePi, 0, 0);
-			return;
-		}
-		const { top, height } = el.getBoundingClientRect();
-		// progress 0 = top of page at viewport top, 1 = bottom of page at viewport top
-		const progress = height > 0 ? Math.max(0, Math.min(1, -top / height)) : 0;
-		activeProgress = progress;
-		onpage(activeChapterId, activePi, progress, chapterScrollProgress(activeChapterId));
-	}
 
-	// True scroll-extent progress for the active chapter: 0 at the chapter's first
-	// page top, 1 once scrolled all the way to its last page bottom. Unlike per-page
-	// progress, this isn't bounded by individual page heights, so it actually reaches
-	// 0/1 at the real start/end instead of stalling short on short pages.
-	function chapterScrollProgress(chapterId: number): number {
-		const section = sections.find((s) => s.chapter.id === chapterId);
-		const lastIdx = (section?.pages.length ?? 1) - 1;
-		const firstEl = pageEls.get(`${chapterId}-0`);
-		const lastEl = pageEls.get(`${chapterId}-${lastIdx}`);
-		if (!firstEl || !lastEl) return 0;
-		const firstTop = firstEl.getBoundingClientRect().top;
-		const lastBottom = lastEl.getBoundingClientRect().bottom;
-		const scrollable = lastBottom - firstTop - window.innerHeight;
-		if (scrollable <= 0) return firstTop <= 0 ? 1 : 0;
-		return Math.max(0, Math.min(1, -firstTop / scrollable));
-	}
+		// True scroll-extent progress for the active chapter: 0 at the chapter's first
+		// page top, 1 once scrolled all the way to its last page bottom. Uses the
+		// reader's scroller height (not window.innerHeight) so dock/safe-area layouts
+		// still latch isRead at the real end.
+		function chapterScrollProgress(chapterId: number): number {
+			const section = sections.find((s) => s.chapter.id === chapterId);
+			const lastIdx = (section?.pages.length ?? 1) - 1;
+			const firstEl = pageEls.get(`${chapterId}-0`);
+			const lastEl = pageEls.get(`${chapterId}-${lastIdx}`);
+			if (!firstEl || !lastEl) return 0;
+			const firstTop = firstEl.getBoundingClientRect().top;
+			const lastBottom = lastEl.getBoundingClientRect().bottom;
+			const { scrollerTop, clientHeight } = scrollerMetrics();
+			return chapterProgressFromRects(firstTop, lastBottom, scrollerTop, clientHeight);
+		}
 
 	function observePage(node: HTMLElement, param: { chapterId: number; pi: number }) {
 		const key = `${param.chapterId}-${param.pi}`;
