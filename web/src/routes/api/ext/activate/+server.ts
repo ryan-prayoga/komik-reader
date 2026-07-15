@@ -15,57 +15,40 @@ async function graphql(query: string, variables?: Record<string, unknown>) {
 	return res.json();
 }
 
-	// Extension install is server-wide — require a logged-in session (any user).
-	// Uninstall/update stay admin-only via GraphQL role gate.
-	export const POST: RequestHandler = async ({ request, getClientAddress, locals }) => {
-		if (!locals.user) {
-			return json({ error: 'Login required' }, { status: 401 });
-		}
-		const limit = rateLimit(`ext-activate:${getClientAddress()}`, 20, 60 * 60_000);
+	// Activation counter only — does NOT install APKs (server-wide Suwayomi state).
+	// Install/uninstall stays admin GraphQL. Guests may bump counts for analytics.
+	export const POST: RequestHandler = async ({ request, getClientAddress }) => {
+		const limit = rateLimit(`ext-activate:${getClientAddress()}`, 60, 60 * 60_000);
 		if (!limit.ok) {
-			return json({ error: 'Terlalu banyak permintaan install' }, { status: 429 });
+			return json({ error: 'Terlalu banyak permintaan' }, { status: 429 });
 		}
 
-	let body: unknown;
-	try {
-		body = await request.json();
-	} catch {
-		return json({ error: 'Invalid JSON' }, { status: 400 });
-	}
+		let body: unknown;
+		try {
+			body = await request.json();
+		} catch {
+			return json({ error: 'Invalid JSON' }, { status: 400 });
+		}
 
-	const pkgName = typeof (body as Record<string, unknown>)?.pkgName === 'string'
-		? (body as Record<string, unknown>).pkgName as string
-		: null;
+		const pkgName =
+			typeof (body as Record<string, unknown>)?.pkgName === 'string'
+				? ((body as Record<string, unknown>).pkgName as string)
+				: null;
 
-	if (!pkgName) return json({ error: 'pkgName required' }, { status: 400 });
+		if (!pkgName || pkgName.length > 200) {
+			return json({ error: 'pkgName required' }, { status: 400 });
+		}
 
-	const data = await graphql(
-		`mutation($pkgName: String!) {
-			updateExtension(input: { id: $pkgName, patch: { install: true } }) {
-				extension { pkgName isInstalled }
-			}
-		}`,
-		{ pkgName }
-	);
+		try {
+			getDb()
+				.prepare(
+					`INSERT INTO extension_activations (pkg_name, count) VALUES (?, 1)
+					 ON CONFLICT(pkg_name) DO UPDATE SET count = count + 1`
+				)
+				.run(pkgName);
+		} catch {
+			// ignore
+		}
 
-	if (data?.errors?.length) {
-		return json({ error: data.errors[0]?.message ?? 'Install failed' }, { status: 500 });
-	}
-
-	const ext = data?.data?.updateExtension?.extension;
-	if (!ext) return json({ error: 'Extension not found' }, { status: 404 });
-
-	// Track activation count (best-effort — never fails the response).
-	try {
-		getDb()
-			.prepare(
-				`INSERT INTO extension_activations (pkg_name, count) VALUES (?, 1)
-				 ON CONFLICT(pkg_name) DO UPDATE SET count = count + 1`
-			)
-			.run(pkgName);
-	} catch {
-		// ignore
-	}
-
-	return json({ pkgName: ext.pkgName, isInstalled: ext.isInstalled });
-};
+		return json({ pkgName, counted: true });
+	};

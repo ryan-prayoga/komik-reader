@@ -38,33 +38,31 @@
 		}
 	}
 
-	async function activate() {
-		loading = true;
-		error = '';
-		try {
+		async function activate() {
+			// Suwayomi installs extensions server-wide (not per-user). Guests and
+			// non-admins only toggle a local "active" filter for already-installed
+			// packages. Server install remains admin-only (GraphQL / admin UI).
 			if (!extension.isInstalled) {
-				const res = await fetch('/api/ext/activate', {
-					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ pkgName: extension.pkgName })
-				});
-				const data = await res.json();
-				if (!res.ok) throw new Error(data.error ?? 'Gagal install');
-			} else {
-				// Already installed — just count the activation
+				error = admin
+					? 'Install dulu lewat tombol Install'
+					: 'Ekstensi belum terpasang di server. Minta admin install dulu.';
+				return;
+			}
+			loading = true;
+			error = '';
+			try {
 				fetch('/api/ext/activate', {
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
 					body: JSON.stringify({ pkgName: extension.pkgName })
 				}).catch(() => {});
+				preferences.activateExtension(extension.pkgName);
+			} catch (e) {
+				error = e instanceof Error ? e.message : 'Gagal';
+			} finally {
+				loading = false;
 			}
-			preferences.activateExtension(extension.pkgName);
-		} catch (e) {
-			error = e instanceof Error ? e.message : 'Gagal';
-		} finally {
-			loading = false;
 		}
-	}
 
 	function deactivate() {
 		preferences.deactivateExtension(extension.pkgName);
