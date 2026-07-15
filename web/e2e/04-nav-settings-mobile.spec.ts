@@ -75,9 +75,10 @@ test.describe('Guest vs admin UI differences', () => {
 	});
 
 	test('admin sees Admin nav after login', async ({ page }) => {
+		// Force desktop layout so sidebar Admin link is in the DOM (mobile uses More sheet).
 		await page.setViewportSize({ width: 1280, height: 800 });
 		await loginAsAdmin(page);
-		await page.goto('/');
+		await page.goto('/', { waitUntil: 'domcontentloaded' });
 		await expect(page.getByRole('link', { name: /^admin$/i }).first()).toBeVisible({
 			timeout: 10_000
 		});

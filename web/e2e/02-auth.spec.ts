@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { ADMIN, loginAsAdmin, guestGraphql } from './helpers';
+import { ADMIN, loginAsAdmin, guestGraphql, openMoreMenu } from './helpers';
 
 test.describe('Auth flows', () => {
 	test('login gagal: password salah', async ({ page }) => {
@@ -36,6 +36,11 @@ test.describe('Auth flows', () => {
 		expect(session, 'komik_session cookie').toBeTruthy();
 		expect(session!.httpOnly).toBe(true);
 
+		// Desktop: username in sidebar. Mobile: only inside More sheet.
+		const visibleName = page.getByText(new RegExp(ADMIN.login, 'i')).first();
+		if (!(await visibleName.isVisible().catch(() => false))) {
+			await openMoreMenu(page);
+		}
 		await expect(page.getByText(new RegExp(ADMIN.login, 'i')).first()).toBeVisible({
 			timeout: 10_000
 		});
@@ -156,5 +161,44 @@ test.describe('Admin authorization', () => {
 			const text = await res.text();
 			expect(text).not.toMatch(/Akun berhasil dibuat/i);
 		}
+	});
+
+	test('logged-in non-admin cannot setSettings via GraphQL', async ({ page }) => {
+		await loginAsAdmin(page);
+		const suffix = Date.now().toString(36);
+		const create = await page.request.post('/admin/users?/create', {
+			form: {
+				email: `user-${suffix}@example.com`,
+				username: `u${suffix}`,
+				password: 'password123'
+			}
+		});
+		expect(create.ok() || create.status() === 200 || create.status() === 303).toBeTruthy();
+
+		const ctx = await page.context().browser()!.newContext();
+		const userPage = await ctx.newPage();
+		const login = await userPage.request.post('/login', {
+			form: {
+				login: `u${suffix}`,
+				password: 'password123',
+				redirectTo: '/'
+			}
+		});
+		const loginBody = await login.text();
+		expect(loginBody).not.toMatch(/"type":"failure"/);
+
+		const res = await userPage.request.post('/api/graphql', {
+			data: {
+				query: `mutation {
+					setSettings(input: { settings: { globalUpdateInterval: 99 } }) {
+						settings { globalUpdateInterval }
+					}
+				}`
+			}
+		});
+		expect(res.status()).toBe(401);
+		const body = await res.text();
+		expect(body).toMatch(/Admin required|Unauthorized|Login required/i);
+		await ctx.close();
 	});
 });
