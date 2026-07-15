@@ -45,6 +45,64 @@ export function isSuwayomiApiPath(pathname: string): boolean {
 	);
 }
 
+/**
+ * REST paths that mutate Suwayomi state (many accept GET historically).
+ * Guests and non-admins must not reach these via the proxy.
+ */
+const REST_MUTATION_PREFIXES = [
+	'/api/v1/extension/install',
+	'/api/v1/extension/uninstall',
+	'/api/v1/extension/update',
+	'/api/v1/downloads/start',
+	'/api/v1/downloads/stop',
+	'/api/v1/downloads/clear',
+	'/api/v1/download/',
+	'/api/v1/backup/',
+	'/api/v1/update/',
+	'/api/v1/settings'
+] as const;
+
+/** Guest-readable REST: images, chapter pages, icons — not control plane. */
+const GUEST_REST_ALLOW_PREFIXES = [
+	'/api/v1/manga/',
+	'/api/v1/chapter/',
+	'/api/v1/extension/icon',
+	'/api/v1/extension/list',
+	'/api/v1/source/list',
+	'/api/v1/source/',
+	'/api/v1/category/list'
+] as const;
+
+function pathMatchesPrefix(pathname: string, prefixes: readonly string[]): boolean {
+	return prefixes.some((p) => pathname === p || pathname.startsWith(p));
+}
+
+export function isRestMutationPath(pathname: string): boolean {
+	if (pathMatchesPrefix(pathname, REST_MUTATION_PREFIXES)) return true;
+	// Suwayomi uses GET …/manga/{id}/library to add/remove library membership.
+	if (/\/api\/v1\/manga\/[^/]+\/library\/?$/.test(pathname)) return true;
+	if (/\/api\/v1\/manga\/[^/]+\/category\/?/.test(pathname)) return true;
+	return false;
+}
+
+/** Guest REST: GET/HEAD only, allowlisted prefixes, never mutation paths. */
+export function isGuestAllowedRest(pathname: string, method: string): boolean {
+	const m = method.toUpperCase();
+	if (m !== 'GET' && m !== 'HEAD') return false;
+	if (isRestMutationPath(pathname)) return false;
+	return pathMatchesPrefix(pathname, GUEST_REST_ALLOW_PREFIXES);
+}
+
+/** Non-admin REST: may read freely; mutations require admin. */
+export function isUserAllowedRest(pathname: string, method: string): boolean {
+	const m = method.toUpperCase();
+	if (m === 'GET' || m === 'HEAD') {
+		// Still block backup export and other mutation-via-GET paths.
+		return !isRestMutationPath(pathname);
+	}
+	return false;
+}
+
 // Suwayomi models source/chapter fetches as GraphQL *mutations* (they trigger a
 // network fetch), so guests must be allowed to run these read-oriented ones to
 // browse and read. Everything else mutating (library, downloads, categories,
@@ -66,8 +124,33 @@ const GUEST_FETCH_SET: ReadonlySet<string> = new Set(GUEST_FETCH_MUTATIONS);
  */
 const ADMIN_ONLY_MUTATIONS = [
 	'setSettings',
+	'resetSettings',
 	'clearCachedImages',
-	'updateExtension'
+	'updateExtension',
+	'updateExtensions',
+	'installExternalExtension',
+	'createBackup',
+	'restoreBackup',
+	'updateWebUI',
+	'clearDownloader',
+	'startDownloader',
+	'stopDownloader',
+	'enqueueChapterDownload',
+	'enqueueChapterDownloads',
+	'dequeueChapterDownload',
+	'dequeueChapterDownloads',
+	'reorderChapterDownload',
+	'deleteDownloadedChapter',
+	'deleteDownloadedChapters',
+	'setGlobalMeta',
+	'setGlobalMetas',
+	'deleteGlobalMeta',
+	'deleteGlobalMetas',
+	'updateLibrary',
+	'updateLibraryManga',
+	'updateCategoryManga',
+	'updateSourcePreference',
+	'fetchExtensions' // catalog refresh is admin-only; guests use cached list
 ] as const;
 
 const ADMIN_ONLY_SET: ReadonlySet<string> = new Set(ADMIN_ONLY_MUTATIONS);

@@ -2,23 +2,25 @@ import type { Handle } from '@sveltejs/kit';
 import { redirect } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import { authEnabled, allowGuest } from '$lib/server/env';
-	import {
-		isPublicPath,
-		isSuwayomiApiPath,
-		isGuestAllowedGraphql,
-		isUserAllowedGraphql
-	} from '$lib/server/guard';
-	import { getUserFromSession, readSessionToken } from '$lib/server/session';
-	import { rateLimit } from '$lib/server/ratelimit';
-	
-	const SUWAYOMI_URL = env.SUWAYOMI_URL || 'http://localhost:4567';
-	
-	// Each browse page fans out into many upstream scrape calls (enrichment), so the
-	// per-IP ceiling is high — it's a runaway/abuse backstop, not a UX throttle.
-	const PROXY_LIMIT = process.env.NODE_ENV === 'production' ? 600 : 10_000;
-	const PROXY_WINDOW_MS = 60_000;
-	// Match client GRAPHQL_TIMEOUT_MS so a hung Suwayomi scrape fails closed here too.
-	const PROXY_TIMEOUT_MS = 30_000;
+import {
+	isPublicPath,
+	isSuwayomiApiPath,
+	isGuestAllowedGraphql,
+	isUserAllowedGraphql,
+	isGuestAllowedRest,
+	isUserAllowedRest
+} from '$lib/server/guard';
+import { getUserFromSession, readSessionToken } from '$lib/server/session';
+import { rateLimit } from '$lib/server/ratelimit';
+
+const SUWAYOMI_URL = env.SUWAYOMI_URL || 'http://localhost:4567';
+
+// Each browse page fans out into many upstream scrape calls (enrichment), so the
+// per-IP ceiling is high — it's a runaway/abuse backstop, not a UX throttle.
+const PROXY_LIMIT = process.env.NODE_ENV === 'production' ? 600 : 10_000;
+const PROXY_WINDOW_MS = 60_000;
+// Match client GRAPHQL_TIMEOUT_MS so a hung Suwayomi scrape fails closed here too.
+const PROXY_TIMEOUT_MS = 30_000;
 
 function unauthorized(message: string): Response {
 	return new Response(JSON.stringify({ errors: [{ message }] }), {
@@ -73,11 +75,18 @@ export const handle: Handle = async ({ event, resolve }) => {
 			} else if (!isUserAllowedGraphql(bodyText)) {
 				return unauthorized('Admin required');
 			}
-		} else if (guest) {
-			if (!allowGuest()) return unauthorized('Unauthorized');
-			// Non-GET image/v1 calls need a session.
-			if (event.request.method !== 'GET' && event.request.method !== 'HEAD') {
-				return unauthorized('Login required');
+		} else if (!isGraphql && authEnabled()) {
+			// REST /api/v1/* — block mutation-via-GET (downloads, backup, extension
+			// install) for guests and non-admins. Admins pass through.
+			if (guest) {
+				if (!allowGuest()) return unauthorized('Unauthorized');
+				if (!isGuestAllowedRest(pathname, event.request.method)) {
+					return unauthorized('Login required');
+				}
+			} else if (user && !isAdmin) {
+				if (!isUserAllowedRest(pathname, event.request.method)) {
+					return unauthorized('Admin required');
+				}
 			}
 		}
 

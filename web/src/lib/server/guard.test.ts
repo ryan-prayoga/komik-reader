@@ -2,6 +2,9 @@
 	import {
 		isGuestAllowedGraphql,
 		isUserAllowedGraphql,
+		isGuestAllowedRest,
+		isUserAllowedRest,
+		isRestMutationPath,
 		isPublicPath,
 		isSuwayomiApiPath
 	} from './guard';
@@ -294,6 +297,48 @@ describe('isGuestAllowedGraphql', () => {
 
 		it('allows pure queries', () => {
 			expect(isUserAllowedGraphql(gqlBody(`query { aboutServer { name } }`))).toBe(true);
+		});
+
+		it('denies expanded admin-only ops (backup, downloader, external install)', () => {
+			for (const name of [
+				'installExternalExtension',
+				'createBackup',
+				'restoreBackup',
+				'clearDownloader',
+				'resetSettings',
+				'updateWebUI'
+			]) {
+				expect(
+					isUserAllowedGraphql(gqlBody(`mutation { ${name} { __typename } }`))
+				).toBe(false);
+			}
+		});
+	});
+
+	describe('REST path gates', () => {
+		it('flags mutation paths including downloads and backup', () => {
+			expect(isRestMutationPath('/api/v1/downloads/start')).toBe(true);
+			expect(isRestMutationPath('/api/v1/downloads/clear')).toBe(true);
+			expect(isRestMutationPath('/api/v1/backup/export/file')).toBe(true);
+			expect(isRestMutationPath('/api/v1/manga/12/library')).toBe(true);
+			expect(isRestMutationPath('/api/v1/extension/list')).toBe(false);
+		});
+
+		it('guest REST allows manga/chapter reads only', () => {
+			expect(isGuestAllowedRest('/api/v1/manga/1/thumbnail', 'GET')).toBe(true);
+			expect(isGuestAllowedRest('/api/v1/chapter/9/page/0', 'GET')).toBe(true);
+			expect(isGuestAllowedRest('/api/v1/extension/list', 'GET')).toBe(true);
+			expect(isGuestAllowedRest('/api/v1/downloads/start', 'GET')).toBe(false);
+			expect(isGuestAllowedRest('/api/v1/backup/export/file', 'GET')).toBe(false);
+			expect(isGuestAllowedRest('/api/v1/manga/1/thumbnail', 'POST')).toBe(false);
+		});
+
+		it('non-admin REST blocks mutation GET and all writes', () => {
+			expect(isUserAllowedRest('/api/v1/manga/1/thumbnail', 'GET')).toBe(true);
+			expect(isUserAllowedRest('/api/v1/downloads/start', 'GET')).toBe(false);
+			expect(isUserAllowedRest('/api/v1/backup/export/file', 'GET')).toBe(false);
+			expect(isUserAllowedRest('/api/v1/manga/1/library', 'GET')).toBe(false);
+			expect(isUserAllowedRest('/api/v1/manga/1/thumbnail', 'POST')).toBe(false);
 		});
 	});
 
