@@ -46,7 +46,9 @@ export function resumeProgressFor(
 ): number {
 	const h = findRow(history, id);
 	if (!h || h.isRead || h.lastPage !== page) return 0;
-	return Math.max(0, Math.min(1, h.lastPageProgress ?? 0));
+		const raw = h.lastPageProgress ?? 0;
+		if (!Number.isFinite(raw)) return 0;
+		return Math.max(0, Math.min(1, raw));
 }
 
 /**
@@ -56,15 +58,20 @@ export function resumeProgressFor(
  * instead of clamping to the very last page, so a 66%-through position still
  * resumes near 66% of the NEW page count rather than jumping to 100%.
  */
-export function clampResumeToFreshPageCount(
-	history: readonly ResumeHistoryRow[],
-	id: number,
-	page: number,
-	freshCount: number
-): number {
-	if (freshCount <= 0) return 0;
-	if (page < freshCount) return page;
-	const storedTotal = findRow(history, id)?.totalPages;
-	const total = storedTotal && storedTotal > 1 ? storedTotal : freshCount;
-	return Math.min(freshCount - 1, Math.round((page / (total - 1)) * (freshCount - 1)));
-}
+	export function clampResumeToFreshPageCount(
+		history: readonly ResumeHistoryRow[],
+		id: number,
+		page: number,
+		freshCount: number
+	): number {
+		if (freshCount <= 0) return 0;
+		if (page < freshCount) return page;
+		// Single-page chapter: only legal index is 0 (avoids /0 → NaN when total=1).
+		if (freshCount === 1) return 0;
+		const storedTotal = findRow(history, id)?.totalPages;
+		const total = storedTotal && storedTotal > 1 ? storedTotal : freshCount;
+		if (total <= 1) return 0;
+		const scaled = Math.round((page / (total - 1)) * (freshCount - 1));
+		if (!Number.isFinite(scaled)) return 0;
+		return Math.min(freshCount - 1, Math.max(0, scaled));
+	}

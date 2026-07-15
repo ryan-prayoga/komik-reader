@@ -132,4 +132,20 @@ describe('clampResumeToFreshPageCount', () => {
 		expect(clampResumeToFreshPageCount(history, 10, 5, 0)).toBe(0);
 		expect(clampResumeToFreshPageCount(history, 10, 5, -1)).toBe(0);
 	});
+
+	it('returns 0 (not NaN) when freshCount is 1 and page is out of range', () => {
+		const noTotal = [row({ chapterId: 10, lastPage: 5 })];
+		expect(clampResumeToFreshPageCount(noTotal, 10, 5, 1)).toBe(0);
+		expect(Number.isNaN(clampResumeToFreshPageCount(noTotal, 10, 5, 1))).toBe(false);
+
+		const oneTotal = [row({ chapterId: 10, lastPage: 3, totalPages: 1 })];
+		expect(clampResumeToFreshPageCount(oneTotal, 10, 3, 1)).toBe(0);
+	});
+});
+
+describe('resumeProgressFor NaN', () => {
+	it('returns 0 when lastPageProgress is NaN', () => {
+		const history = [row({ chapterId: 1, lastPage: 2, lastPageProgress: Number.NaN })];
+		expect(resumeProgressFor(history, 1, 2)).toBe(0);
+	});
 });
