@@ -132,29 +132,48 @@ class LocalData {
 		totalPages?: number;
 		lastPageProgress?: number;
 	}) {
-		const existing = this.getHistory(entry.chapterId);
-		let row: LocalHistory = {
-			...entry,
-			// Keep richer metadata if a later write lacks it.
-			mangaTitle: entry.mangaTitle || existing?.mangaTitle || '',
-			thumbnailUrl: entry.thumbnailUrl ?? existing?.thumbnailUrl ?? null,
-			sourceId: entry.sourceId ?? existing?.sourceId ?? null,
-			chapterNumber: entry.chapterNumber ?? existing?.chapterNumber,
-			totalPages: entry.totalPages ?? existing?.totalPages,
-			updatedAt: nowMs(),
-			deleted: false
-		};
-		// Atomic against the DB row: progress fields come from `entry`
-		// (authoritative), but timeSpentMs belongs to addTimeSpent — take it from
-		// the row as it exists inside the transaction, or a concurrent time flush
-		// gets wiped (this write used to drop the field entirely).
-		await updateItem<LocalHistory>('history', entry.chapterId, (current) => {
-			row = { ...row, timeSpentMs: current?.timeSpentMs ?? existing?.timeSpentMs };
-			return row;
-		});
-		this.#setHistoryRow(row);
-		this.#changed();
-	}
+			const existing = this.getHistory(entry.chapterId);
+			// Monotonic isRead: once true, later partial writes cannot un-read.
+			const isRead = Boolean(entry.isRead || existing?.isRead);
+			// Prefer explicit fraction; keep prior webtoon fraction when a paged/backfill
+			// write omits the field (otherwise reopen lands at panel top).
+			const lastPageProgress =
+				entry.lastPageProgress !== undefined
+					? entry.lastPageProgress
+					: existing?.lastPageProgress;
+			let row: LocalHistory = {
+				...entry,
+				isRead,
+				// Keep richer metadata if a later write lacks it.
+				mangaTitle: entry.mangaTitle || existing?.mangaTitle || '',
+				thumbnailUrl: entry.thumbnailUrl ?? existing?.thumbnailUrl ?? null,
+				sourceId: entry.sourceId ?? existing?.sourceId ?? null,
+				chapterNumber: entry.chapterNumber ?? existing?.chapterNumber,
+				totalPages: entry.totalPages ?? existing?.totalPages,
+				lastPageProgress,
+				updatedAt: nowMs(),
+				deleted: false
+			};
+			// Atomic against the DB row: progress fields come from `entry`
+			// (authoritative), but timeSpentMs belongs to addTimeSpent — take it from
+			// the row as it exists inside the transaction, or a concurrent time flush
+			// gets wiped (this write used to drop the field entirely). Also re-apply
+			// isRead latch against the DB row in case memory was stale.
+			await updateItem<LocalHistory>('history', entry.chapterId, (current) => {
+				row = {
+					...row,
+					isRead: Boolean(row.isRead || current?.isRead),
+					lastPageProgress:
+						entry.lastPageProgress !== undefined
+							? entry.lastPageProgress
+							: (current?.lastPageProgress ?? row.lastPageProgress),
+					timeSpentMs: current?.timeSpentMs ?? existing?.timeSpentMs
+				};
+				return row;
+			});
+			this.#setHistoryRow(row);
+			this.#changed();
+		}
 
 	/**
 	 * Upsert a single chapter's read flag, creating a history row if absent.
@@ -462,35 +481,44 @@ class LocalData {
 	 * the sync engine uses), so importing an older backup can't clobber newer
 	 * local changes — safe to import repeatedly or onto a partially-seeded device.
 	 */
-	async importData(dump: LocalDataExport) {
-		function newer<T extends { updatedAt: number }>(
-			incoming: T[],
-			existingByKey: Map<string, T>,
-			keyOf: (row: T) => string
-		): T[] {
-			return incoming.filter((row) => {
-				const existing = existingByKey.get(keyOf(row));
-				return !existing || row.updatedAt > existing.updatedAt;
-			});
+		async importData(dump: LocalDataExport) {
+			function newer<T extends { updatedAt: number }>(
+				incoming: T[],
+				existingByKey: Map<string, T>,
+				keyOf: (row: T) => string
+			): T[] {
+				return incoming.filter((row) => {
+					const existing = existingByKey.get(keyOf(row));
+					return !existing || row.updatedAt > existing.updatedAt;
+				});
+			}
+
+			// Compare against FULL IndexedDB (including tombstones). In-memory
+			// arrays only hold live rows — ignoring deleted would resurrect
+			// history/library the user already cleared when importing an older dump.
+			const [allHistory, allLibrary, allCategories, allReadtime] = await Promise.all([
+				getAll<LocalHistory>('history'),
+				getAll<LocalLibrary>('library'),
+				getAll<LocalCategory>('categories'),
+				getAll<LocalReadtime>('readtime')
+			]);
+			const existingHistory = new Map(allHistory.map((h) => [String(h.chapterId), h]));
+			const existingLibrary = new Map(allLibrary.map((l) => [String(l.mangaId), l]));
+			const existingCategories = new Map(allCategories.map((c) => [String(c.id), c]));
+			const existingReadtime = new Map(allReadtime.map((r) => [r.key, r]));
+
+			await Promise.all([
+				putMany('history', newer(dump.history ?? [], existingHistory, (r) => String(r.chapterId))),
+				putMany('library', newer(dump.library ?? [], existingLibrary, (r) => String(r.mangaId))),
+				putMany(
+					'categories',
+					newer(dump.categories ?? [], existingCategories, (r) => String(r.id))
+				),
+				putMany('readtime', newer(dump.readtime ?? [], existingReadtime, (r) => r.key))
+			]);
+			await this.reload();
+			this.#changed();
 		}
-
-		const existingHistory = new Map(this.history.map((h) => [String(h.chapterId), h]));
-		const existingLibrary = new Map(this.library.map((l) => [String(l.mangaId), l]));
-		const existingCategories = new Map(this.categories.map((c) => [String(c.id), c]));
-		const existingReadtime = new Map(this.readtime.map((r) => [r.key, r]));
-
-		await Promise.all([
-			putMany('history', newer(dump.history ?? [], existingHistory, (r) => String(r.chapterId))),
-			putMany('library', newer(dump.library ?? [], existingLibrary, (r) => String(r.mangaId))),
-			putMany(
-				'categories',
-				newer(dump.categories ?? [], existingCategories, (r) => String(r.id))
-			),
-			putMany('readtime', newer(dump.readtime ?? [], existingReadtime, (r) => r.key))
-		]);
-		await this.reload();
-		this.#changed();
-	}
 }
 
 export const localData = new LocalData();

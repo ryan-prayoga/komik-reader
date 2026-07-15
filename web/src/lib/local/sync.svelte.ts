@@ -155,14 +155,28 @@ class SyncEngine {
 					store === 'history' && existing && 'timeSpentMs' in (existing as Record<string, unknown>)
 						? { ...(ch.data as Record<string, unknown>), timeSpentMs: (existing as { timeSpentMs?: number }).timeSpentMs }
 						: ch.data;
-				await putItem(store, merged);
-				applied = true;
-				if (ch.updatedAt > maxCursor) maxCursor = ch.updatedAt;
+					// Monotonic isRead on history so a mid-chapter device cannot
+					// LWW-clobber another device's finished state.
+					let finalRow = merged as Record<string, unknown>;
+					if (store === 'history' && existing) {
+						const ex = existing as { isRead?: boolean; lastPage?: number };
+						const inc = finalRow as { isRead?: boolean; lastPage?: number };
+						finalRow = {
+							...finalRow,
+							isRead: Boolean(inc.isRead || ex.isRead),
+							lastPage: Math.max(Number(inc.lastPage ?? 0), Number(ex.lastPage ?? 0))
+						};
+					}
+					await putItem(store, finalRow);
+					applied = true;
+					// Do NOT advance push cursor from remote updatedAt — a future
+					// clock on another device would freeze all subsequent local pushes.
+				}
 			}
-		}
 
-		await setMeta(PUSH_KEY, maxCursor);
-		await setMeta(PULL_KEY, result.cursor);
+			// Push cursor only reflects what we successfully collected to send.
+			await setMeta(PUSH_KEY, maxCursor);
+			await setMeta(PULL_KEY, result.cursor);
 		if (applied) await localData.reload();
 	}
 }
