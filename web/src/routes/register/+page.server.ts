@@ -65,9 +65,16 @@ export const actions: Actions = {
 			return fail(409, { error: 'Username sudah dipakai', email, username });
 		}
 
-		const user = createUser(email, username, password, getUserCount() === 0);
-		const token = createSession(user.id);
-		setSessionCookie(cookies, token);
-		redirect(303, '/');
-	}
-};
+			// isAdmin decided atomically inside createUser (first row wins).
+			let user;
+			try {
+				user = createUser(email, username, password, false);
+			} catch {
+				// UNIQUE email/username race with a concurrent register.
+				return fail(409, { error: 'Email atau username sudah dipakai', email, username });
+			}
+			const token = createSession(user.id);
+			setSessionCookie(cookies, token);
+			redirect(303, '/');
+		}
+	};

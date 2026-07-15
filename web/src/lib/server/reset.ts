@@ -12,29 +12,40 @@ function expiresAt(): string {
 	return toSqliteDatetime(d);
 }
 
-export function createPasswordReset(userId: number): string {
-	const token = randomBytes(32).toString('hex');
-	const database = getDb();
-	database
-		.prepare('INSERT INTO password_resets (user_id, token_hash, expires_at) VALUES (?, ?, ?)')
-		.run(userId, hashToken(token), expiresAt());
-	return token;
-}
+	export function createPasswordReset(userId: number): string {
+		const token = randomBytes(32).toString('hex');
+		const database = getDb();
+		const insert = database.prepare(
+			'INSERT INTO password_resets (user_id, token_hash, expires_at) VALUES (?, ?, ?)'
+		);
+		const revoke = database.prepare(
+			"UPDATE password_resets SET used_at = datetime('now') WHERE user_id = ? AND used_at IS NULL"
+		);
+		const run = database.transaction(() => {
+			// Invalidate prior unused tokens so only the latest email link works.
+			revoke.run(userId);
+			insert.run(userId, hashToken(token), expiresAt());
+		});
+		run();
+		return token;
+	}
 
-export function consumePasswordReset(token: string): number | null {
-	const database = getDb();
-	const row = database
-		.prepare(
-			`SELECT id, user_id FROM password_resets
+	export function consumePasswordReset(token: string): number | null {
+		const database = getDb();
+		const tokenHash = hashToken(token);
+		// Atomic claim: only one concurrent request can flip used_at.
+		const claim = database.prepare(
+			`UPDATE password_resets
+			 SET used_at = datetime('now')
 			 WHERE token_hash = ? AND used_at IS NULL AND expires_at > datetime('now')`
-		)
-		.get(hashToken(token)) as { id: number; user_id: number } | undefined;
+		);
+		const get = database.prepare(
+			`SELECT user_id FROM password_resets WHERE token_hash = ? AND used_at IS NOT NULL`
+		);
 
-	if (!row) return null;
+		const result = claim.run(tokenHash);
+		if (result.changes !== 1) return null;
 
-	database
-		.prepare("UPDATE password_resets SET used_at = datetime('now') WHERE id = ?")
-		.run(row.id);
-
-	return row.user_id;
-}
+		const row = get.get(tokenHash) as { user_id: number } | undefined;
+		return row?.user_id ?? null;
+	}

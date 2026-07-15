@@ -23,14 +23,14 @@ function columnExists(database: Database.Database, table: string, column: string
 
 function migrate(database: Database.Database) {
 	database.exec(`
-		CREATE TABLE IF NOT EXISTS users (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			email TEXT NOT NULL UNIQUE COLLATE NOCASE,
-			username TEXT NOT NULL,
-			password_hash TEXT NOT NULL,
-			is_admin INTEGER NOT NULL DEFAULT 0,
-			created_at TEXT NOT NULL DEFAULT (datetime('now'))
-		);
+			CREATE TABLE IF NOT EXISTS users (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				email TEXT NOT NULL UNIQUE COLLATE NOCASE,
+				username TEXT NOT NULL COLLATE NOCASE,
+				password_hash TEXT NOT NULL,
+				is_admin INTEGER NOT NULL DEFAULT 0,
+				created_at TEXT NOT NULL DEFAULT (datetime('now'))
+			);
 
 		CREATE TABLE IF NOT EXISTS sessions (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -78,9 +78,19 @@ function migrate(database: Database.Database) {
 		CREATE INDEX IF NOT EXISTS idx_user_sync_seq ON user_sync(user_id, seq);
 	`);
 
-	if (!columnExists(database, 'users', 'is_admin')) {
-		database.exec('ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0');
-	}
+		if (!columnExists(database, 'users', 'is_admin')) {
+			database.exec('ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0');
+		}
+
+		// Case-insensitive unique username (best-effort on existing DBs that already
+		// have duplicates — UNIQUE fails until cleaned).
+		try {
+			database.exec(
+				'CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username COLLATE NOCASE)'
+			);
+		} catch {
+			// leave without index if legacy duplicates block creation
+		}
 
 	const adminCount = database
 		.prepare('SELECT COUNT(*) AS c FROM users WHERE is_admin = 1')

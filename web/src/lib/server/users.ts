@@ -87,18 +87,36 @@ export function findUserByLogin(login: string): UserRow | null {
 	return row ?? null;
 }
 
-export function createUser(
-	email: string,
-	username: string,
-	password: string,
-	isAdmin = false
-): UserRow {
-	const database = getDb();
-	const result = database
-		.prepare('INSERT INTO users (email, username, password_hash, is_admin) VALUES (?, ?, ?, ?)')
-		.run(normalizeEmail(email), username.trim(), hashPassword(password), isAdmin ? 1 : 0);
-	return database.prepare('SELECT * FROM users WHERE id = ?').get(result.lastInsertRowid) as UserRow;
-}
+	export function createUser(
+		email: string,
+		username: string,
+		password: string,
+		isAdmin = false
+	): UserRow {
+		const database = getDb();
+		// Atomic first-admin: only promote when the table is still empty inside
+		// the same transaction that inserts, so parallel first-registers cannot
+		// both become admin.
+		const insert = database.prepare(
+			'INSERT INTO users (email, username, password_hash, is_admin) VALUES (?, ?, ?, ?)'
+		);
+		const countStmt = database.prepare('SELECT COUNT(*) AS c FROM users');
+		const getById = database.prepare('SELECT * FROM users WHERE id = ?');
+
+		const row = database.transaction(() => {
+			const count = (countStmt.get() as { c: number }).c;
+			const asAdmin = isAdmin || count === 0 ? 1 : 0;
+			const result = insert.run(
+				normalizeEmail(email),
+				username.trim(),
+				hashPassword(password),
+				asAdmin
+			);
+			return getById.get(result.lastInsertRowid) as UserRow;
+		})();
+
+		return row;
+	}
 
 // A precomputed bcrypt hash of a throwaway value. When no user matches we still
 // run a compare against this so response time doesn't reveal whether the account

@@ -15,15 +15,16 @@ async function graphql(query: string, variables?: Record<string, unknown>) {
 	return res.json();
 }
 
-// Guests may trigger extension installs (server-wide, one-way only).
-// Uninstall and update are not exposed here — those require a session.
-export const POST: RequestHandler = async ({ request, getClientAddress }) => {
-	// Extension install is a server-wide state change reachable by guests — throttle
-	// hard so it can't be spammed to churn the extension list or fill disk.
-	const limit = rateLimit(`ext-activate:${getClientAddress()}`, 20, 60 * 60_000);
-	if (!limit.ok) {
-		return json({ error: 'Terlalu banyak permintaan install' }, { status: 429 });
-	}
+	// Extension install is server-wide — require a logged-in session (any user).
+	// Uninstall/update stay admin-only via GraphQL role gate.
+	export const POST: RequestHandler = async ({ request, getClientAddress, locals }) => {
+		if (!locals.user) {
+			return json({ error: 'Login required' }, { status: 401 });
+		}
+		const limit = rateLimit(`ext-activate:${getClientAddress()}`, 20, 60 * 60_000);
+		if (!limit.ok) {
+			return json({ error: 'Terlalu banyak permintaan install' }, { status: 429 });
+		}
 
 	let body: unknown;
 	try {
