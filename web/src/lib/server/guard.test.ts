@@ -1,5 +1,10 @@
-import { describe, it, expect } from 'vitest';
-import { isGuestAllowedGraphql, isPublicPath, isSuwayomiApiPath } from './guard';
+	import { describe, it, expect } from 'vitest';
+	import {
+		isGuestAllowedGraphql,
+		isUserAllowedGraphql,
+		isPublicPath,
+		isSuwayomiApiPath
+	} from './guard';
 
 function gqlBody(query: string): string {
 	return JSON.stringify({ query });
@@ -178,36 +183,117 @@ describe('isGuestAllowedGraphql', () => {
 		).toBe(false);
 	});
 
-	it('allows batch when every op is guest-safe; denies if any op is not', () => {
-		expect(
-			isGuestAllowedGraphql(
-				JSON.stringify([
-					{ query: 'query { aboutServer { name } }' },
-					{
-						query: `mutation {
-							fetchManga(input: { id: 1 }) { manga { id } }
-						}`
-					}
-				])
-			)
-		).toBe(true);
-		expect(
-			isGuestAllowedGraphql(
-				JSON.stringify([
-					{
-						query: `mutation {
-							fetchManga(input: { id: 1 }) { manga { id } }
-						}`
-					},
-					{
-						query: `mutation {
-							updateExtension(input: { id: "x", patch: { install: true } }) {
-								extension { pkgName }
-							}
-						}`
-					}
-				])
-			)
-		).toBe(false);
+		it('allows batch when every op is guest-safe; denies if any op is not', () => {
+			expect(
+				isGuestAllowedGraphql(
+					JSON.stringify([
+						{ query: 'query { aboutServer { name } }' },
+						{
+							query: `mutation {
+								fetchManga(input: { id: 1 }) { manga { id } }
+							}`
+						}
+					])
+				)
+			).toBe(true);
+			expect(
+				isGuestAllowedGraphql(
+					JSON.stringify([
+						{
+							query: `mutation {
+								fetchManga(input: { id: 1 }) { manga { id } }
+							}`
+						},
+						{
+							query: `mutation {
+								updateExtension(input: { id: "x", patch: { install: true } }) {
+									extension { pkgName }
+								}
+							}`
+						}
+					])
+				)
+			).toBe(false);
+		});
 	});
-});
+
+	describe('isUserAllowedGraphql', () => {
+		it('allows progress and library mutations for non-admin users', () => {
+			expect(
+				isUserAllowedGraphql(
+					gqlBody(`mutation($id: Int!, $lastPageRead: Int!) {
+						updateChapter(input: { id: $id, patch: { lastPageRead: $lastPageRead } }) {
+							chapter { id }
+						}
+					}`)
+				)
+			).toBe(true);
+			expect(
+				isUserAllowedGraphql(
+					gqlBody(`mutation($id: Int!, $inLibrary: Boolean!) {
+						updateManga(input: { id: $id, patch: { inLibrary: $inLibrary } }) {
+							manga { id }
+						}
+					}`)
+				)
+			).toBe(true);
+		});
+
+		it('denies admin-only server mutations for non-admin users', () => {
+			expect(
+				isUserAllowedGraphql(
+					gqlBody(`mutation {
+						setSettings(input: { settings: { globalUpdateInterval: 1 } }) {
+							settings { globalUpdateInterval }
+						}
+					}`)
+				)
+			).toBe(false);
+			expect(
+				isUserAllowedGraphql(
+					gqlBody(`mutation {
+						updateExtension(input: { id: "x", patch: { install: true } }) {
+							extension { pkgName }
+						}
+					}`)
+				)
+			).toBe(false);
+			expect(
+				isUserAllowedGraphql(
+					gqlBody(`mutation {
+						clearCachedImages(input: { cachedPages: true, cachedThumbnails: true }) {
+							cachedPages
+						}
+					}`)
+				)
+			).toBe(false);
+		});
+
+		it('denies batch when any op is admin-only', () => {
+			expect(
+				isUserAllowedGraphql(
+					JSON.stringify([
+						{
+							query: `mutation {
+								updateChapter(input: { id: 1, patch: { isRead: true } }) {
+									chapter { id }
+								}
+							}`
+						},
+						{
+							query: `mutation {
+								setSettings(input: { settings: { updateMangas: true } }) {
+									settings { updateMangas }
+								}
+							}`
+						}
+					])
+				)
+			).toBe(false);
+		});
+
+		it('allows pure queries', () => {
+			expect(isUserAllowedGraphql(gqlBody(`query { aboutServer { name } }`))).toBe(true);
+		});
+	});
+

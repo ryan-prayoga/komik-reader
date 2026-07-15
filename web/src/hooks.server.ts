@@ -2,18 +2,23 @@ import type { Handle } from '@sveltejs/kit';
 import { redirect } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import { authEnabled, allowGuest } from '$lib/server/env';
-import { isPublicPath, isSuwayomiApiPath, isGuestAllowedGraphql } from '$lib/server/guard';
-import { getUserFromSession, readSessionToken } from '$lib/server/session';
-import { rateLimit } from '$lib/server/ratelimit';
-
-const SUWAYOMI_URL = env.SUWAYOMI_URL || 'http://localhost:4567';
-
+	import {
+		isPublicPath,
+		isSuwayomiApiPath,
+		isGuestAllowedGraphql,
+		isUserAllowedGraphql
+	} from '$lib/server/guard';
+	import { getUserFromSession, readSessionToken } from '$lib/server/session';
+	import { rateLimit } from '$lib/server/ratelimit';
+	
+	const SUWAYOMI_URL = env.SUWAYOMI_URL || 'http://localhost:4567';
+	
 	// Each browse page fans out into many upstream scrape calls (enrichment), so the
 	// per-IP ceiling is high — it's a runaway/abuse backstop, not a UX throttle.
 	const PROXY_LIMIT = process.env.NODE_ENV === 'production' ? 600 : 10_000;
 	const PROXY_WINDOW_MS = 60_000;
-// Match client GRAPHQL_TIMEOUT_MS so a hung Suwayomi scrape fails closed here too.
-const PROXY_TIMEOUT_MS = 30_000;
+	// Match client GRAPHQL_TIMEOUT_MS so a hung Suwayomi scrape fails closed here too.
+	const PROXY_TIMEOUT_MS = 30_000;
 
 function unauthorized(message: string): Response {
 	return new Response(JSON.stringify({ errors: [{ message }] }), {
@@ -54,16 +59,24 @@ export const handle: Handle = async ({ event, resolve }) => {
 		if (!proxyLimit.ok) return tooManyRequests(proxyLimit.retryAfter);
 
 		let bodyText: string | undefined;
+		const isGraphql = pathname.startsWith('/api/graphql');
+		const user = event.locals.user;
+		const isAdmin = Boolean(user?.is_admin);
 
-		if (guest) {
-			if (!allowGuest()) return unauthorized('Unauthorized');
-
-			// Guests may read (queries + Suwayomi read-fetch mutations) but not
-			// perform owner/server writes. Non-GET image/v1 calls need a session.
-			if (pathname.startsWith('/api/graphql')) {
-				bodyText = await event.request.text();
+		// GraphQL body must be buffered whenever we role-gate mutations (guest or
+		// non-admin). Admins pass through without parsing.
+		if (isGraphql && authEnabled() && (guest || (user && !isAdmin))) {
+			bodyText = await event.request.text();
+			if (guest) {
+				if (!allowGuest()) return unauthorized('Unauthorized');
 				if (!isGuestAllowedGraphql(bodyText)) return unauthorized('Login required');
-			} else if (event.request.method !== 'GET' && event.request.method !== 'HEAD') {
+			} else if (!isUserAllowedGraphql(bodyText)) {
+				return unauthorized('Admin required');
+			}
+		} else if (guest) {
+			if (!allowGuest()) return unauthorized('Unauthorized');
+			// Non-GET image/v1 calls need a session.
+			if (event.request.method !== 'GET' && event.request.method !== 'HEAD') {
 				return unauthorized('Login required');
 			}
 		}
@@ -72,6 +85,8 @@ export const handle: Handle = async ({ event, resolve }) => {
 		const headers = new Headers(event.request.headers);
 		headers.delete('host');
 		headers.delete('accept-encoding');
+		// Never forward the app session cookie to Suwayomi.
+		headers.delete('cookie');
 
 		const init: RequestInit & { duplex?: 'half' } = {
 			method: event.request.method,

@@ -46,19 +46,31 @@ export function isSuwayomiApiPath(pathname: string): boolean {
 }
 
 // Suwayomi models source/chapter fetches as GraphQL *mutations* (they trigger a
-	// network fetch), so guests must be allowed to run these read-oriented ones to
-	// browse and read. Everything else mutating (library, downloads, categories,
-	// progress, extensions, settings) stays login-only.
-	// fetchExtensions is catalog-refresh (read-oriented, no server state change).
-	const GUEST_FETCH_MUTATIONS = [
-		'fetchSourceManga',
-		'fetchManga',
-		'fetchChapters',
-		'fetchChapterPages',
-		'fetchExtensions'
-	] as const;
+// network fetch), so guests must be allowed to run these read-oriented ones to
+// browse and read. Everything else mutating (library, downloads, categories,
+// progress, extensions, settings) stays login-only.
+// fetchExtensions is catalog-refresh (read-oriented, no server state change).
+const GUEST_FETCH_MUTATIONS = [
+	'fetchSourceManga',
+	'fetchManga',
+	'fetchChapters',
+	'fetchChapterPages',
+	'fetchExtensions'
+] as const;
 
-	const GUEST_FETCH_SET: ReadonlySet<string> = new Set(GUEST_FETCH_MUTATIONS);
+const GUEST_FETCH_SET: ReadonlySet<string> = new Set(GUEST_FETCH_MUTATIONS);
+
+/**
+ * Server-wide Suwayomi ops that must stay admin-only even for logged-in users.
+ * Non-admin sessions still get progress/library/category mutations.
+ */
+const ADMIN_ONLY_MUTATIONS = [
+	'setSettings',
+	'clearCachedImages',
+	'updateExtension'
+] as const;
+
+const ADMIN_ONLY_SET: ReadonlySet<string> = new Set(ADMIN_ONLY_MUTATIONS);
 
 	function isMutation(query: string): boolean {
 		return /(^|[\s})])mutation[\s({]/.test(query);
@@ -206,28 +218,48 @@ export function isSuwayomiApiPath(pathname: string): boolean {
 		return fields;
 	}
 
-	/**
-	 * Guest GraphQL gate: non-mutations allowed; mutations only if every root field
-	 * is an exact GUEST_FETCH name. Empty/invalid/unparseable bodies denied.
-	 */
-	export function isGuestAllowedGraphql(bodyText: string): boolean {
-		if (!bodyText?.trim()) return false;
-		try {
-			const parsed = JSON.parse(bodyText);
-			const ops = Array.isArray(parsed) ? parsed : [parsed];
-			return ops.every((op) => {
-				if (op == null || typeof op !== 'object') return false;
-				const q = String((op as { query?: unknown }).query ?? '');
-				if (!q.trim()) return false;
-
-				const cleaned = stripGraphqlComments(q);
-				if (!isMutation(cleaned)) return true;
-
-				const roots = mutationRootFields(cleaned);
-				if (!roots || roots.length === 0) return false;
-				return roots.every((f) => GUEST_FETCH_SET.has(f));
-			});
-		} catch {
-			return false;
-		}
+	function forEachGraphqlOp(
+	bodyText: string,
+	fn: (cleanedQuery: string) => boolean
+): boolean {
+	if (!bodyText?.trim()) return false;
+	try {
+		const parsed = JSON.parse(bodyText);
+		const ops = Array.isArray(parsed) ? parsed : [parsed];
+		return ops.every((op) => {
+			if (op == null || typeof op !== 'object') return false;
+			const q = String((op as { query?: unknown }).query ?? '');
+			if (!q.trim()) return false;
+			return fn(stripGraphqlComments(q));
+		});
+	} catch {
+		return false;
 	}
+}
+
+/**
+ * Guest GraphQL gate: non-mutations allowed; mutations only if every root field
+ * is an exact GUEST_FETCH name. Empty/invalid/unparseable bodies denied.
+ */
+export function isGuestAllowedGraphql(bodyText: string): boolean {
+	return forEachGraphqlOp(bodyText, (cleaned) => {
+		if (!isMutation(cleaned)) return true;
+		const roots = mutationRootFields(cleaned);
+		if (!roots || roots.length === 0) return false;
+		return roots.every((f) => GUEST_FETCH_SET.has(f));
+	});
+}
+
+/**
+ * Logged-in non-admin gate: queries OK; mutations OK unless any root field is
+ * an admin-only server control (settings / extension install / cache clear).
+ * Unparseable mutation bodies denied closed.
+ */
+export function isUserAllowedGraphql(bodyText: string): boolean {
+	return forEachGraphqlOp(bodyText, (cleaned) => {
+		if (!isMutation(cleaned)) return true;
+		const roots = mutationRootFields(cleaned);
+		if (!roots || roots.length === 0) return false;
+		return roots.every((f) => !ADMIN_ONLY_SET.has(f));
+	});
+}
