@@ -11,10 +11,11 @@
 	import { readerSettings, BG_CLASS } from '$lib/reader-settings.svelte';
 	import { localData } from '$lib/local/data.svelte';
 	import {
-		clampResumeToFreshPageCount,
-		resumePageFor,
-		resumeProgressFor
-	} from '$lib/reader/resume';
+			clampResumeToFreshPageCount,
+			resumePageFor,
+			resumeProgressFor
+		} from '$lib/reader/resume';
+		import { isWebtoonChapterRead } from '$lib/reader/webtoon-progress';
 	import { updates } from '$lib/updates/updates.svelte';
 	import { readingTimer } from '$lib/reading-time';
 	import WebtoonView from '$lib/components/reader/WebtoonView.svelte';
@@ -124,13 +125,19 @@
 				}
 				if (whole !== 0) el.scrollBy(0, whole);
 
-				// Stop cleanly at end of content when there's nothing left to load.
-				const atEnd = el.scrollTop + el.clientHeight >= el.scrollHeight - 8;
-				if (atEnd && !loadingNextChapter && !nextUnloadedChapter) {
-					autoScroll = false;
-					showToast('Sudah di akhir bacaan.', 'info');
-					return;
-				}
+					// Stop cleanly at end of content when there's nothing left to load,
+					// or when the next-chapter fetch already failed (otherwise we'd
+					// thrash against the error footer forever).
+					const atEnd = el.scrollTop + el.clientHeight >= el.scrollHeight - 8;
+					if (
+						atEnd &&
+						!loadingNextChapter &&
+						(!nextUnloadedChapter || nextChapterError)
+					) {
+						autoScroll = false;
+						if (!nextChapterError) showToast('Sudah di akhir bacaan.', 'info');
+						return;
+					}
 			}
 			lastTime = time;
 			rafId = requestAnimationFrame(step);
@@ -398,13 +405,17 @@
 		// back to unread when re-scrolling an earlier page. Scroll-extent
 		// progress ~1 also counts as read: it covers the case where the last
 		// page's own report got skipped but the chapter was scrolled to its end.
-		const alreadyRead = isChapterReadAnywhere(section.chapter.id);
-		const isRead =
-			alreadyRead || pageIdx >= section.pages.length - 1 || chapterProgress >= 0.995;
-		if (pageChanged || force) {
-			void queueChapterProgress(section.chapter.id, pageIdx, isRead);
-			if (isRead) markChapterReadLocally(section.chapter.id);
-		}
+			const alreadyRead = isChapterReadAnywhere(section.chapter.id);
+			const isRead = isWebtoonChapterRead({
+				alreadyRead,
+				pageIdx,
+				pageCount: section.pages.length,
+				chapterProgress
+			});
+			if (pageChanged || force) {
+				void queueChapterProgress(section.chapter.id, pageIdx, isRead);
+				if (isRead) markChapterReadLocally(section.chapter.id);
+			}
 		void localData.recordHistory({
 			chapterId: section.chapter.id,
 			mangaId,
