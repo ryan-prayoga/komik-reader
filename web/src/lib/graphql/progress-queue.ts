@@ -28,64 +28,90 @@ function readQueue(): Record<string, PendingEntry> {
 	}
 }
 
-function writeQueue(queue: Record<string, PendingEntry>) {
-	if (!browser) return;
-	localStorage.setItem(STORAGE_KEY, JSON.stringify(queue));
-}
+	function writeQueue(queue: Record<string, PendingEntry>) {
+		if (!browser) return;
+		localStorage.setItem(STORAGE_KEY, JSON.stringify(queue));
+	}
 
-/** Same call as `updateChapterProgress`, but persists the last-failed attempt so it can be replayed. */
-export async function queueChapterProgress(
-	chapterId: number,
-	lastPageRead: number,
-	isRead: boolean
-): Promise<void> {
-	try {
-		await updateChapterProgress(chapterId, lastPageRead, isRead);
-		if (browser) {
-			const queue = readQueue();
-			if (queue[chapterId]) {
-				delete queue[chapterId];
+	let chain: Promise<void> = Promise.resolve();
+	function serialize<T>(fn: () => Promise<T>): Promise<T> {
+		const run = chain.then(fn, fn);
+		chain = run.then(
+			() => undefined,
+			() => undefined
+		);
+		return run;
+	}
+
+	function mergeEntry(
+		prev: PendingEntry | undefined,
+		next: PendingEntry
+	): PendingEntry {
+		if (!prev) return next;
+		return {
+			chapterId: next.chapterId,
+			lastPageRead: Math.max(prev.lastPageRead, next.lastPageRead),
+			isRead: Boolean(prev.isRead || next.isRead)
+		};
+	}
+
+	/** Same call as `updateChapterProgress`, but persists the last-failed attempt so it can be replayed. */
+	export async function queueChapterProgress(
+		chapterId: number,
+		lastPageRead: number,
+		isRead: boolean
+	): Promise<void> {
+		return serialize(async () => {
+			try {
+				await updateChapterProgress(chapterId, lastPageRead, isRead);
+				if (browser) {
+					const queue = readQueue();
+					if (queue[chapterId]) {
+						delete queue[chapterId];
+						writeQueue(queue);
+					}
+				}
+			} catch (e) {
+				if (!browser || isAuthError(e)) return;
+				const queue = readQueue();
+				queue[chapterId] = mergeEntry(queue[chapterId], {
+					chapterId,
+					lastPageRead,
+					isRead
+				});
 				writeQueue(queue);
 			}
-		}
-	} catch (e) {
-		if (!browser || isAuthError(e)) return;
-		const queue = readQueue();
-		// Latest attempt wins — only the most recent position/read-state per
-		// chapter is worth resending.
-		queue[chapterId] = { chapterId, lastPageRead, isRead };
-		writeQueue(queue);
+		});
 	}
-}
 
-let replaying = false;
+	let replaying = false;
 
-/** Resend every pending write. Safe to call repeatedly (e.g. on every 'online' event). */
-export async function replayQueuedProgress(): Promise<void> {
-	if (!browser || replaying) return;
-	const queue = readQueue();
-	const entries = Object.values(queue);
-	if (!entries.length) return;
-	replaying = true;
-	try {
-		for (const entry of entries) {
+	/** Resend every pending write. Safe to call repeatedly (e.g. on every 'online' event). */
+	export async function replayQueuedProgress(): Promise<void> {
+		if (!browser || replaying) return;
+		return serialize(async () => {
+			if (replaying) return;
+			const queue = readQueue();
+			const entries = Object.values(queue);
+			if (!entries.length) return;
+			replaying = true;
 			try {
-				await updateChapterProgress(entry.chapterId, entry.lastPageRead, entry.isRead);
-				const current = readQueue();
-				delete current[entry.chapterId];
-				writeQueue(current);
-			} catch (e) {
-				// Auth errors never heal on their own — drop the entry instead of
-				// replaying an ever-staler write forever. Anything else (offline,
-				// timeout) stays queued for the next replay.
-				if (isAuthError(e)) {
-					const current = readQueue();
-					delete current[entry.chapterId];
-					writeQueue(current);
+				for (const entry of entries) {
+					try {
+						await updateChapterProgress(entry.chapterId, entry.lastPageRead, entry.isRead);
+						const current = readQueue();
+						delete current[entry.chapterId];
+						writeQueue(current);
+					} catch (e) {
+						if (isAuthError(e)) {
+							const current = readQueue();
+							delete current[entry.chapterId];
+							writeQueue(current);
+						}
+					}
 				}
+			} finally {
+				replaying = false;
 			}
-		}
-	} finally {
-		replaying = false;
+		});
 	}
-}

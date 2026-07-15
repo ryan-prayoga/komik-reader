@@ -102,9 +102,21 @@ describe('isWebtoonChapterRead', () => {
 		).toBe(true);
 	});
 
-	it('is true on last page index', () => {
+	it('is false on last page index until page/chapter near end', () => {
 		expect(
 			isWebtoonChapterRead({ alreadyRead: false, pageIdx: 9, pageCount: 10, chapterProgress: 0.2 })
+		).toBe(false);
+		expect(
+			isWebtoonChapterRead({
+				alreadyRead: false,
+				pageIdx: 9,
+				pageCount: 10,
+				chapterProgress: 0.2,
+				pageProgress: 0.95
+			})
+		).toBe(true);
+		expect(
+			isWebtoonChapterRead({ alreadyRead: false, pageIdx: 9, pageCount: 10, chapterProgress: 0.92 })
 		).toBe(true);
 	});
 

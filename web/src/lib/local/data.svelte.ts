@@ -133,10 +133,8 @@ class LocalData {
 		lastPageProgress?: number;
 	}) {
 			const existing = this.getHistory(entry.chapterId);
-			// Monotonic isRead: once true, later partial writes cannot un-read.
 			const isRead = Boolean(entry.isRead || existing?.isRead);
-			// Prefer explicit fraction; keep prior webtoon fraction when a paged/backfill
-			// write omits the field (otherwise reopen lands at panel top).
+			const lastPage = Math.max(entry.lastPage, existing?.lastPage ?? 0);
 			const lastPageProgress =
 				entry.lastPageProgress !== undefined
 					? entry.lastPageProgress
@@ -144,7 +142,7 @@ class LocalData {
 			let row: LocalHistory = {
 				...entry,
 				isRead,
-				// Keep richer metadata if a later write lacks it.
+				lastPage,
 				mangaTitle: entry.mangaTitle || existing?.mangaTitle || '',
 				thumbnailUrl: entry.thumbnailUrl ?? existing?.thumbnailUrl ?? null,
 				sourceId: entry.sourceId ?? existing?.sourceId ?? null,
@@ -154,15 +152,11 @@ class LocalData {
 				updatedAt: nowMs(),
 				deleted: false
 			};
-			// Atomic against the DB row: progress fields come from `entry`
-			// (authoritative), but timeSpentMs belongs to addTimeSpent — take it from
-			// the row as it exists inside the transaction, or a concurrent time flush
-			// gets wiped (this write used to drop the field entirely). Also re-apply
-			// isRead latch against the DB row in case memory was stale.
 			await updateItem<LocalHistory>('history', entry.chapterId, (current) => {
 				row = {
 					...row,
 					isRead: Boolean(row.isRead || current?.isRead),
+					lastPage: Math.max(row.lastPage, current?.lastPage ?? 0),
 					lastPageProgress:
 						entry.lastPageProgress !== undefined
 							? entry.lastPageProgress
@@ -206,7 +200,8 @@ class LocalData {
 			updatedAt: nowMs(),
 			deleted: false,
 			timeSpentMs: existing?.timeSpentMs,
-			totalPages: existing?.totalPages
+			totalPages: existing?.totalPages,
+			lastPageProgress: existing?.lastPageProgress
 		};
 		await putItem('history', row);
 		this.#setHistoryRow(row);
@@ -243,15 +238,16 @@ class LocalData {
 				chapterName: entry.chapterName || existing?.chapterName || 'Chapter',
 				sourceId: entry.sourceId ?? existing?.sourceId ?? null,
 				chapterNumber: entry.chapterNumber ?? existing?.chapterNumber,
-				lastPage: existing?.lastPage ?? 0,
-				isRead,
-				updatedAt: base + i,
-				deleted: false,
-				timeSpentMs: existing?.timeSpentMs,
-				totalPages: existing?.totalPages
-			};
-		});
-		await putMany('history', rows);
+					lastPage: existing?.lastPage ?? 0,
+					isRead,
+					updatedAt: base + i,
+					deleted: false,
+					timeSpentMs: existing?.timeSpentMs,
+					totalPages: existing?.totalPages,
+					lastPageProgress: existing?.lastPageProgress
+				};
+			});
+			await putMany('history', rows);
 		const byId = new Map(rows.map((r) => [r.chapterId, r]));
 		this.#setHistoryList(
 			[...rows, ...this.history.filter((h) => !byId.has(h.chapterId))].sort(

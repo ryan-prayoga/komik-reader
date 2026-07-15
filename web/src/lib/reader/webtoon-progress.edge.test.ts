@@ -16,13 +16,21 @@ import {
  */
 describe('webtoon-progress edge QC', () => {
 	describe('isWebtoonChapterRead monotonic surface', () => {
-		it('single-page chapter is read at page 0', () => {
+		it('single-page chapter needs substantial progress', () => {
 			expect(
 				isWebtoonChapterRead({
 					alreadyRead: false,
 					pageIdx: 0,
 					pageCount: 1,
 					chapterProgress: 0
+				})
+			).toBe(false);
+			expect(
+				isWebtoonChapterRead({
+					alreadyRead: false,
+					pageIdx: 0,
+					pageCount: 1,
+					chapterProgress: 0.95
 				})
 			).toBe(true);
 		});

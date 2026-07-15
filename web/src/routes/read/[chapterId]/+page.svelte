@@ -316,7 +316,8 @@
 		// back to unread (isRead here is recomputed from raw page position on
 		// every call, so without this guard it would flip false again).
 		const alreadyRead = isChapterReadAnywhere(chapterId);
-		const isRead = alreadyRead || index >= pages.length - 1;
+		const isRead =
+			alreadyRead || (pages.length > 0 && index >= pages.length - 1);
 		void queueChapterProgress(chapterId, index, isRead);
 		if (isRead) markChapterReadLocally(chapterId);
 		if (mangaId) {
@@ -410,7 +411,8 @@
 				alreadyRead,
 				pageIdx,
 				pageCount: section.pages.length,
-				chapterProgress
+				chapterProgress,
+				pageProgress
 			});
 			if (pageChanged || force) {
 				void queueChapterProgress(section.chapter.id, pageIdx, isRead);

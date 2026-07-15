@@ -42,19 +42,29 @@ export function chapterProgressFromRects(
 	return Math.max(0, Math.min(1, (scrollerTop - firstTop) / scrollable));
 }
 
-/** Whether a webtoon chapter should be marked read (monotonic-friendly). */
-export function isWebtoonChapterRead(input: {
-	readonly alreadyRead: boolean;
-	readonly pageIdx: number;
-	readonly pageCount: number;
-	readonly chapterProgress: number;
-}): boolean {
-	if (input.alreadyRead) return true;
-	if (!(input.pageCount > 0)) return false;
-	if (input.pageIdx >= input.pageCount - 1) return true;
-	if (input.chapterProgress >= 0.995) return true;
-	return false;
-}
+	/** Whether a webtoon chapter should be marked read (monotonic-friendly). */
+	export function isWebtoonChapterRead(input: {
+		readonly alreadyRead: boolean;
+		readonly pageIdx: number;
+		readonly pageCount: number;
+		readonly chapterProgress: number;
+		/** 0–1 fraction within the current page (optional; last page needs this or chapterProgress). */
+		readonly pageProgress?: number;
+	}): boolean {
+		if (input.alreadyRead) return true;
+		if (!(input.pageCount > 0)) return false;
+		if (input.chapterProgress >= 0.995) return true;
+		// Last page alone is not enough (tall panels) — need near end of page or chapter.
+		if (input.pageIdx >= input.pageCount - 1) {
+			const pp = input.pageProgress;
+			if (typeof pp === 'number' && Number.isFinite(pp) && pp >= 0.9) return true;
+			if (input.chapterProgress >= 0.9) return true;
+			// Single-page chapter: require substantial scroll, not open alone.
+			if (input.pageCount === 1) return input.chapterProgress >= 0.9;
+			return false;
+		}
+		return false;
+	}
 
 /**
  * Drop empty / pre-anchor reports so a missing page node never overwrites
