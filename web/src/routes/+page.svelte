@@ -65,7 +65,12 @@
 	onMount(async () => {
 		void updates.init();
 		try {
-			allSources = await getInstalledSources(preferences.nsfwFilter);
+			// Suwayomi's per-source isNsfw flag can disagree with the parent
+			// extension's (e.g. Kiryuu: extension isNsfw=false, source isNsfw=true).
+			// Non-admins only ever see sources they explicitly activated, so skip
+			// the server-side NSFW condition here — an already-activated source
+			// must never silently vanish from its own owner's browse list.
+			allSources = await getInstalledSources(filterByActive ? null : preferences.nsfwFilter);
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Gagal memuat source';
 		} finally {

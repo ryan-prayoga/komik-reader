@@ -189,7 +189,10 @@
 		if (urlSrc) sourceId = urlSrc;
 
 		try {
-			allSources = await getInstalledSources(preferences.nsfwFilter);
+			// See routes/+page.svelte: source-level isNsfw can disagree with the
+			// extension's own flag, so an activated source must not be dropped
+			// by the server-side NSFW condition here.
+			allSources = await getInstalledSources(filterByActive ? null : preferences.nsfwFilter);
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Gagal memuat source';
 		}

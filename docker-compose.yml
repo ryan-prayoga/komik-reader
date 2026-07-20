@@ -5,8 +5,22 @@ services:
     environment:
       - TZ=Asia/Jakarta
       - EXTENSION_REPOS=["https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.min.json"]
+      - FLARESOLVERR_ENABLED=true
+      - FLARESOLVERR_URL=http://flaresolverr:8191
     volumes:
       - suwayomi_data:/home/suwayomi/.local/share/Tachidesk
+    restart: unless-stopped
+    depends_on:
+      - flaresolverr
+    networks:
+      - komik
+
+  flaresolverr:
+    image: ghcr.io/thephaseless/byparr:latest
+    container_name: komik-reader-flaresolverr
+    init: true
+    environment:
+      - TZ=Asia/Jakarta
     restart: unless-stopped
     networks:
       - komik
