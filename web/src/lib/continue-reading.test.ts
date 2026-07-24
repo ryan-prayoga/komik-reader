@@ -234,7 +234,40 @@ describe('resolveContinueStatus', () => {
 		expect(s.kind).toBe('baru');
 		expect(s.label).toBe('Baru');
 		expect(s.subtitle).toContain('Chapter 11');
-		expect(s.href).toBe('/read/2');
+		// Follows history: detail page picks the next unread chapter, never the tip.
+		expect(s.href).toBe('/manga/7');
+	});
+
+	it('BARU never links past unread chapters when several dropped at once', () => {
+		const s = resolveContinueStatus({
+			lastChapter: { ...base, isRead: true },
+			historyForManga: [{ chapterId: 1, chapterNumber: 10, isRead: true }],
+			updateMeta: {
+				latestChapterId: 4,
+				latestChapterNumber: 13,
+				latestChapterName: 'Chapter 13',
+				mangaStatus: 'ONGOING',
+				hasUpdate: true
+			}
+		});
+		expect(s.kind).toBe('baru');
+		expect(s.href).toBe('/manga/7');
+	});
+
+	it('BARU still resumes mid-chapter when last-touched is unfinished', () => {
+		const s = resolveContinueStatus({
+			lastChapter: { ...base, isRead: false },
+			historyForManga: [{ chapterId: 1, chapterNumber: 10, isRead: false }],
+			updateMeta: {
+				latestChapterId: 4,
+				latestChapterNumber: 13,
+				latestChapterName: 'Chapter 13',
+				mangaStatus: 'ONGOING',
+				hasUpdate: true
+			}
+		});
+		expect(s.kind).toBe('lanjut');
+		expect(s.href).toBe('/read/1');
 	});
 
 	it('SELESAI when all known chapters read and series is ongoing (with status hint)', () => {

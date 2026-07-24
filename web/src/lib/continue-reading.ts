@@ -86,8 +86,9 @@ export type ContinueStatus = {
 	badgeClass: string;
 	showCheck: boolean;
 	/**
-	 * Preferred href: mid-chapter → that chapter; new chapter → latest id when
-	 * known; otherwise manga detail (which resolves the true next unread).
+	 * Preferred href: mid-chapter → that chapter; anything else (including a
+	 * brand-new chapter upstream) → manga detail, which resolves the true next
+	 * chapter from history instead of skipping ahead to the newest one.
 	 */
 	href: string;
 };
@@ -176,9 +177,12 @@ export function resolveContinueStatus(input: {
 		const latestRead = isLatestChapterRead(historyForManga, meta);
 
 		if (!latestRead) {
-			// Unread content beyond current position.
-			const latestHref =
-				meta.latestChapterId != null ? `/read/${meta.latestChapterId}` : mangaHref;
+			// Unread content beyond current position. Never link straight to the
+			// newest chapter — a series can gain several chapters (or a .5 side
+			// chapter) between visits, and jumping to the tip would silently skip
+			// everything in between. Detail page resolves the true next chapter
+			// from history (last-touched if unfinished, else oldest unread).
+			const nextHref = mangaHref;
 
 			// Library "update" flag (or last chapter clearly behind latest) → Baru.
 			const lastNum = last.chapterNumber ?? 0;
@@ -196,7 +200,7 @@ export function resolveContinueStatus(input: {
 						: 'Chapter baru tersedia',
 					badgeClass: 'bg-accent',
 					showCheck: false,
-					href: latestHref
+					href: nextHref
 				};
 			}
 
