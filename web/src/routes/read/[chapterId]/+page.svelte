@@ -15,7 +15,7 @@
 			resumePageFor,
 			resumeProgressFor
 		} from '$lib/reader/resume';
-		import { isWebtoonChapterRead } from '$lib/reader/webtoon-progress';
+		import { isWebtoonChapterRead, nextPruneSpacerPx } from '$lib/reader/webtoon-progress';
 	import { updates } from '$lib/updates/updates.svelte';
 	import { readingTimer } from '$lib/reading-time';
 	import WebtoonView from '$lib/components/reader/WebtoonView.svelte';
@@ -486,20 +486,25 @@
 	// Keep at most one chapter of scrollback loaded behind the one the reader is
 	// currently on — otherwise `sections` (and the DOM/images under it) grows
 	// without bound the longer someone keeps scrolling through a series.
-	// Dropping content that's above the viewport shrinks scrollHeight, so we
-	// compensate scrollTop by the removed amount to avoid a visible jump.
 	//
-	// The prune is DEFERRED until the scroller is idle. It naturally triggers
-	// right as the reader crosses into a new chapter — i.e. exactly when a
-	// momentum fling is most likely still in flight — and iOS Safari IGNORES
-	// programmatic scrollTop/scrollBy while momentum scrolling is running. The
-	// flushSync compensation below then silently failed: the DOM shrank by the
-	// pruned chapter's height but the scroll position stayed, teleporting the
-	// reader roughly one chapter forward ("suddenly mid-chapter, had to scroll
-	// back up"). Chrome never showed this because its native scroll anchoring
-	// already corrects removals above the viewport (delta computes to 0 there).
+	// Dropping content ABOVE the reading position would slide everything below
+	// it up by exactly the removed height. The previous fix measured that shift
+	// and corrected scrollTop right after the removal, but iOS Safari IGNORES
+	// programmatic scrollTop/scrollBy while a momentum fling (or its slow tail
+	// under -webkit-overflow-scrolling: touch) is still in flight — when the
+	// write was eaten, the reader teleported forward by a whole chapter. This
+	// prune fires exactly when crossing a chapter boundary, so the landing spot
+	// was "the chapter I just scrolled into, already at its ending".
+	//
+	// Now nothing moves at all: the dropped chapters' height is handed to a
+	// spacer above the surviving sections in the SAME synchronous update, so
+	// scrollHeight and scrollTop both stay untouched and there is no scroll
+	// correction left for the browser to ignore.
 	let pruneTimer: ReturnType<typeof setInterval> | null = null;
 	let touchActive = false;
+	// Height (px) standing in for every section pruned so far.
+	let prunedSpacerPx = $state(0);
+	let pruneSpacerEl = $state<HTMLDivElement | undefined>();
 
 	$effect(() => {
 		if (typeof window === 'undefined') return;
@@ -529,8 +534,9 @@
 
 	// Wait until the scroll position has been stable for one 200ms tick with no
 	// finger down, then prune. Fallback: force it after 15s even without idle
-	// (e.g. auto-scroll never settles) — auto-scroll isn't momentum, so the
-	// compensation works there, and the verify-retry below covers stragglers.
+	// (e.g. auto-scroll never settles). Pruning mid-scroll is safe now that the
+	// spacer keeps the layout still — the idle wait only avoids doing DOM work
+	// in the middle of a fling.
 	function schedulePrune() {
 		if (pruneTimer) return;
 		let lastTop = webtoonScrollEl?.scrollTop ?? 0;
@@ -552,36 +558,35 @@
 		const idx = sections.findIndex((s) => s.chapter.id === currentChapterId);
 		if (idx <= 1) return;
 		const dropCount = idx - 1;
+		const spacer = pruneSpacerEl;
 		// Anchor on the first page of the section that survives the prune (not
 		// document.scrollHeight) — the whole-page height is unreliable here since
 		// a newly-appended next chapter is likely still loading images below,
 		// which would pollute a scrollHeight diff and cause a bogus scroll jump.
-		const anchorSelector = `[data-page-key="${sections[dropCount].chapter.id}-0"]`;
-		const topBefore = document.querySelector(anchorSelector)?.getBoundingClientRect().top;
-		// flushSync (not tick().then) applies the DOM mutation and the scroll
-		// correction in the same synchronous pass — with a paint in between, the
-		// browser shows a frame of the OLD scrollTop against the shrunk content.
+		const anchor = document.querySelector(
+			`[data-page-key="${sections[dropCount].chapter.id}-0"]`
+		);
+		if (!spacer || !anchor) return;
+		// Gap between the spacer's top edge and the first surviving page = the
+		// spacer's current height PLUS everything about to be removed (the dropped
+		// sections and the survivor's own chapter divider, which stops rendering
+		// once it becomes section 0). Growing the spacer to exactly that leaves
+		// every surviving node at the identical content-space offset. Rect tops
+		// are both viewport-space, so scrollTop cancels out of the difference.
+		const nextSpacer = nextPruneSpacerPx(
+			spacer.getBoundingClientRect().top,
+			anchor.getBoundingClientRect().top,
+			prunedSpacerPx
+		);
+		if (nextSpacer === null) return;
+		// flushSync (not tick().then) applies the removal and the spacer growth in
+		// the same synchronous pass — with a paint in between the browser would
+		// show one frame of the shrunk content, and could clamp scrollTop against
+		// the momentarily shorter scrollHeight.
 		flushSync(() => {
+			prunedSpacerPx = nextSpacer;
 			sections = sections.slice(dropCount);
 		});
-		if (topBefore === undefined) return;
-		const correct = (): boolean => {
-			const topAfter = document.querySelector(anchorSelector)?.getBoundingClientRect().top;
-			if (topAfter === undefined) return true;
-			const delta = topAfter - topBefore;
-			if (Math.abs(delta) < 1) return true;
-			webtoonScrollEl?.scrollBy(0, delta);
-			return false;
-		};
-		// Belt-and-suspenders for the same iOS quirk: verify the correction
-		// actually landed and reapply for a few frames if the browser ate it.
-		if (!correct()) {
-			let tries = 0;
-			const tick = () => {
-				if (!correct() && ++tries < 10) requestAnimationFrame(tick);
-			};
-			requestAnimationFrame(tick);
-		}
 	}
 
 	function toggleChrome() {
@@ -799,6 +804,9 @@
 		currentPageProgress = 0;
 		currentChapterProgress = 0;
 		loadingNextChapter = false;
+		// Scrollback from the previous chapter stream is gone — its stand-in space
+		// must go with it, or the fresh chapter opens below a chapter-tall void.
+		prunedSpacerPx = 0;
 
 		async function load() {
 			try {
@@ -1149,6 +1157,15 @@
 								toggleChrome();
 							}}
 						>
+							<!-- Stands in for the height of every pruned chapter so dropping
+							     them never shifts what is on screen. Must always render (a
+							     zero-height div) — pruneSections measures against its top
+							     edge. aria-hidden: pure layout, nothing to announce. -->
+							<div
+								bind:this={pruneSpacerEl}
+								aria-hidden="true"
+								style="height: {prunedSpacerPx}px"
+							></div>
 							<WebtoonView
 								{sections}
 								zoom={readerSettings.zoom}

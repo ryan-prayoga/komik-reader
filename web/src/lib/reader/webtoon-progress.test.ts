@@ -6,6 +6,7 @@ import {
 	buildAnchoredPrefixWithGaps,
 	chapterProgressFromRects,
 	isWebtoonChapterRead,
+	nextPruneSpacerPx,
 	pageProgressFromRects,
 	readingOrderGaps,
 	shouldEmitWebtoonProgress
@@ -201,3 +202,31 @@ describe('readingOrderGaps + chapter divider', () => {
 	});
 });
 
+
+describe('nextPruneSpacerPx', () => {
+	it('absorbs the dropped chapters height so nothing shifts', () => {
+		// Spacer top at -9000 (scrolled far past), first surviving page at -1000:
+		// 8000px of scrollback is about to be removed and must be reserved.
+		expect(nextPruneSpacerPx(-9000, -1000, 0)).toBe(8000);
+	});
+
+	it('accumulates across successive prunes', () => {
+		// Spacer already 8000 tall; gap to the new anchor is 8000 + 5000 dropped.
+		expect(nextPruneSpacerPx(-13000, 0, 8000)).toBe(13000);
+	});
+
+	it('is a no-op sized spacer when there is nothing above the anchor', () => {
+		expect(nextPruneSpacerPx(0, 0, 0)).toBe(0);
+	});
+
+	it('rejects a gap smaller than the spacer already is', () => {
+		// Would shrink the reserved space and slide the reader forward.
+		expect(nextPruneSpacerPx(-1000, -900, 8000)).toBeNull();
+	});
+
+	it('rejects non-finite measurements', () => {
+		expect(nextPruneSpacerPx(NaN, 100, 0)).toBeNull();
+		expect(nextPruneSpacerPx(0, Infinity, 0)).toBeNull();
+		expect(nextPruneSpacerPx(0, 100, NaN)).toBeNull();
+	});
+});

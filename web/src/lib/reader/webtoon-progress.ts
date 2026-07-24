@@ -67,6 +67,32 @@ export function chapterProgressFromRects(
 	}
 
 /**
+ * New height for the spacer that stands in for pruned scrollback chapters.
+ *
+ * `spacerTop`/`anchorTop` are viewport-space rect tops (getBoundingClientRect),
+ * so scrollTop cancels out of their difference: the gap between them is the
+ * spacer's CURRENT height plus everything about to be dropped. Growing the
+ * spacer to exactly that keeps every surviving node at the same content-space
+ * offset, so the prune needs no scrollTop correction — which matters because
+ * iOS ignores programmatic scroll writes mid-momentum.
+ *
+ * Returns null when the measurement is unusable (non-finite, or a gap smaller
+ * than the spacer already is, which would mean the anchor moved above it) —
+ * the caller must then skip the prune rather than shift the reading position.
+ */
+export function nextPruneSpacerPx(
+	spacerTop: number,
+	anchorTop: number,
+	currentSpacerPx: number
+): number | null {
+	if (!Number.isFinite(spacerTop) || !Number.isFinite(anchorTop)) return null;
+	if (!Number.isFinite(currentSpacerPx)) return null;
+	const next = anchorTop - spacerTop;
+	if (!(next >= currentSpacerPx)) return null;
+	return next;
+}
+
+/**
  * Drop empty / pre-anchor reports so a missing page node never overwrites
  * a real lastPageProgress with zeros mid-prune/remount.
  */
