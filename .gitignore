@@ -37,5 +37,7 @@ web/data/
 
 .claude/
 .omo/
-.opencode/
+# No trailing slash: this is a symlink to an out-of-repo agent config, and git
+# treats a symlink as a file, so a dir-only pattern would never match it.
+.opencode
 
