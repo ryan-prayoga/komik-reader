@@ -20,14 +20,15 @@
 	import LibraryBig from '@lucide/svelte/icons/library-big';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 
-		const filterByActive = $derived($page.data.authEnabled && !$page.data.user?.is_admin);
-
 		let allSources = $state<Source[]>([]);
 		let loading = $state(true);
 		let error = $state('');
 
+		const hasActiveSources = $derived(preferences.activePkgNames.length > 0);
+		const noSourcesInstalled = $derived(allSources.length === 0);
+
 		const sources = $derived(
-			filterByActive && preferences.activePkgNames.length > 0
+			hasActiveSources
 				? allSources.filter((s) => preferences.activePkgNames.includes(s.extension.pkgName))
 				: allSources
 		);
@@ -67,10 +68,10 @@
 		try {
 			// Suwayomi's per-source isNsfw flag can disagree with the parent
 			// extension's (e.g. Kiryuu: extension isNsfw=false, source isNsfw=true).
-			// Non-admins only ever see sources they explicitly activated, so skip
+			// Once the user has activated sources, they only ever see those, so skip
 			// the server-side NSFW condition here — an already-activated source
 			// must never silently vanish from its own owner's browse list.
-			allSources = await getInstalledSources(filterByActive ? null : preferences.nsfwFilter);
+			allSources = await getInstalledSources(hasActiveSources ? null : preferences.nsfwFilter);
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Gagal memuat source';
 		} finally {
@@ -191,9 +192,9 @@
 		{#if sources.length === 0}
 			<EmptyState
 				title="Belum ada source aktif"
-				description={filterByActive
-					? 'Aktifkan ekstensi dulu untuk menampilkan source baca komik.'
-					: 'Install ekstensi dulu untuk menampilkan source baca komik.'}
+				description={noSourcesInstalled
+					? 'Install ekstensi dulu untuk menampilkan source baca komik.'
+					: 'Aktifkan ekstensi dulu untuk menampilkan source baca komik.'}
 			>
 				{#snippet icon()}
 					{#if libraryPreview.length === 0 && recent.length === 0}
@@ -205,7 +206,7 @@
 				{#snippet action()}
 					<div class="flex flex-wrap justify-center gap-2">
 						<Button href="/extensions">
-							{filterByActive ? 'Pilih ekstensi' : 'Buka ekstensi'}
+							{noSourcesInstalled ? 'Buka ekstensi' : 'Pilih ekstensi'}
 						</Button>
 						{#if libraryPreview.length === 0}
 							<Button href="/search" variant="secondary">Cari komik</Button>
