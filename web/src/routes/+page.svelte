@@ -28,9 +28,7 @@
 		const noSourcesInstalled = $derived(allSources.length === 0);
 
 		const sources = $derived(
-			hasActiveSources
-				? allSources.filter((s) => preferences.activePkgNames.includes(s.extension.pkgName))
-				: allSources
+			allSources.filter((s) => preferences.activePkgNames.includes(s.extension.pkgName))
 		);
 
 	// Continue-reading from local history — deduplicated per manga, latest chapter only.
