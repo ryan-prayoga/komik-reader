@@ -1,5 +1,5 @@
 import { browser } from '$app/environment';
-import { getAll, getItem, putItem, getMeta, setMeta } from './db';
+import { getAll, getItem, putItem, updateItem, getMeta, setMeta } from './db';
 import { localData } from './data.svelte';
 import type { LocalHistory, LocalLibrary, LocalCategory, SyncChange, SyncEntity } from './types';
 
@@ -186,30 +186,51 @@ class SyncEngine {
 				continue;
 			}
 
-			const existing = await getItem<{ updatedAt: number }>(store, Number(ch.itemKey));
-			if (!existing || ch.updatedAt > existing.updatedAt) {
+			// One transaction for read-modify-write. Doing getItem then putItem left
+			// a window in which a local write (recordHistory, addTimeSpent) could
+			// commit and then be silently overwritten by this merge, using a
+			// snapshot taken before it.
+			let didApply = false;
+			await updateItem<Record<string, unknown>>(store, Number(ch.itemKey), (current) => {
+				const existing = current as (Record<string, unknown> & { updatedAt?: number }) | null;
+				if (existing && ch.updatedAt <= Number(existing.updatedAt ?? 0)) return null;
+
 				// Preserve the device-local `timeSpentMs` — never let a remote
 				// change overwrite it (and a remote change shouldn't carry it
 				// anyway because we strip it on push).
-				const merged =
-					store === 'history' && existing && 'timeSpentMs' in (existing as Record<string, unknown>)
-						? { ...(ch.data as Record<string, unknown>), timeSpentMs: (existing as { timeSpentMs?: number }).timeSpentMs }
-						: ch.data;
-					// Monotonic isRead on history so a mid-chapter device cannot
-					// LWW-clobber another device's finished state.
-					let finalRow = merged as Record<string, unknown>;
-					if (store === 'history' && existing) {
-						const ex = existing as { isRead?: boolean; lastPage?: number };
-						const inc = finalRow as { isRead?: boolean; lastPage?: number };
-						finalRow = {
-							...finalRow,
-							isRead: Boolean(inc.isRead || ex.isRead),
-							lastPage: Math.max(Number(inc.lastPage ?? 0), Number(ex.lastPage ?? 0))
-						};
-					}
-					await putItem(store, finalRow);
-					applied = true;
+				let finalRow = (
+					store === 'history' && existing && 'timeSpentMs' in existing
+						? { ...(ch.data as Record<string, unknown>), timeSpentMs: existing.timeSpentMs }
+						: ch.data
+				) as Record<string, unknown>;
+
+				if (store === 'history' && existing) {
+					const ex = existing as { isRead?: boolean; lastPage?: number; updatedAt?: number };
+					const inc = finalRow as {
+						isRead?: boolean;
+						lastPage?: number;
+						readClearedAt?: number;
+					};
+					// A deliberate "tandai belum dibaca" carries readClearedAt. If that
+					// clear is newer than the row we are merging against, it wins —
+					// otherwise isRead stays monotonic so a device sitting mid-chapter
+					// can't undo another device's finished state.
+					const explicitUnread =
+						inc.isRead === false &&
+						typeof inc.readClearedAt === 'number' &&
+						inc.readClearedAt >= Number(ex.updatedAt ?? 0);
+					finalRow = {
+						...finalRow,
+						isRead: explicitUnread ? false : Boolean(inc.isRead || ex.isRead),
+						lastPage: explicitUnread
+							? Number(inc.lastPage ?? 0)
+							: Math.max(Number(inc.lastPage ?? 0), Number(ex.lastPage ?? 0))
+					};
 				}
+				didApply = true;
+				return finalRow;
+			});
+			if (didApply) applied = true;
 			}
 
 			// Advance push cursor only to what the server accepted (not remote

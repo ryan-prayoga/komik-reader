@@ -201,7 +201,10 @@ class LocalData {
 			deleted: false,
 			timeSpentMs: existing?.timeSpentMs,
 			totalPages: existing?.totalPages,
-			lastPageProgress: existing?.lastPageProgress
+			lastPageProgress: existing?.lastPageProgress,
+			// Stamp deliberate un-reads so the pull merge can tell them apart from a
+			// device that is simply behind (see LocalHistory.readClearedAt).
+			readClearedAt: isRead ? existing?.readClearedAt : nowMs()
 		};
 		await putItem('history', row);
 		this.#setHistoryRow(row);

@@ -30,6 +30,17 @@ export type LocalHistory = {
 	 * device's contribution without any device overwriting another's total.
 	 */
 	timeSpentMs?: number;
+	/**
+	 * When the user explicitly marked this chapter UNREAD, if ever.
+	 *
+	 * Pull-merge keeps `isRead` monotonic so a device sitting mid-chapter cannot
+	 * clobber another device's finished state. That guard also swallowed a
+	 * deliberate "tandai belum dibaca", which therefore never propagated. This
+	 * timestamp distinguishes the two: a clear that is newer than the row it
+	 * merges against is honoured, everything else stays monotonic. Optional —
+	 * rows written before this field simply keep the old behaviour.
+	 */
+	readClearedAt?: number;
 };
 
 /**
