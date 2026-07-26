@@ -6,7 +6,7 @@
 	import { fetchChapterPages, getMangaChapters } from '$lib/graphql/api';
 	import { queueChapterProgress } from '$lib/graphql/progress-queue';
 	import { isOnline } from '$lib/offline/connection.svelte';
-	import { cacheChapterToDevice, getCachedPageUrls } from '$lib/offline/cache';
+	import { cacheChapterToDevice, getCachedPageUrls, releaseCachedPageUrls } from '$lib/offline/cache';
 	import { getOfflineChapter } from '$lib/offline/db';
 	import { readerSettings, BG_CLASS } from '$lib/reader-settings.svelte';
 	import { localData } from '$lib/local/data.svelte';
@@ -975,6 +975,9 @@
 			flushWebtoonProgressNow();
 			stopTimer();
 			readerSettings.clearActiveManga();
+			// Offline pages are blob URLs; without this they pin the whole chapter's
+			// image data in memory for as long as the document lives.
+			releaseCachedPageUrls();
 		};
 	});
 

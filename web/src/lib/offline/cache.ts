@@ -84,26 +84,61 @@ export async function cacheChapterToDevice(
 	return record;
 }
 
+/**
+ * Blob URLs handed to the reader for the chapter it currently has open. The
+ * reader shows one offline chapter at a time, so a single slot is enough — and
+ * it has to be tracked somewhere, since an un-revoked object URL pins its blob
+ * in memory for the lifetime of the document.
+ */
+let handedOut: { chapterId: number; urls: string[] } | null = null;
+
+/** Revoke the object URLs from the last getCachedPageUrls call. */
+export function releaseCachedPageUrls(chapterId?: number): void {
+	if (!handedOut) return;
+	if (chapterId != null && handedOut.chapterId !== chapterId) return;
+	for (const url of handedOut.urls) URL.revokeObjectURL(url);
+	handedOut = null;
+}
+
+/**
+ * Read the saved pages back OUT of `komik-offline-v1` as blob URLs.
+ *
+ * Returning the plain network URLs instead (what this used to do) only *looked*
+ * like it worked: the resulting <img> requests are served by the Workbox
+ * CacheFirst route, which reads `komik-pages-v1` — an LRU cache with a 5000
+ * entry / 30 day cap. So a chapter the user explicitly saved would render fine
+ * until that unrelated cache evicted it, then break offline while this function
+ * still reported success. Going through the blob keeps saved chapters bound to
+ * the cache that is actually never evicted.
+ */
 export async function getCachedPageUrls(chapterId: number): Promise<string[] | null> {
 	const record = await getOfflineChapter(chapterId);
 	if (!record) return null;
 
 	const cache = await openCache();
-	const available: string[] = [];
+	const urls: string[] = [];
 
 	for (const pageUrl of record.pageUrls) {
-		const url = apiUrl(pageUrl);
-		const match = await cache.match(url);
-		if (!match) return null;
-		available.push(url);
+		const match = await cache.match(apiUrl(pageUrl));
+		if (!match) {
+			// All-or-nothing: don't leak the URLs already minted for a chapter the
+			// caller is about to be told is unavailable.
+			for (const url of urls) URL.revokeObjectURL(url);
+			return null;
+		}
+		urls.push(URL.createObjectURL(await match.blob()));
 	}
 
-	return available;
+	releaseCachedPageUrls();
+	handedOut = { chapterId, urls };
+	return urls;
 }
 
 export async function removeChapterFromDevice(chapterId: number): Promise<void> {
 	const record = await getOfflineChapter(chapterId);
 	if (!record) return;
+
+	releaseCachedPageUrls(chapterId);
 
 	const cache = await openCache();
 	for (const pageUrl of record.pageUrls) {
@@ -113,7 +148,17 @@ export async function removeChapterFromDevice(chapterId: number): Promise<void> 
 	await removeOfflineChapter(chapterId);
 }
 
+/**
+ * Availability check only — deliberately does NOT go through getCachedPageUrls,
+ * which would mint blob URLs nobody consumes and evict the reader's live ones.
+ */
 export async function isChapterAvailableOffline(chapterId: number): Promise<boolean> {
-	const urls = await getCachedPageUrls(chapterId);
-	return urls !== null && urls.length > 0;
+	const record = await getOfflineChapter(chapterId);
+	if (!record || record.pageUrls.length === 0) return false;
+
+	const cache = await openCache();
+	for (const pageUrl of record.pageUrls) {
+		if (!(await cache.match(apiUrl(pageUrl)))) return false;
+	}
+	return true;
 }
