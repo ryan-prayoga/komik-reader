@@ -1,4 +1,9 @@
-import type { BrowseManga, FetchMangaType, FilterChangeInput } from '$lib/graphql/types';
+import type {
+	BrowseManga,
+	FetchMangaType,
+	FilterChangeInput,
+	SourceFilter
+} from '$lib/graphql/types';
 
 // In-memory snapshot of a browse listing so returning from a manga detail
 // (which remounts the route via the layout's {#key pathname}) restores the
@@ -15,6 +20,10 @@ export type BrowseSnapshot = {
 	hasNext: boolean;
 	scrollY: number;
 	appliedFilters: FilterChangeInput[];
+	// The filter widget STATE behind appliedFilters. Restoring the applied input
+	// without it left the sheet showing server defaults while the badge counted
+	// the applied filters — pressing "Terapkan" then silently cleared them.
+	sourceFilters: SourceFilter[];
 	ts: number;
 };
 

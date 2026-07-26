@@ -40,6 +40,8 @@
 	let loadingMore = $state(false);
 	let error = $state('');
 	let enrichGen = 0;
+	// Request generation for the listing itself (see load()).
+	let loadGen = 0;
 	let sentinel = $state<HTMLElement | null>(null);
 
 
@@ -144,11 +146,18 @@
 			enrichGen++;
 		}
 		const gen = enrichGen;
+		// Separate from enrichGen (which only turns over on reset, since a
+		// load-more's enrichment stays valid): every request bumps this, so a
+		// slower earlier fetch can no longer land after a newer one. Tapping
+		// Populer→Terbaru on a slow source used to leave POPULAR results sitting
+		// under the Terbaru tab, whichever resolved last.
+		const listGen = ++loadGen;
 
 		const type: FetchMangaType = activeSearch ? 'SEARCH' : tab;
 
 		try {
 			const result = await fetchBrowseManga(sourceId, type, reset ? 1 : pageNum, activeSearch, appliedFilters);
+			if (listGen !== loadGen) return;
 			const enriched = applyEnrichment(result.mangas);
 			if (reset) {
 				mangas = enriched;
@@ -161,10 +170,13 @@
 				// Batch Suwayomi DB only — no per-card source scrape (dataSaver-safe).
 				void enrichInBackground(result.mangas, gen);
 		} catch (e) {
+			if (listGen !== loadGen) return;
 			error = e instanceof Error ? e.message : 'Gagal memuat manga';
 		} finally {
-			loading = false;
-			loadingMore = false;
+			if (listGen === loadGen) {
+				loading = false;
+				loadingMore = false;
+			}
 		}
 	}
 
@@ -304,19 +316,27 @@
 			pageNum,
 			hasNext,
 			scrollY: window.scrollY,
-			appliedFilters
+			appliedFilters,
+			sourceFilters
 		});
 	});
 
 	onMount(() => {
 		getSourceById(sourceId).then((s) => (source = s));
+
+		const snap = getBrowseSnapshot(sourceId);
+		const restored = Boolean(snap && snap.mangas.length > 0);
+		// Only adopt the server's default filter state when we are NOT restoring —
+		// otherwise this late-resolving fetch overwrites the restored selection and
+		// the sheet disagrees with the filters actually applied to the list.
+		const restoredFilters = restored && (snap?.sourceFilters?.length ?? 0) > 0;
 		getSourceFilters(sourceId).then((f) => {
+			if (restoredFilters) return;
 			sourceFilters = f;
 			uiFilters = cloneFilters(f);
 		});
 
-		const snap = getBrowseSnapshot(sourceId);
-		if (snap && snap.mangas.length > 0) {
+		if (snap && restored) {
 			tab = snap.tab;
 			activeSearch = snap.activeSearch;
 			searchInput = snap.activeSearch;
@@ -324,6 +344,10 @@
 			pageNum = snap.pageNum;
 			hasNext = snap.hasNext;
 			appliedFilters = snap.appliedFilters;
+			if (restoredFilters) {
+				sourceFilters = cloneFilters(snap.sourceFilters);
+				uiFilters = cloneFilters(snap.sourceFilters);
+			}
 			loading = false;
 			tick().then(() => window.scrollTo(0, snap.scrollY));
 			return;
