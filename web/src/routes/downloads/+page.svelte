@@ -105,8 +105,16 @@
 		selected = new Set();
 	}
 
+	// The undo offer must expire BEFORE the pages are actually gone. It used to be
+	// the other way round (toast 5500ms, delete at 5000ms), so a tap in that 500ms
+	// gap put the row back on screen while its cached pages were already deleted —
+	// the UI claimed a restore it could not deliver, and the chapter then failed to
+	// open offline.
+	const HARD_DELETE_DELAY_MS = 6000;
+	const UNDO_TOAST_MS = 5000;
+
 	function scheduleRemove(chapter: OfflineChapter) {
-		// Optimistic UI — hard-delete after toast window unless user undoes.
+		// Optimistic UI — hard-delete after the undo window unless the user undoes.
 		const prev = pendingHardDelete.get(chapter.chapterId);
 		if (prev) clearTimeout(prev);
 
@@ -114,11 +122,18 @@
 		selected = new Set([...selected].filter((id) => id !== chapter.chapterId));
 
 		let undone = false;
+		let executed = false;
 		showToast(`“${chapter.chapterName}” dihapus.`, 'success', {
-			duration: 5500,
+			duration: UNDO_TOAST_MS,
 			action: {
 				label: 'Urungkan',
 				onClick: () => {
+					// Safety net for any path that keeps the action reachable past the
+					// window: never pretend to restore something already deleted.
+					if (executed) {
+						showToast('Chapter sudah terhapus — unduh ulang untuk menyimpannya lagi.', 'info');
+						return;
+					}
 					undone = true;
 					const t = pendingHardDelete.get(chapter.chapterId);
 					if (t) {
@@ -138,8 +153,9 @@
 		const timer = setTimeout(() => {
 			pendingHardDelete.delete(chapter.chapterId);
 			if (undone) return;
+			executed = true;
 			void removeChapterFromDevice(chapter.chapterId).then(() => refreshStorage());
-		}, 5000);
+		}, HARD_DELETE_DELAY_MS);
 		pendingHardDelete.set(chapter.chapterId, timer);
 	}
 
