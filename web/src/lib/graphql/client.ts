@@ -16,7 +16,10 @@ const GRAPHQL_TIMEOUT_MS = 30_000;
 
 export async function gql<T>(
 	query: string,
-	variables?: Record<string, unknown>
+	variables?: Record<string, unknown>,
+	// `keepalive` lets a request outlive the document — required for the progress
+	// flush on pagehide, which otherwise gets torn down with the page.
+	opts?: { keepalive?: boolean }
 ): Promise<T> {
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), GRAPHQL_TIMEOUT_MS);
@@ -27,6 +30,7 @@ export async function gql<T>(
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ query, variables }),
+			keepalive: opts?.keepalive,
 			signal: controller.signal
 		});
 	} catch (e) {

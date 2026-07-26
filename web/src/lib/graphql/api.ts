@@ -291,7 +291,8 @@ export async function fetchChapterPages(chapterId: number): Promise<string[]> {
 export async function updateChapterProgress(
 	chapterId: number,
 	lastPageRead: number,
-	isRead = false
+	isRead = false,
+	opts?: { keepalive?: boolean }
 ): Promise<void> {
 	await gql(
 		`mutation($id: Int!, $lastPageRead: Int!, $isRead: Boolean) {
@@ -299,7 +300,8 @@ export async function updateChapterProgress(
 				chapter { id lastPageRead isRead }
 			}
 		}`,
-		{ id: chapterId, lastPageRead, isRead }
+		{ id: chapterId, lastPageRead, isRead },
+		opts
 	);
 }
 

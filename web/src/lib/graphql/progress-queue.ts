@@ -10,12 +10,35 @@ import { GraphqlError } from './client';
 
 const STORAGE_KEY = 'komik-reader-pending-progress';
 
-// Guests are blocked from progress writes at the proxy (401) — that's a
-// permanent condition, not a blip. Queueing those would grow the queue
-// unboundedly and, worse, replay stale positions long after the state moved on.
-function isAuthError(e: unknown): boolean {
-	return e instanceof GraphqlError && /^HTTP 40[13]\b/.test(e.message);
+/**
+ * Errors a replay can never recover from — keeping these queued means retrying
+ * on every app start and every 'online' event, forever, for a write that will
+ * always be refused.
+ *
+ * Guests blocked at the proxy (401/403) were already handled. The gap was
+ * GraphQL-level rejections, which arrive as HTTP 200 with an `errors` array:
+ * Suwayomi routinely deletes and recreates chapter rows with new ids (see
+ * local/migrate.ts), so "chapter not found" for a stale id was replayed
+ * indefinitely and the queue never shrank.
+ */
+function isPermanentError(e: unknown): boolean {
+	// Network failure / DOM abort — transient by definition.
+	if (!(e instanceof GraphqlError)) return false;
+	if (e.message.startsWith('Request timeout')) return false;
+	// The server saw the mutation and refused it.
+	if (e.errors?.length) return true;
+	const status = /^HTTP (\d{3})\b/.exec(e.message);
+	if (status) {
+		const code = Number(status[1]);
+		if (code === 408 || code === 429) return false; // explicitly retryable
+		return code >= 400 && code < 500;
+	}
+	return false;
 }
+
+// Backstop so a long offline stretch can't grow the queue without bound. Oldest
+// entries lose; the newest positions are the ones worth replaying.
+const MAX_QUEUE_ENTRIES = 500;
 
 type PendingEntry = { chapterId: number; lastPageRead: number; isRead: boolean };
 
@@ -30,7 +53,19 @@ function readQueue(): Record<string, PendingEntry> {
 
 	function writeQueue(queue: Record<string, PendingEntry>) {
 		if (!browser) return;
-		localStorage.setItem(STORAGE_KEY, JSON.stringify(queue));
+		const keys = Object.keys(queue);
+		if (keys.length > MAX_QUEUE_ENTRIES) {
+			for (const k of keys.slice(0, keys.length - MAX_QUEUE_ENTRIES)) delete queue[k];
+		}
+		try {
+			// Drop the key entirely when nothing is pending, so an empty queue leaves
+			// no trace in localStorage.
+			if (Object.keys(queue).length === 0) localStorage.removeItem(STORAGE_KEY);
+			else localStorage.setItem(STORAGE_KEY, JSON.stringify(queue));
+		} catch {
+			// Quota exceeded / private mode — losing a queued position is bad but
+			// throwing here would take down the caller's read path with it.
+		}
 	}
 
 	let chain: Promise<void> = Promise.resolve();
@@ -59,12 +94,25 @@ function readQueue(): Record<string, PendingEntry> {
 	export async function queueChapterProgress(
 		chapterId: number,
 		lastPageRead: number,
-		isRead: boolean
+		isRead: boolean,
+		opts?: { keepalive?: boolean }
 	): Promise<void> {
 		return serialize(async () => {
+			// Write-ahead: record the intent BEFORE the request goes out. Enqueuing
+			// only in the catch lost the write completely when the page died
+			// mid-flight — the pagehide flush starts the fetch, the document goes
+			// away, the promise never settles, and the catch never runs. That is
+			// exactly the moment whose position matters most.
+			if (browser) {
+				const queue = readQueue();
+				queue[chapterId] = mergeEntry(queue[chapterId], { chapterId, lastPageRead, isRead });
+				writeQueue(queue);
+			}
 			try {
-				await updateChapterProgress(chapterId, lastPageRead, isRead);
+				await updateChapterProgress(chapterId, lastPageRead, isRead, opts);
 				if (browser) {
+					// serialize() guarantees no other writer touched this entry while the
+					// request was in flight, so clearing it here cannot drop a newer one.
 					const queue = readQueue();
 					if (queue[chapterId]) {
 						delete queue[chapterId];
@@ -72,14 +120,12 @@ function readQueue(): Record<string, PendingEntry> {
 					}
 				}
 			} catch (e) {
-				if (!browser || isAuthError(e)) return;
-				const queue = readQueue();
-				queue[chapterId] = mergeEntry(queue[chapterId], {
-					chapterId,
-					lastPageRead,
-					isRead
-				});
-				writeQueue(queue);
+				if (browser && isPermanentError(e)) {
+					const queue = readQueue();
+					delete queue[chapterId];
+					writeQueue(queue);
+				}
+				// Otherwise leave it queued — replayQueuedProgress retries it.
 			}
 		});
 	}
@@ -103,7 +149,7 @@ function readQueue(): Record<string, PendingEntry> {
 						delete current[entry.chapterId];
 						writeQueue(current);
 					} catch (e) {
-						if (isAuthError(e)) {
+						if (isPermanentError(e)) {
 							const current = readQueue();
 							delete current[entry.chapterId];
 							writeQueue(current);

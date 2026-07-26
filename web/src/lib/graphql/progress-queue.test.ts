@@ -75,14 +75,70 @@ describe('progress-queue', () => {
 	}
 
 	describe('queueChapterProgress', () => {
-		it('does not write localStorage when update succeeds and queue was empty', async () => {
+		it('leaves no localStorage trace when the update succeeds', async () => {
 			updateChapterProgress.mockResolvedValue(undefined);
 			const { queueChapterProgress } = await loadQueue();
 
 			await queueChapterProgress(10, 3, false);
 
-			expect(updateChapterProgress).toHaveBeenCalledWith(10, 3, false);
+			expect(updateChapterProgress).toHaveBeenCalledWith(10, 3, false, undefined);
+			// Written ahead of the request, then cleared on success.
 			expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+		});
+
+		it('persists the write BEFORE the request so a torn-down page cannot lose it', async () => {
+			// The pagehide flush starts a request the document may not outlive: if the
+			// entry were only recorded in the catch, that write would vanish entirely.
+			let queuedDuringFlight: string | null = null;
+			updateChapterProgress.mockImplementation(async () => {
+				queuedDuringFlight = localStorage.getItem(STORAGE_KEY);
+			});
+			const { queueChapterProgress } = await loadQueue();
+
+			await queueChapterProgress(7, 12, true);
+
+			expect(queuedDuringFlight).not.toBeNull();
+			expect(JSON.parse(queuedDuringFlight!)['7']).toEqual({
+				chapterId: 7,
+				lastPageRead: 12,
+				isRead: true
+			});
+			expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+		});
+
+		it('forwards keepalive so the unload flush survives the page', async () => {
+			updateChapterProgress.mockResolvedValue(undefined);
+			const { queueChapterProgress } = await loadQueue();
+
+			await queueChapterProgress(5, 1, false, { keepalive: true });
+
+			expect(updateChapterProgress).toHaveBeenCalledWith(5, 1, false, { keepalive: true });
+		});
+
+		it('drops a GraphQL-level rejection instead of replaying it forever', async () => {
+			// HTTP 200 with an errors array — e.g. Suwayomi recreated the chapter row
+			// under a new id, so this write can never succeed.
+			const { GraphqlError } = await import('./client');
+			updateChapterProgress.mockRejectedValue(
+				new GraphqlError('Chapter not found', [{ message: 'Chapter not found' }])
+			);
+			const { queueChapterProgress } = await loadQueue();
+
+			await queueChapterProgress(99, 4, false);
+
+			expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+		});
+
+		it('keeps a timeout queued for retry', async () => {
+			const { GraphqlError } = await import('./client');
+			updateChapterProgress.mockRejectedValue(
+				new GraphqlError('Request timeout — server terlalu lama merespons')
+			);
+			const { queueChapterProgress } = await loadQueue();
+
+			await queueChapterProgress(31, 8, false);
+
+			expect(readStoredQueue()['31']).toEqual({ chapterId: 31, lastPageRead: 8, isRead: false });
 		});
 
 		it('clears the chapter entry from localStorage after a successful write', async () => {

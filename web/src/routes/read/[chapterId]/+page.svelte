@@ -459,7 +459,12 @@
 				pageProgress
 			});
 			if (pageChanged || force) {
-				void queueChapterProgress(section.chapter.id, pageIdx, isRead);
+				// `force` is the pagehide/visibilitychange flush — the document may be
+				// torn down the instant this returns, so the request has to be allowed
+				// to outlive it.
+				void queueChapterProgress(section.chapter.id, pageIdx, isRead, {
+					keepalive: force
+				});
 				if (isRead) markChapterReadLocally(section.chapter.id);
 			}
 		void localData.recordHistory({
