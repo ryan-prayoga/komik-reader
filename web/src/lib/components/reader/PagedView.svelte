@@ -13,8 +13,10 @@
 		direction?: ReaderDirection;
 		onpage: (index: number) => void;
 		ontoggle: () => void;
-		onnext?: () => void; // advance past the last page (→ next chapter)
-		onprev?: () => void; // go back before the first page (→ prev chapter)
+		// Return true if the handler actually started navigating. Returning false
+		// (no adjacent chapter) leaves the boundary live instead of latching it.
+		onnext?: () => boolean; // advance past the last page (→ next chapter)
+		onprev?: () => boolean; // go back before the first page (→ prev chapter)
 		onzoom?: (zoom: number) => void; // pinch-to-zoom
 		// Re-fetch this chapter's page URLs (stale Suwayomi URLs) — escalation path
 		// for the retry button after repeated same-URL failures.
@@ -116,8 +118,11 @@
 		const n = nextIndex(current);
 		if (n > lastIndex) {
 			if (navigatingAway) return; // already handing off — don't double-navigate
-			navigatingAway = true;
-			onnext?.(); // past the end — hand off to chapter navigation
+			// Only latch once navigation is genuinely under way. Latching on a
+			// no-op handler (no next chapter — the newest one) left the flag stuck
+			// forever, since only a `pages` change clears it: every later boundary
+			// gesture died here, including going BACK to the previous chapter.
+			navigatingAway = onnext?.() ?? false;
 			return;
 		}
 		current = n;
@@ -126,8 +131,7 @@
 	function prev() {
 		if (current <= 0) {
 			if (navigatingAway) return;
-			navigatingAway = true;
-			onprev?.();
+			navigatingAway = onprev?.() ?? false;
 			return;
 		}
 		current = pairStart(current - 1);

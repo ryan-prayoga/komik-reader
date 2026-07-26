@@ -183,6 +183,21 @@
 		}
 	}
 
+	// Paged boundary handoff. The boolean tells PagedView whether a navigation
+	// actually started: at the newest/oldest chapter there is nowhere to go, and
+	// reporting that honestly keeps the boundary usable instead of wedging it.
+	function goToNextChapter(): boolean {
+		if (!nextChapter) return false;
+		navigateToChapter(nextChapter.id);
+		return true;
+	}
+
+	function goToPrevChapter(): boolean {
+		if (!prevChapter) return false;
+		navigateToChapter(prevChapter.id);
+		return true;
+	}
+
 	// Suwayomi page URLs can expire; same-URL retries never recover from that.
 	// The views escalate here after repeated failures to swap in fresh URLs.
 	async function refreshChapterPages(id: number) {
@@ -1138,8 +1153,8 @@
 				direction={readerSettings.direction}
 				onpage={reportPage}
 				ontoggle={toggleChrome}
-				onnext={() => nextChapter && navigateToChapter(nextChapter.id)}
-				onprev={() => prevChapter && navigateToChapter(prevChapter.id)}
+				onnext={goToNextChapter}
+				onprev={goToPrevChapter}
 				onzoom={(z) => readerSettings.set('zoom', z)}
 				onrefreshpages={() => refreshChapterPages(chapterId)}
 			/>
