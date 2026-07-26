@@ -13,19 +13,51 @@ class SyncEngine {
 
 	#pending = false;
 	#timer: ReturnType<typeof setTimeout> | null = null;
+	#started = false;
 
-	/** Wire mutations → debounced sync. Call once on app start. */
+	/**
+	 * Wire mutations → debounced sync. Idempotent: only the first call installs
+	 * the trigger and window listeners, so it is safe to re-enter. Listeners are
+	 * installed regardless of session state because schedule() already no-ops
+	 * while logged out — that way a session started later is live immediately.
+	 */
 	start(loggedIn: boolean) {
+		if (this.#started) {
+			this.setLoggedIn(loggedIn);
+			return;
+		}
+		this.#started = true;
 		this.loggedIn = loggedIn;
 		localData.setSyncTrigger(() => this.schedule());
+		if (browser) {
+			window.addEventListener('online', () => this.schedule(0));
+			document.addEventListener('visibilitychange', () => {
+				if (document.visibilityState === 'visible') this.schedule(0);
+			});
+		}
+		if (loggedIn) this.schedule(0);
+	}
+
+	/**
+	 * Login and logout both happen through SPA navigation (`use:enhance` +
+	 * invalidateAll), so the root layout's onMount — where start() runs — never
+	 * fires again. Without the layout pushing the new session state in here, a
+	 * user who logged in after boot never synced at all, while the UI kept
+	 * offering "Login untuk sync".
+	 */
+	setLoggedIn(loggedIn: boolean) {
+		if (this.loggedIn === loggedIn) return;
+		this.loggedIn = loggedIn;
 		if (loggedIn) {
-			this.schedule(0);
-			if (browser) {
-				window.addEventListener('online', () => this.schedule(0));
-				document.addEventListener('visibilitychange', () => {
-					if (document.visibilityState === 'visible') this.schedule(0);
-				});
-			}
+			// Only meaningful once start() has wired the trigger; before that the
+			// initial schedule is start()'s job.
+			if (this.#started) this.schedule(0);
+			return;
+		}
+		// Logged out — drop any pending run so it can't fire against the new session.
+		if (this.#timer) {
+			clearTimeout(this.#timer);
+			this.#timer = null;
 		}
 	}
 

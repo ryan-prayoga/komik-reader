@@ -33,6 +33,13 @@
 	);
 	const canLogin = $derived(data.authEnabled && !data.user);
 
+	// `data.user` flips on SPA login/logout (form actions + invalidateAll), long
+	// after onMount has run — so the engine has to be told here, not just once at
+	// boot, or a session started mid-visit never syncs.
+	$effect(() => {
+		syncEngine.setLoggedIn(!!data.user);
+	});
+
 	const themeColor = $derived(
 		isReader ? '#000000' : preferences.resolved === 'dark' ? '#0b0a09' : '#ffffff'
 	);
