@@ -140,9 +140,28 @@
 		report();
 	}
 
+	function isEditableTarget(target: EventTarget | null): boolean {
+		if (!(target instanceof HTMLElement)) return false;
+		return (
+			target.tagName === 'INPUT' ||
+			target.tagName === 'TEXTAREA' ||
+			target.tagName === 'SELECT' ||
+			target.isContentEditable
+		);
+	}
+
 	// Keyboard navigation (reader is the focused surface). ArrowRight advances in
 	// the reading direction — flipped for RTL (manga).
 	function onkeydown(e: KeyboardEvent) {
+		// The route-level reader shortcuts already guard these; this window
+		// listener did not, so typing a space in the chapter-search box paged the
+		// reader forward (and swallowed the space), and arrow keys on a slider in
+		// the settings sheet flipped pages behind the open sheet instead of moving
+		// the slider. Any open dialog/sheet marks itself aria-modal, so one check
+		// covers all of them without threading state in from the route.
+		if (isEditableTarget(e.target)) return;
+		if (typeof document !== 'undefined' && document.querySelector('[aria-modal="true"]')) return;
+
 		const forward = direction === 'rtl' ? 'ArrowLeft' : 'ArrowRight';
 		const back = direction === 'rtl' ? 'ArrowRight' : 'ArrowLeft';
 		// Volume keys: common manga-app mapping (works on some Android WebViews / PWA).
@@ -160,6 +179,7 @@
 
 	// Touch: swipe to page, pinch to zoom, double-tap center to toggle zoom.
 	let touchX = 0;
+	let pinching = false;
 	let pinchStartDist = 0;
 	let pinchStartZoom = 1;
 	let lastCenterTapAt = 0;
@@ -193,9 +213,10 @@
 
 	function onTouchStart(e: TouchEvent) {
 		if (e.touches.length === 2) {
+			pinching = true;
 			pinchStartDist = dist(e);
 			pinchStartZoom = zoom;
-		} else {
+		} else if (!pinching) {
 			touchX = e.changedTouches[0]?.clientX ?? 0;
 		}
 	}
@@ -208,9 +229,17 @@
 		}
 	}
 	function onTouchEnd(e: TouchEvent) {
-		if (pinchStartDist > 0) {
-			pinchStartDist = 0;
-			return; // finishing a pinch, not a swipe
+		// Fingers rarely lift together. The old check cleared pinchStartDist on the
+		// FIRST lift, so the second finger's touchend fell through to the swipe
+		// branch measuring against a touchX from the first finger's original
+		// position — |dx| > 50 was easy to hit, turning the page right after a
+		// zoom. Stay in pinch mode until every finger is off the glass.
+		if (pinching) {
+			if (e.touches.length === 0) {
+				pinching = false;
+				pinchStartDist = 0;
+			}
+			return;
 		}
 		const dx = (e.changedTouches[0]?.clientX ?? 0) - touchX;
 		if (Math.abs(dx) > 50) {

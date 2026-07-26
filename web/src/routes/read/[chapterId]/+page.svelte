@@ -16,6 +16,7 @@
 			resumeProgressFor
 		} from '$lib/reader/resume';
 		import { isWebtoonChapterRead, nextPruneSpacerPx } from '$lib/reader/webtoon-progress';
+		import { lastVisibleIndex as lastVisibleIndexOf } from '$lib/reader/paging';
 	import { updates } from '$lib/updates/updates.svelte';
 	import { readingTimer } from '$lib/reading-time';
 	import WebtoonView from '$lib/components/reader/WebtoonView.svelte';
@@ -365,6 +366,23 @@
 		// session.
 		readingTimer.pingActivity();
 		void readingTimer.flush();
+	}
+
+	/**
+	 * Paged mode marks progress on page FLIPS, so a chapter that shows all of its
+	 * pages at the opening position never reported anything: a 1-page chapter has
+	 * no flip at all (its slider is hidden, max = 0), and tapping forward hands
+	 * straight off to the next chapter. It could never be marked read. Two pages
+	 * in double mode are the same case — both are on screen immediately.
+	 */
+	function reportFullyVisibleChapter() {
+		if (!isPaged || pages.length === 0) return;
+		const lastVisible = lastVisibleIndexOf(
+			currentPage,
+			{ double: useDouble, doubleOffset: readerSettings.doubleOffset },
+			pages.length - 1
+		);
+		if (lastVisible >= pages.length - 1) reportPage(currentPage, lastVisible);
 	}
 
 	let lastReportedPageKey = '';
@@ -980,6 +998,7 @@
 				// re-asserted unread on the server the moment it's reopened.
 				if (pages.length > 0) {
 					void queueChapterProgress(id, currentPage, isChapterReadAnywhere(id));
+					reportFullyVisibleChapter();
 				}
 			} catch (e) {
 				if (cancelled) return;
