@@ -49,6 +49,10 @@
 	let currentPageProgress = $state(0); // 0–1 scroll progress within the current page
 	let currentChapterProgress = $state(0); // 0–1 true scroll progress across the whole chapter
 	let loadingNextChapter = $state(false);
+	// Monotonic id of the current chapter load. Async work that outlives its
+	// chapter compares against this to detect that it is stale. Plain `let` — it
+	// gates side effects, nothing renders from it.
+	let loadGeneration = 0;
 
 	// Shared
 	let chapters = $state<Chapter[]>([]);
@@ -469,17 +473,30 @@
 	}
 
 	async function handleNearEnd() {
-		if (loadingNextChapter || !nextUnloadedChapter) return;
+		// Pin the target BEFORE awaiting. Re-reading the derived afterwards was the
+		// bug: switching chapters mid-fetch resets `sections`/`chapters`, so the
+		// late resolve either appended `{ chapter: null }` (TypeError in the
+		// {#each} key, reader dies to the error page) or paired the NEW chapter's
+		// identity with the OLD chapter's pages — after which scrolling wrote
+		// progress and isRead against the wrong chapter id.
+		const target = nextUnloadedChapter;
+		if (loadingNextChapter || !target) return;
+		const gen = loadGeneration;
 		loadingNextChapter = true;
 		nextChapterError = '';
 		try {
-			const nextPages = (await fetchChapterPages(nextUnloadedChapter.id)).map((p) => apiUrl(p));
-			sections = [...sections, { chapter: nextUnloadedChapter, pages: nextPages }];
+			const nextPages = (await fetchChapterPages(target.id)).map((p) => apiUrl(p));
+			if (gen !== loadGeneration) return; // chapter changed while fetching
+			// The prune/reset paths can also drop the section this was meant to
+			// extend; only append while the stream still ends where we left off.
+			if (sections.some((s) => s.chapter.id === target.id)) return;
+			sections = [...sections, { chapter: target, pages: nextPages }];
 		} catch {
+			if (gen !== loadGeneration) return;
 			nextChapterError = 'Gagal memuat chapter berikutnya.';
 			showToast('Gagal memuat chapter berikutnya. Coba lagi.', 'error');
 		} finally {
-			loadingNextChapter = false;
+			if (gen === loadGeneration) loadingNextChapter = false;
 		}
 	}
 
@@ -758,6 +775,10 @@
 		const id = chapterId;
 		navNonce;
 		let cancelled = false;
+		// Bumped on every chapter (re-)load so work started for the OLD chapter can
+		// tell that it is stale once it finally resolves. `cancelled` alone only
+		// covers this effect body; handleNearEnd runs outside it.
+		loadGeneration += 1;
 
 		// Start the reading timer for paged mode. The cleanup function runs when
 		// the user navigates to another chapter (SvelteKit `goto`), flushing the
