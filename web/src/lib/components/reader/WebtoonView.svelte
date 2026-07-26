@@ -555,39 +555,56 @@
 	}
 
 	/**
-	 * Keep decoded bitmaps only within ±KEEP_IMAGE_RADIUS of activePi in the
-	 * active chapter. Far pages: lock container height from pageHeights /
-	 * offsetHeight, then clear img src (node stays mounted). Near pages: put
-	 * src back. Called after every active-page update on the scroll path.
+	 * Keep decoded bitmaps only within ±KEEP_IMAGE_RADIUS of the active page,
+	 * counted across ALL loaded sections rather than within the active chapter —
+	 * so the window reaches into the next chapter before the reader gets there.
+	 * Far pages: lock container height from pageHeights / offsetHeight, then clear
+	 * img src (node stays mounted). Near pages: put src back. Called after every
+	 * active-page update on the scroll path.
 	 */
 	function syncImageWindow() {
 		if (!activeChapterId) return;
 		unloadEnabled = true;
+		// Flatten every loaded section into one running index so the keep-window can
+		// SPAN a chapter boundary. Scoping it to the active chapter meant the next
+		// chapter's pages — already appended by the infinite scroll — all rendered
+		// with an empty src, so the browser only started fetching page 0 of the next
+		// chapter once it had already become active. Crossing into a chapter
+		// therefore always began with a stretch of blank void on any connection
+		// slower than instant.
+		const flatKeys: string[] = [];
+		let activeFlatIdx = -1;
+		for (const section of sections) {
+			const cid = section.chapter.id;
+			for (let pi = 0; pi < section.pages.length; pi++) {
+				if (cid === activeChapterId && pi === activePi) activeFlatIdx = flatKeys.length;
+				flatKeys.push(`${cid}-${pi}`);
+			}
+		}
+		// Active page not in the loaded sections (mid-reset) — leave the window be
+		// rather than unloading everything on screen.
+		if (activeFlatIdx < 0) return;
+
 		const nextLive: Record<string, boolean> = {};
 		const nextLocks = { ...heightLocks };
 		let loadedDirty = false;
 		const nextLoaded = { ...loadedPages };
-		for (const section of sections) {
-			const cid = section.chapter.id;
-			for (let pi = 0; pi < section.pages.length; pi++) {
-				const key = `${cid}-${pi}`;
-				const keep =
-					cid === activeChapterId && Math.abs(pi - activePi) <= KEEP_IMAGE_RADIUS;
-				if (keep) {
-					nextLive[key] = true;
-					// min-height stays until markLoaded after re-decode.
-				} else {
-					// Height lock BEFORE src clear (same render): prefer measured map,
-					// fall back to live offsetHeight so layout never collapses to 0.
-					if (nextLocks[key] == null) {
-						const measured =
-							pageHeights.get(key) ?? pageEls.get(key)?.offsetHeight ?? 0;
-						if (measured > 0) nextLocks[key] = measured;
-					}
-					if (nextLoaded[key]) {
-						delete nextLoaded[key];
-						loadedDirty = true;
-					}
+		for (let gi = 0; gi < flatKeys.length; gi++) {
+			const key = flatKeys[gi];
+			const keep = Math.abs(gi - activeFlatIdx) <= KEEP_IMAGE_RADIUS;
+			if (keep) {
+				nextLive[key] = true;
+				// min-height stays until markLoaded after re-decode.
+			} else {
+				// Height lock BEFORE src clear (same render): prefer measured map,
+				// fall back to live offsetHeight so layout never collapses to 0.
+				if (nextLocks[key] == null) {
+					const measured = pageHeights.get(key) ?? pageEls.get(key)?.offsetHeight ?? 0;
+					if (measured > 0) nextLocks[key] = measured;
+				}
+				if (nextLoaded[key]) {
+					delete nextLoaded[key];
+					loadedDirty = true;
 				}
 			}
 		}
@@ -833,6 +850,11 @@
 						<Spinner size={24} class="text-white/40" />
 					</div>
 				{/if}
+				<!-- `loading` below is eager only AROUND the resume point. It used to be
+				     `pi <= initialPage + 1`, which made every page before it eager too:
+				     resuming at page 80 of 100 fired ~80 requests for pages sitting
+				     above the viewport, ignoring dataSaver, until the first scroll tick
+				     pruned them. -->
 				<img
 					src={imageLive ? pageSrc(pageUrl, key) : ''}
 					alt="Halaman {pi + 1}"
@@ -841,7 +863,9 @@
 						? 'opacity-100'
 						: 'opacity-0'} {readerSettings.cropBorders ? 'scale-[1.03]' : ''}"
 					style="aspect-ratio: auto 1 / {ratio}"
-					loading={eagerPages[key] || (si === 0 && pi <= initialPage + 1) ? 'eager' : 'lazy'}
+					loading={eagerPages[key] || (si === 0 && Math.abs(pi - initialPage) <= 1)
+						? 'eager'
+						: 'lazy'}
 					decoding="async"
 					onload={(e) => markLoaded(key, section.chapter.id, e.currentTarget as HTMLImageElement)}
 					onerror={() => markError(key)}
