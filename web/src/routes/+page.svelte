@@ -61,8 +61,9 @@
 		else showToast(failed ? `Selesai · ${failed} gagal.` : 'Semua sudah up to date.', 'info');
 	}
 
-	onMount(async () => {
-		void updates.init();
+	async function loadSources() {
+		loading = true;
+		error = '';
 		try {
 			// Suwayomi's per-source isNsfw flag can disagree with the parent
 			// extension's (e.g. Kiryuu: extension isNsfw=false, source isNsfw=true).
@@ -75,6 +76,11 @@
 		} finally {
 			loading = false;
 		}
+	}
+
+	onMount(() => {
+		void updates.init();
+		void loadSources();
 	});
 </script>
 
@@ -91,29 +97,14 @@
 		</Button>
 	</PageHeader>
 
-	{#if !localData.ready || loading}
+	<!-- Only the source list needs the server. Continue-reading, updates and the
+	     library preview all come from IndexedDB, so they render regardless — a
+	     down/unreachable Suwayomi used to replace this entire page with the error
+	     card, which is exactly when local-first should be carrying the app. -->
+	{#if !localData.ready}
 		<div class="flex justify-center py-16 text-muted">
 			<Spinner size={26} label="Memuat beranda…" />
 		</div>
-	{:else if error}
-		<Card class="border-danger/30 bg-danger/10">
-			<div class="flex items-start gap-3">
-				<ServerCrash size={20} class="mt-0.5 shrink-0 text-danger" />
-				<div class="min-w-0 flex-1">
-					<p class="font-medium text-danger">Server komik sedang tidak tersambung</p>
-					<p class="mt-1 text-sm text-muted">Coba muat ulang beberapa saat lagi.</p>
-					{#if $page.data.user?.is_admin}
-						<p class="mt-2 text-xs text-muted/80">{error}</p>
-						<p class="mt-1 text-xs text-muted/80">
-							Admin: jalankan <code class="rounded bg-surface-hover px-1.5 py-0.5">cd suwayomi && ./bootstrap.sh</code>
-						</p>
-					{/if}
-					<div class="mt-3">
-						<Button size="sm" variant="secondary" onclick={() => location.reload()}>Coba lagi</Button>
-					</div>
-				</div>
-			</div>
-		</Card>
 	{:else}
 		<ContinueReading chapters={recent} seeAllHref="/history" />
 
@@ -187,7 +178,35 @@
 				/>
 			{/if}
 		</div>
-		{#if sources.length === 0}
+		{#if loading}
+			<div class="flex justify-center py-10 text-muted">
+				<Spinner size={22} label="Memuat source…" />
+			</div>
+		{:else if error}
+			<Card class="border-danger/30 bg-danger/10">
+				<div class="flex items-start gap-3">
+					<ServerCrash size={20} class="mt-0.5 shrink-0 text-danger" />
+					<div class="min-w-0 flex-1">
+						<p class="font-medium text-danger">Server komik sedang tidak tersambung</p>
+						<p class="mt-1 text-sm text-muted">
+							Bacaan dan koleksi yang tersimpan di perangkat tetap bisa dibuka.
+						</p>
+						{#if $page.data.user?.is_admin}
+							<p class="mt-2 text-xs text-muted/80">{error}</p>
+							<p class="mt-1 text-xs text-muted/80">
+								Admin: jalankan <code class="rounded bg-surface-hover px-1.5 py-0.5">cd suwayomi && ./bootstrap.sh</code>
+							</p>
+						{/if}
+						<div class="mt-3 flex flex-wrap gap-2">
+							<!-- Retry the fetch itself; a full reload would throw away the
+							     local content still rendered above. -->
+							<Button size="sm" variant="secondary" onclick={loadSources}>Coba lagi</Button>
+							<Button size="sm" variant="ghost" href="/downloads">Baca offline</Button>
+						</div>
+					</div>
+				</div>
+			</Card>
+		{:else if sources.length === 0}
 			<EmptyState
 				title="Belum ada source aktif"
 				description={noSourcesInstalled
