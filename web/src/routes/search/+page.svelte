@@ -37,6 +37,12 @@
 		let multiProgress = $state({ done: 0, total: 0 });
 		let recent = $state<string[]>([]);
 		let searchGen = 0;
+		// The source the current `mangas` actually came from. loadMore used to read
+		// the live `sourceId`, so changing the Select without pressing Cari made
+		// page 2 come from a DIFFERENT source and get appended to the same grid.
+		let activeSourceId = $state('');
+		let sourcesLoading = $state(true);
+		let loadMoreError = $state('');
 
 		type SourceResult = { source: Source; mangas: BrowseManga[] };
 		let multiResults = $state<SourceResult[]>([]);
@@ -140,13 +146,16 @@
 
 		multiMode = false;
 		loading = true;
+		loadMoreError = '';
 		pageNum = 1;
+		const targetSource = sourceId;
 		try {
-			const result = await fetchBrowseManga(sourceId, 'SEARCH', 1, q);
+			const result = await fetchBrowseManga(targetSource, 'SEARCH', 1, q);
 			if (gen !== searchGen) return;
 			mangas = result.mangas;
 			hasNext = result.hasNextPage;
 			pageNum = 2;
+			activeSourceId = targetSource;
 		} catch (e) {
 			if (gen !== searchGen) return;
 			error = e instanceof Error ? e.message : 'Gagal mencari';
@@ -157,17 +166,30 @@
 
 	async function loadMore() {
 		if (multiMode || loadingMore || !hasNext || loading || !activeQuery) return;
+		if (loadMoreError) return; // wait for an explicit retry, don't hammer
+		const gen = searchGen;
 		loadingMore = true;
 		try {
-			const result = await fetchBrowseManga(sourceId, 'SEARCH', pageNum, activeQuery);
+			// activeSourceId, not sourceId — page 2 must come from the same source
+			// that produced the rows already on screen.
+			const result = await fetchBrowseManga(activeSourceId, 'SEARCH', pageNum, activeQuery);
+			if (gen !== searchGen) return;
 			mangas = [...mangas, ...result.mangas];
 			hasNext = result.hasNextPage;
 			pageNum += 1;
-		} catch {
-			hasNext = false;
+		} catch (e) {
+			if (gen !== searchGen) return;
+			// Silently setting hasNext = false ended pagination for good and looked
+			// identical to "no more results". Surface it with a way back.
+			loadMoreError = e instanceof Error ? e.message : 'Gagal memuat lebih banyak';
 		} finally {
-			loadingMore = false;
+			if (gen === searchGen) loadingMore = false;
 		}
+	}
+
+	function retryLoadMore() {
+		loadMoreError = '';
+		void loadMore();
 	}
 
 	/** "Lihat semua" on a source's section — switch to single-source search on that source. */
@@ -195,6 +217,8 @@
 			allSources = await getInstalledSources(filterByActive ? null : preferences.nsfwFilter);
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Gagal memuat source';
+		} finally {
+			sourcesLoading = false;
 		}
 
 		if (urlQ) void search({ fromUrl: true });
@@ -263,7 +287,15 @@
 		</div>
 	{/if}
 
-	{#if sources.length === 0}
+	<!-- `sourcesLoading` guard: this used to render while getInstalledSources was
+	     still in flight, so every visit flashed "Belum ada source aktif" — a wrong
+	     CTA that persists for seconds on a slow link, and showed up next to the
+	     error box when the fetch failed outright. -->
+	{#if sourcesLoading}
+		<div class="flex justify-center py-10 text-muted">
+			<Spinner size={22} label="Memuat source…" />
+		</div>
+	{:else if sources.length === 0 && !error}
 		<EmptyState
 			title="Belum ada source aktif"
 			description={filterByActive
@@ -339,6 +371,11 @@
 		<div bind:this={sentinel} class="h-1"></div>
 		{#if loadingMore}
 			<div class="flex justify-center py-8 text-muted"><Spinner size={22} /></div>
+		{:else if loadMoreError}
+			<div class="flex flex-col items-center gap-2 py-8">
+				<p class="text-sm text-muted">{loadMoreError}</p>
+				<Button size="sm" variant="secondary" onclick={retryLoadMore}>Muat lagi</Button>
+			</div>
 		{/if}
 	{/if}
 </section>
