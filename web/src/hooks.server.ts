@@ -36,8 +36,24 @@ function tooManyRequests(retryAfter: number): Response {
 	});
 }
 
+/**
+ * SvelteKit matches routes on the DECODED pathname but leaves `url.pathname`
+ * percent-encoded, so gating on the raw value let `/%61dmin/users` route to
+ * `/admin/users` while `startsWith('/admin')` read false. Every access check
+ * below uses this; only the proxy target URL keeps the raw form. Malformed
+ * escapes fail closed to the raw string rather than throwing.
+ */
+function decodedPathname(url: URL): string {
+	try {
+		return decodeURIComponent(url.pathname);
+	} catch {
+		return url.pathname;
+	}
+}
+
 export const handle: Handle = async ({ event, resolve }) => {
-	const { pathname } = event.url;
+	const rawPathname = event.url.pathname;
+	const pathname = decodedPathname(event.url);
 
 	if (authEnabled()) {
 		const token = readSessionToken(event.cookies);
@@ -90,7 +106,9 @@ export const handle: Handle = async ({ event, resolve }) => {
 			}
 		}
 
-		const target = `${SUWAYOMI_URL}${pathname}${event.url.search}`;
+		// Raw (still-encoded) path here — the gates above ran on the decoded form,
+		// but the upstream request must reproduce the client's original path.
+		const target = `${SUWAYOMI_URL}${rawPathname}${event.url.search}`;
 		const headers = new Headers(event.request.headers);
 		headers.delete('host');
 		headers.delete('accept-encoding');

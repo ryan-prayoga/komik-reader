@@ -2,7 +2,10 @@ import type { Actions, PageServerLoad } from './$types';
 import { requireAdmin } from '$lib/server/admin';
 import { getAllowRegistration, setAllowRegistration } from '$lib/server/settings';
 
-export const load: PageServerLoad = async () => {
+// Re-asserted here, not just in the parent layout — a load node can be skipped
+// via `?x-sveltekit-invalidated=`, which exposed this to anonymous requests.
+export const load: PageServerLoad = async ({ locals }) => {
+	requireAdmin(locals.user);
 	return { allowRegistration: getAllowRegistration() };
 };
 

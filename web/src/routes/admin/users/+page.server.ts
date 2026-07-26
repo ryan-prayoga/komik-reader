@@ -16,8 +16,13 @@ import {
 	validatePassword
 } from '$lib/server/users';
 
+// The parent layout's requireAdmin is not enough on its own: SvelteKit lets a
+// client skip individual load nodes via `?x-sveltekit-invalidated=`, so this
+// leaf must re-assert admin itself or `__data.json` would serve every user's
+// email to any logged-in account.
 export const load: PageServerLoad = async ({ locals }) => {
-	return { users: listUsers(), currentUserId: locals.user!.id };
+	requireAdmin(locals.user);
+	return { users: listUsers(), currentUserId: locals.user.id };
 };
 
 export const actions: Actions = {
