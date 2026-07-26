@@ -23,16 +23,51 @@ const STORES: Record<LocalStore, string> = {
 // error/close so a later call reopens rather than reusing a dead handle.
 let dbPromise: Promise<IDBDatabase> | null = null;
 
+// How long to wait on a blocked upgrade before giving up. A version bump can
+// only proceed once every other connection closes; without a deadline the open
+// request just sits there, and since app start awaits localData.init(), the
+// whole UI hangs on a shimmer with no error to show.
+const BLOCKED_TIMEOUT_MS = 5000;
+
 function openDb(): Promise<IDBDatabase> {
 	if (!dbPromise) {
 		dbPromise = new Promise((resolve, reject) => {
 			const req = indexedDB.open(DB_NAME, DB_VERSION);
+			let blockedTimer: ReturnType<typeof setTimeout> | null = null;
+			const clearBlocked = () => {
+				if (blockedTimer) {
+					clearTimeout(blockedTimer);
+					blockedTimer = null;
+				}
+			};
+			// Another connection (usually a tab still running the pre-deploy build,
+			// which has no onversionchange handler to close itself) is holding the
+			// old version open.
+			req.onblocked = () => {
+				clearBlocked();
+				blockedTimer = setTimeout(() => {
+					dbPromise = null;
+					reject(
+						new Error(
+							'Database lokal terkunci tab lain. Tutup tab Komik Reader yang masih terbuka lalu muat ulang.'
+						)
+					);
+				}, BLOCKED_TIMEOUT_MS);
+			};
 			req.onerror = () => {
+				clearBlocked();
 				dbPromise = null;
 				reject(req.error);
 			};
 			req.onsuccess = () => {
+				clearBlocked();
 				const db = req.result;
+				// Step out of the way when another tab needs to upgrade, so we are
+				// not the connection blocking it.
+				db.onversionchange = () => {
+					db.close();
+					dbPromise = null;
+				};
 				db.onclose = () => {
 					dbPromise = null;
 				};
@@ -58,6 +93,10 @@ export async function putItem<T>(store: LocalStore, value: T): Promise<void> {
 		tx.objectStore(store).put(value);
 		tx.oncomplete = () => resolve();
 		tx.onerror = () => reject(tx.error);
+		// An abort (quota exceeded, a throwing handler, the connection closing
+		// under us) fires neither of the above — without this the promise never
+		// settles and its awaiter hangs for the life of the page.
+		tx.onabort = () => reject(tx.error ?? new Error('Transaksi IndexedDB dibatalkan'));
 	});
 }
 
@@ -70,6 +109,10 @@ export async function putMany<T>(store: LocalStore, values: T[]): Promise<void> 
 		for (const v of values) os.put(v);
 		tx.oncomplete = () => resolve();
 		tx.onerror = () => reject(tx.error);
+		// An abort (quota exceeded, a throwing handler, the connection closing
+		// under us) fires neither of the above — without this the promise never
+		// settles and its awaiter hangs for the life of the page.
+		tx.onabort = () => reject(tx.error ?? new Error('Transaksi IndexedDB dibatalkan'));
 	});
 }
 
@@ -95,6 +138,10 @@ export async function updateItem<T>(
 		};
 		tx.oncomplete = () => resolve();
 		tx.onerror = () => reject(tx.error);
+		// An abort (quota exceeded, a throwing handler, the connection closing
+		// under us) fires neither of the above — without this the promise never
+		// settles and its awaiter hangs for the life of the page.
+		tx.onabort = () => reject(tx.error ?? new Error('Transaksi IndexedDB dibatalkan'));
 	});
 }
 
@@ -105,6 +152,7 @@ export async function getAll<T>(store: LocalStore): Promise<T[]> {
 		const req = tx.objectStore(store).getAll();
 		req.onsuccess = () => resolve((req.result as T[]) ?? []);
 		req.onerror = () => reject(req.error);
+		tx.onabort = () => reject(tx.error ?? new Error('Transaksi IndexedDB dibatalkan'));
 	});
 }
 
@@ -115,6 +163,7 @@ export async function getItem<T>(store: LocalStore, key: IDBValidKey): Promise<T
 		const req = tx.objectStore(store).get(key);
 		req.onsuccess = () => resolve((req.result as T) ?? null);
 		req.onerror = () => reject(req.error);
+		tx.onabort = () => reject(tx.error ?? new Error('Transaksi IndexedDB dibatalkan'));
 	});
 }
 
@@ -134,5 +183,9 @@ export async function deleteItem(store: LocalStore, key: IDBValidKey): Promise<v
 		tx.objectStore(store).delete(key);
 		tx.oncomplete = () => resolve();
 		tx.onerror = () => reject(tx.error);
+		// An abort (quota exceeded, a throwing handler, the connection closing
+		// under us) fires neither of the above — without this the promise never
+		// settles and its awaiter hangs for the life of the page.
+		tx.onabort = () => reject(tx.error ?? new Error('Transaksi IndexedDB dibatalkan'));
 	});
 }
