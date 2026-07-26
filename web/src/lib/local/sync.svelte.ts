@@ -6,10 +6,24 @@ import type { LocalHistory, LocalLibrary, LocalCategory, SyncChange, SyncEntity 
 const PUSH_KEY = 'syncPushCursor'; // max local updatedAt already pushed (client clock)
 const PULL_KEY = 'syncPullCursor'; // server changefeed seq already pulled
 
+/** Thrown when the server refused everything because this device's clock is off. */
+class ClockSkewError extends Error {
+	constructor(public rejected: number) {
+		super(`clock skew: ${rejected} changes refused`);
+		this.name = 'ClockSkewError';
+	}
+}
+
 class SyncEngine {
 	loggedIn = $state(false);
 	syncing = $state(false);
 	lastSyncedAt = $state<number | null>(null);
+	/**
+	 * How far this device's clock is ahead of the server, in ms, when that skew is
+	 * actually blocking writes. 0 means no problem. Surfaced in Settings so the
+	 * user can act on it instead of wondering why nothing syncs.
+	 */
+	clockSkewMs = $state(0);
 
 	#pending = false;
 	#timer: ReturnType<typeof setTimeout> | null = null;
@@ -73,16 +87,22 @@ class SyncEngine {
 			return;
 		}
 		this.syncing = true;
+		let skewed = false;
 		try {
 			await this.#sync();
 			this.lastSyncedAt = Date.now();
-		} catch {
-			// best-effort; a later change or visibility event retries
+			this.clockSkewMs = 0;
+		} catch (e) {
+			// A clock-skew failure must NOT stamp lastSyncedAt: reporting a fresh
+			// sync time while the server accepted nothing is what made this
+			// invisible in the first place.
+			skewed = e instanceof ClockSkewError;
 		} finally {
 			this.syncing = false;
 			if (this.#pending) {
 				this.#pending = false;
-				this.schedule(500);
+				// Retrying immediately against a wrong clock only burns rate limit.
+				if (!skewed) this.schedule(500);
 			}
 		}
 	}
@@ -164,7 +184,25 @@ class SyncEngine {
 			cursor: number;
 			acceptedMaxUpdatedAt?: number;
 			acceptedCount?: number;
+			rejectedFutureCount?: number;
+			serverTime?: number;
 		};
+
+		// The server refuses rows whose updatedAt is more than 15 minutes ahead of
+		// its own clock. That used to be invisible: a device running fast had every
+		// write refused while Settings kept showing "Terakhir sync: <jam>" — the
+		// account silently received nothing, for as long as the clock stayed wrong.
+		const rejectedFuture = Number(result.rejectedFutureCount ?? 0);
+		this.clockSkewMs =
+			rejectedFuture > 0 && typeof result.serverTime === 'number'
+				? Date.now() - result.serverTime
+				: 0;
+		if (rejectedFuture > 0 && Number(result.acceptedCount ?? 0) === 0) {
+			// Nothing landed and nothing will until the clock is fixed. Advancing
+			// cursors or rescheduling here would just spin against the rate limiter.
+			await setMeta(PULL_KEY, result.cursor);
+			throw new ClockSkewError(rejectedFuture);
+		}
 
 		let applied = false;
 		for (const ch of result.changes) {

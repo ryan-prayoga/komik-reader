@@ -29,6 +29,14 @@ export type SyncResult = {
 		acceptedMaxUpdatedAt: number;
 		/** How many of the submitted changes were applied (not skipped/capped). */
 		acceptedCount: number;
+		/**
+		 * Changes refused because their updatedAt was too far in the future. Reported
+		 * so the client can tell the user their device clock is wrong instead of
+		 * showing a successful sync that silently stored nothing.
+		 */
+		rejectedFutureCount: number;
+		/** Server wall clock, so the client can show how far off it is. */
+		serverTime: number;
 	};
 
 /**
@@ -64,11 +72,18 @@ export function syncChanges(
 			let seq = (getMaxSeq.get(userId) as { m: number }).m;
 			let acceptedMaxUpdatedAt = 0;
 			let acceptedCount = 0;
+			let rejectedFutureCount = 0;
 			for (const c of batch) {
 				if (!VALID_ENTITIES.has(c.entity) || typeof c.itemKey !== 'string') continue;
 				if (c.itemKey.length === 0 || c.itemKey.length > MAX_ITEM_KEY_LEN) continue;
 				if (typeof c.updatedAt !== 'number' || !Number.isFinite(c.updatedAt)) continue;
-				if (c.updatedAt > now + MAX_CLOCK_SKEW_MS) continue;
+				if (c.updatedAt > now + MAX_CLOCK_SKEW_MS) {
+					// Counted, not silently dropped: a device whose clock runs fast used
+					// to have every write refused while its UI kept reporting a
+					// successful sync.
+					rejectedFutureCount += 1;
+					continue;
+				}
 				if (c.updatedAt < 0) continue;
 				let serialized: string;
 				try {
@@ -110,10 +125,10 @@ export function syncChanges(
 				seq: number;
 			}[];
 			const cursor = rows.length ? rows[rows.length - 1].seq : since;
-			return { rows, cursor, acceptedMaxUpdatedAt, acceptedCount };
+			return { rows, cursor, acceptedMaxUpdatedAt, acceptedCount, rejectedFutureCount };
 		});
 
-		const { rows, cursor, acceptedMaxUpdatedAt, acceptedCount } = run();
+		const { rows, cursor, acceptedMaxUpdatedAt, acceptedCount, rejectedFutureCount } = run();
 		return {
 			changes: rows.map((r) => {
 				let data: unknown = null;
@@ -132,6 +147,8 @@ export function syncChanges(
 			}),
 			cursor,
 			acceptedMaxUpdatedAt,
-			acceptedCount
+			acceptedCount,
+			rejectedFutureCount,
+			serverTime: now
 		};
 	}

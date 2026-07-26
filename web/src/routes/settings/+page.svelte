@@ -133,7 +133,18 @@
 					<Button href="/login" size="sm">Login</Button>
 				{/if}
 			</div>
-			{#if syncEngine.loggedIn && syncEngine.lastSyncedAt}
+			{#if syncEngine.loggedIn && syncEngine.clockSkewMs > 0}
+				<!-- The server refuses writes stamped too far into the future, so nothing
+				     reaches the account until the device clock is corrected. Without this
+				     the failure is completely silent. -->
+				<p
+					class="mt-3 rounded-[var(--radius)] border border-danger/30 bg-danger/10 p-3 text-xs text-danger"
+				>
+					Jam perangkat ini {Math.round(syncEngine.clockSkewMs / 60000)} menit lebih cepat dari server,
+					jadi bacaan belum tersimpan ke akun. Samakan jam perangkat (aktifkan jam otomatis), lalu sync
+					lagi.
+				</p>
+			{:else if syncEngine.loggedIn && syncEngine.lastSyncedAt}
 				<p class="mt-3 text-xs text-muted">
 					Terakhir sync: {new Date(syncEngine.lastSyncedAt).toLocaleTimeString('id-ID')}
 				</p>
