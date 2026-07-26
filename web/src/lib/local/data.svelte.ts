@@ -14,6 +14,24 @@ export type LocalDataExport = {
 
 const nowMs = () => Date.now();
 
+/**
+ * Stamp a bulk mutation with STRICTLY INCREASING `updatedAt` values.
+ *
+ * Giving every row the same millisecond broke the sync push: it collects rows
+ * with `updatedAt > pushCursor` in batches of 500 and then advances the cursor
+ * to the highest accepted value. With 800 identical timestamps, the first 500
+ * synced, the cursor became that timestamp, and the remaining 300 — equal, not
+ * greater — were never collected again. Those deletions stayed local forever
+ * while other devices kept showing the chapters as present.
+ *
+ * A few hundred rows only pushes the stamp a few hundred ms into the future,
+ * far inside the server's 15-minute skew tolerance.
+ */
+function stampBulk<T extends { updatedAt: number }>(rows: T[], patch: (row: T) => T): T[] {
+	const base = nowMs();
+	return rows.map((r, i) => ({ ...patch(r), updatedAt: base + i }));
+}
+
 const DEVICE_ID_KEY = 'deviceId';
 
 function makeDeviceId(): string {
@@ -333,11 +351,7 @@ class LocalData {
 	async removeHistoryByManga(mangaId: number) {
 		const rows = this.history.filter((h) => h.mangaId === mangaId);
 		if (!rows.length) return;
-		const ts = nowMs();
-		await putMany(
-			'history',
-			rows.map((r) => ({ ...r, deleted: true, updatedAt: ts }))
-		);
+		await putMany('history', stampBulk(rows, (r) => ({ ...r, deleted: true })));
 		for (const r of rows) this.#historyByChapterId.delete(r.chapterId);
 		this.history = this.history.filter((h) => h.mangaId !== mangaId);
 		this.#changed();
@@ -347,11 +361,7 @@ class LocalData {
 	async clearAllHistory() {
 		const rows = this.history;
 		if (!rows.length) return;
-		const ts = nowMs();
-		await putMany(
-			'history',
-			rows.map((r) => ({ ...r, deleted: true, updatedAt: ts }))
-		);
+		await putMany('history', stampBulk(rows, (r) => ({ ...r, deleted: true })));
 		this.#setHistoryList([]);
 		this.#changed();
 	}
@@ -448,9 +458,12 @@ class LocalData {
 		await putItem('categories', { ...row, deleted: true, updatedAt: ts });
 		this.categories = this.categories.filter((c) => c.id !== id);
 		// Drop the category from any library entries that reference it.
-		const affected = this.library
-			.filter((l) => l.categoryIds.includes(id))
-			.map((l) => ({ ...l, categoryIds: l.categoryIds.filter((c) => c !== id), updatedAt: ts }));
+		// Same collision hazard as the bulk tombstones — a category holding more
+		// than one push batch of manga would strand the rows past the first 500.
+		const affected = stampBulk(
+			this.library.filter((l) => l.categoryIds.includes(id)),
+			(l) => ({ ...l, categoryIds: l.categoryIds.filter((c) => c !== id) })
+		);
 		if (affected.length) {
 			await putMany('library', affected);
 			const byId = new Map(affected.map((a) => [a.mangaId, a]));

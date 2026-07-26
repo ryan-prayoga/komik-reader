@@ -42,8 +42,29 @@ describe('planChapterIdMigration', () => {
 		expect(plan.writes).toHaveLength(2);
 		const tombstone = plan.writes.find((w) => w.chapterId === 100);
 		expect(tombstone?.deleted).toBe(true);
-		expect(tombstone?.updatedAt).toBe(NOW);
+		// Each write gets its own stamp (see below), so the tombstone sits just
+		// after the migrated row rather than sharing its timestamp.
+		expect(tombstone?.updatedAt).toBe(NOW + 1);
 		expect(plan.remap.get(100)).toBe(m);
+	});
+
+	it('gives every written row a distinct updatedAt', () => {
+		// Identical timestamps collide with the sync push cursor: it collects
+		// `updatedAt > cursor` in batches of 500 and then advances the cursor to the
+		// highest accepted value, so rows equal to it are never collected again. A
+		// large re-key would strand everything past the first batch.
+		const history = Array.from({ length: 40 }, (_, i) =>
+			row({ chapterId: 100 + i, chapterNumber: 200 + i, isRead: true })
+		);
+		const live = Array.from({ length: 40 }, (_, i) => ch(900 + i, 200 + i));
+
+		const plan = planChapterIdMigration(1, live, history, NOW);
+
+		expect(plan.migrated).toHaveLength(40);
+		expect(plan.writes).toHaveLength(80);
+		const stamps = plan.writes.map((w) => w.updatedAt);
+		expect(new Set(stamps).size).toBe(stamps.length);
+		expect(Math.min(...stamps)).toBe(NOW);
 	});
 
 	it('leaves rows whose chapterId still exists untouched', () => {

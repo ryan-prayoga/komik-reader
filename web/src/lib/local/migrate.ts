@@ -50,6 +50,11 @@ export function planChapterIdMigration(
 	);
 
 	const plan: MigrationPlan = { writes: [], migrated: [], remap: new Map() };
+	// Every written row gets its own timestamp. Sharing one `now` across a large
+	// migration collides with the sync push, which collects `updatedAt > cursor`
+	// in batches and then advances the cursor to the highest accepted value —
+	// rows equal to it are never collected again (see stampBulk in data.svelte.ts).
+	let stamp = now;
 	// history arrives sorted by updatedAt desc, so when two orphans claim the
 	// same live chapter the most recently touched one wins.
 	for (const h of history) {
@@ -64,13 +69,13 @@ export function planChapterIdMigration(
 			...h,
 			chapterId: target.id,
 			chapterName: target.name || h.chapterName,
-			updatedAt: now,
+			updatedAt: stamp++,
 			deleted: false
 		};
 		plan.migrated.push(next);
 		plan.remap.set(h.chapterId, next);
 		// Tombstone the old key so sync propagates the re-key to other devices.
-		plan.writes.push(next, { ...h, deleted: true, updatedAt: now });
+		plan.writes.push(next, { ...h, deleted: true, updatedAt: stamp++ });
 	}
 	return plan;
 }
