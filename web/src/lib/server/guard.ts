@@ -156,12 +156,25 @@ const ADMIN_ONLY_MUTATIONS = [
 const ADMIN_ONLY_SET: ReadonlySet<string> = new Set(ADMIN_ONLY_MUTATIONS);
 
 	function isMutation(query: string): boolean {
-		return /(^|[\s})])mutation[\s({]/.test(query);
+		return /(^|[\s,})])mutation[\s({]/.test(query);
 	}
 
-	/** Remove # and /* comments so allowlist matching cannot be bypassed via comment text. */
-	function stripGraphqlComments(query: string): string {
-		return query.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/#[^\n\r]*/g, ' ');
+	/**
+	 * Normalize the tokens GraphQL itself ignores, so allowlist matching cannot be
+	 * bypassed by hiding the operation keyword behind one of them:
+	 *   - `#` / `/* *​/` comments (bypass via comment text)
+	 *   - commas, which the spec (§2.1.6) treats as insignificant and therefore
+	 *     legal before a definition — `,mutation {…}` is a real mutation that the
+	 *     operation regexes would otherwise not recognize at all.
+	 * Commas inside string literals get normalized too; that can only make the
+	 * match stricter (deny), never looser, and mutationRootFields blanks strings
+	 * before it parses.
+	 */
+	function normalizeGraphqlSource(query: string): string {
+		return query
+			.replace(/\/\*[\s\S]*?\*\//g, ' ')
+			.replace(/#[^\n\r]*/g, ' ')
+			.replace(/,/g, ' ');
 	}
 
 	/** Neutralize string contents so braces inside literals do not skew brace-depth scanning. */
@@ -189,11 +202,16 @@ const ADMIN_ONLY_SET: ReadonlySet<string> = new Set(ADMIN_ONLY_MUTATIONS);
 		return null;
 	}
 
-	/** Extract mutation root field names; null = unparseable (deny). */
+	/**
+	 * Extract mutation root field names; null = unparseable (deny).
+	 * Collects from EVERY mutation operation in the document, not just the one
+	 * `operationName` selects — otherwise a body could smuggle a second operation
+	 * past the allowlist and then pick it by name at execution time.
+	 */
 	function mutationRootFields(query: string): string[] | null {
-		const s = stripGraphqlStrings(stripGraphqlComments(query));
+		const s = stripGraphqlStrings(normalizeGraphqlSource(query));
 		const fields: string[] = [];
-		const opRe = /(^|[\s})])mutation(?=[\s({])/g;
+		const opRe = /(^|[\s,})])mutation(?=[\s({])/g;
 		let m: RegExpExecArray | null;
 		let found = false;
 
@@ -313,7 +331,7 @@ const ADMIN_ONLY_SET: ReadonlySet<string> = new Set(ADMIN_ONLY_MUTATIONS);
 			if (op == null || typeof op !== 'object') return false;
 			const q = String((op as { query?: unknown }).query ?? '');
 			if (!q.trim()) return false;
-			return fn(stripGraphqlComments(q));
+			return fn(normalizeGraphqlSource(q));
 		});
 	} catch {
 		return false;

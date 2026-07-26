@@ -218,6 +218,33 @@ describe('isGuestAllowedGraphql', () => {
 				)
 			).toBe(false);
 		});
+
+		it('denies admin mutations hidden behind GraphQL ignored tokens (comma, comment)', () => {
+			// A comma is insignificant per spec §2.1.6, so `,mutation {…}` executes
+			// as a mutation. The operation regexes used to require whitespace/}/)
+			// before the keyword, which let a single leading comma skip the gate.
+			for (const prefix of [',', ' ,', ',,', '\n,', '# x\n,', ',# x\n']) {
+				expect(
+					isGuestAllowedGraphql(
+						gqlBody(`${prefix}mutation {
+							updateExtension(input: { id: "x", patch: { install: true } }) {
+								extension { pkgName }
+							}
+						}`)
+					)
+				).toBe(false);
+			}
+		});
+
+		it('still allows guest fetch mutations written with leading commas', () => {
+			expect(
+				isGuestAllowedGraphql(
+					gqlBody(`,mutation {
+						fetchChapterPages(input: { chapterId: 1 }) { pages }
+					}`)
+				)
+			).toBe(true);
+		});
 	});
 
 	describe('isUserAllowedGraphql', () => {
@@ -297,6 +324,26 @@ describe('isGuestAllowedGraphql', () => {
 
 		it('allows pure queries', () => {
 			expect(isUserAllowedGraphql(gqlBody(`query { aboutServer { name } }`))).toBe(true);
+		});
+
+		it('denies a second operation smuggled in after a comma (operationName pick)', () => {
+			// The comma made the second `mutation` invisible to the root-field
+			// scanner, so an admin-only op could ride along in the same document and
+			// then be selected by `operationName` — which is never validated.
+			expect(
+				isUserAllowedGraphql(
+					JSON.stringify({
+						operationName: 'B',
+						query: `mutation A {
+							updateChapter(input: { id: 1, patch: { isRead: true } }) { chapter { id } }
+						},mutation B {
+							setSettings(input: { settings: { maxSourcesInParallel: 1 } }) {
+								settings { maxSourcesInParallel }
+							}
+						}`
+					})
+				)
+			).toBe(false);
 		});
 
 		it('denies expanded admin-only ops (backup, downloader, external install)', () => {
