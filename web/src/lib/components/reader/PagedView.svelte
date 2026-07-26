@@ -2,6 +2,11 @@
 	import { readerSettings, type ReaderFit, type ReaderDirection } from '$lib/reader-settings.svelte';
 	import { preferences } from '$lib/preferences.svelte';
 	import Spinner from '$lib/components/ui/Spinner.svelte';
+	import {
+		pairStart as pairStartOf,
+		nextIndex as nextIndexOf,
+		lastVisibleIndex as lastVisibleIndexOf
+	} from '$lib/reader/paging';
 
 	interface Props {
 		pages: string[];
@@ -11,7 +16,11 @@
 		fit?: ReaderFit;
 		zoom?: number;
 		direction?: ReaderDirection;
-		onpage: (index: number) => void;
+		// `lastVisible` is the highest page index currently on screen — same as
+		// `index` in single mode, the right half of the spread in double mode.
+		// Progress/read-state must key off it, or a chapter whose final page only
+		// ever appears as a spread partner never counts as finished.
+		onpage: (index: number, lastVisible: number) => void;
 		ontoggle: () => void;
 		// Return true if the handler actually started navigating. Returning false
 		// (no adjacent chapter) leaves the boundary live instead of latching it.
@@ -96,22 +105,15 @@
 		return `${url}${url.includes('?') ? '&' : '?'}_retry=${n}`;
 	}
 
-	// Left page index of the pair that contains `i`. In offset double mode the
-	// very first page stands alone so subsequent spreads line up.
-	function pairStart(i: number): number {
-		if (!double) return i;
-		if (doubleOffset) {
-			if (i <= 0) return 0;
-			return i - ((i - 1) % 2);
-		}
-		return i - (i % 2);
-	}
+	// Pairing math lives in $lib/reader/paging (pure + unit-tested); these just
+	// bind it to the current props.
+	const mode = $derived({ double, doubleOffset });
+	const pairStart = (i: number) => pairStartOf(i, mode);
+	const nextIndex = (i: number) => nextIndexOf(i, mode);
+	const lastVisibleIndex = (i: number) => lastVisibleIndexOf(i, mode, lastIndex);
 
-	function nextIndex(i: number): number {
-		if (!double) return i + 1;
-		const start = pairStart(i);
-		if (doubleOffset && start === 0) return 1;
-		return start + 2;
+	function report() {
+		onpage(current, lastVisibleIndex(current));
 	}
 
 	function next() {
@@ -126,7 +128,7 @@
 			return;
 		}
 		current = n;
-		onpage(current);
+		report();
 	}
 	function prev() {
 		if (current <= 0) {
@@ -135,7 +137,7 @@
 			return;
 		}
 		current = pairStart(current - 1);
-		onpage(current);
+		report();
 	}
 
 	// Keyboard navigation (reader is the focused surface). ArrowRight advances in

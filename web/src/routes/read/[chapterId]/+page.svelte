@@ -329,14 +329,21 @@
 		return localData.history.find((h) => h.chapterId === id)?.isRead ?? false;
 	}
 
-		function reportPage(index: number) {
+		// `lastVisible` defaults to `index` for callers with a single page position
+		// (the slider's onseek). In double mode PagedView passes the right half of
+		// the spread: `index` stays the left page (what the label and slider track),
+		// while the read check uses the furthest page the user has actually seen.
+		// Without that split, a chapter with an even page count topped out at
+		// index = length - 2 and never latched isRead — so it stayed "unread" in the
+		// picker and reopened at its final spread instead of at the start.
+		function reportPage(index: number, lastVisible: number = index) {
 		currentPage = index;
 		// Monotonic: never let scrolling back downgrade an already-read chapter
 		// back to unread (isRead here is recomputed from raw page position on
 		// every call, so without this guard it would flip false again).
 		const alreadyRead = isChapterReadAnywhere(chapterId);
 		const isRead =
-			alreadyRead || (pages.length > 0 && index >= pages.length - 1);
+			alreadyRead || (pages.length > 0 && lastVisible >= pages.length - 1);
 		void queueChapterProgress(chapterId, index, isRead);
 		if (isRead) markChapterReadLocally(chapterId);
 		if (mangaId) {
