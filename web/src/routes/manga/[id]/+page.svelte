@@ -201,13 +201,20 @@
 			// User explicitly refreshed while on detail → mark seen.
 			await seedUpdates(true);
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Gagal memuat chapter';
+			// A failed refresh must NOT go through `error`: that state replaces the
+			// whole page, so one flaky tap used to wipe the cover, the read CTA and
+			// the chapter list that were already on screen. The page is still valid,
+			// only the refresh failed — say so and leave it standing.
+			showToast(e instanceof Error ? e.message : 'Gagal memuat chapter', 'error');
 		} finally {
 			refreshing = false;
 		}
 	}
 
-	onMount(async () => {
+	// Fatal load only — the page has no content to show without it.
+	async function retryLoad() {
+		loading = true;
+		error = '';
 		try {
 			await load();
 		} catch (e) {
@@ -215,6 +222,10 @@
 		} finally {
 			loading = false;
 		}
+	}
+
+	onMount(async () => {
+		await retryLoad();
 		listOfflineChapters().then((list) => {
 			offlineIds = new Set(list.map((c) => c.chapterId));
 		});
@@ -256,7 +267,6 @@
 		downloadingAll = true;
 		cancelDownload = false;
 		downloadProgress = '';
-		error = '';
 		try {
 			const sorted = [...merged].sort((a, b) => a.sourceOrder - b.sourceOrder);
 			const base = filter === 'unread' ? sorted.filter((c) => !c.read) : sorted;
@@ -289,7 +299,9 @@
 				failed > 0 ? 'info' : 'success'
 			);
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Gagal download';
+			// Same reasoning as refreshChapters: a batch-download failure is not a
+			// reason to tear down a page the user is still reading.
+			showToast(e instanceof Error ? e.message : 'Gagal download', 'error');
 		} finally {
 			downloadingAll = false;
 			cancelDownload = false;
@@ -363,8 +375,12 @@
 			{/each}
 		</div>
 	{:else if error}
-		<div class="rounded-[var(--radius)] border border-danger/30 bg-danger/10 p-4 text-sm text-danger">
-			{error}
+		<div class="rounded-[var(--radius)] border border-danger/30 bg-danger/10 p-4">
+			<p class="text-sm text-danger">{error}</p>
+			<div class="mt-3 flex flex-wrap gap-2">
+				<Button size="sm" variant="secondary" onclick={retryLoad}>Coba lagi</Button>
+				<Button size="sm" variant="ghost" onclick={goBack}>Kembali</Button>
+			</div>
 		</div>
 	{:else if manga}
 		<!-- In-flow back control (avoids fixed offsets vs top bar / collapsed sidebar) -->
