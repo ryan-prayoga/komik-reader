@@ -31,7 +31,11 @@
 		}}
 	>
 		{#if form?.error}
-			<div class="rounded-[var(--radius)] border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
+			<!-- role=alert so the failure is announced, matching the login form. -->
+			<div
+				role="alert"
+				class="rounded-[var(--radius)] border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger"
+			>
 				{form.error}
 			</div>
 		{/if}

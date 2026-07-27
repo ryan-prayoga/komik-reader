@@ -2,6 +2,7 @@
 	import type { Snippet } from 'svelte';
 	import { fade, scale } from 'svelte/transition';
 	import { trapFocus } from '$lib/utils/focusTrap';
+	import { scrollLock } from '$lib/utils/scrollLock';
 	import { motionDuration } from '$lib/utils/motion';
 	import X from '@lucide/svelte/icons/x';
 
@@ -29,7 +30,7 @@
 <svelte:window onkeydown={open ? onkeydown : undefined} />
 
 {#if open}
-	<div class="fixed inset-0 z-[100] flex items-center justify-center p-4">
+	<div use:scrollLock class="fixed inset-0 z-[100] flex items-center justify-center p-4">
 		<button
 			type="button"
 			aria-label="Tutup"

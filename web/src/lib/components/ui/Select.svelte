@@ -19,15 +19,20 @@
 		children,
 		...rest
 	}: Props = $props();
+
+	// Same fix as Input: `label` without `id` rendered `for=undefined`, leaving the
+	// control unlabelled and the label inert. The search page relies on this.
+	const fallbackId = 'select-' + Math.random().toString(36).slice(2, 8);
+	const fieldId = $derived(id ?? fallbackId);
 </script>
 
 <div class="flex flex-col gap-1.5 {klass}">
 	{#if label}
-		<label for={id} class="text-sm font-medium text-text">{label}</label>
+		<label for={fieldId} class="text-sm font-medium text-text">{label}</label>
 	{/if}
 	<div class="relative">
 		<select
-			{id}
+			id={fieldId}
 			bind:value
 			class="w-full appearance-none rounded-[var(--radius)] border border-border bg-surface px-3 py-2 pr-9 text-sm text-text outline-none transition focus:border-accent"
 			{...rest}

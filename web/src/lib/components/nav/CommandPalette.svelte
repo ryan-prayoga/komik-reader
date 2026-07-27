@@ -1,7 +1,9 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { fade, scale } from 'svelte/transition';
 	import { trapFocus } from '$lib/utils/focusTrap';
+	import { scrollLock } from '$lib/utils/scrollLock';
 	import { motionDuration } from '$lib/utils/motion';
 	import { localData } from '$lib/local/data.svelte';
 	import { primaryNav, manageNav } from '$lib/nav';
@@ -17,6 +19,17 @@
 	let query = $state('');
 	let active = $state(0);
 	let inputEl = $state<HTMLInputElement | null>(null);
+	let listEl = $state<HTMLDivElement | null>(null);
+	const listId = 'cmdk-' + Math.random().toString(36).slice(2, 8);
+
+	/**
+	 * Arrow-key selection has to bring the row into view: the list caps at 50vh,
+	 * so past the fold the highlight moved somewhere the user could not see.
+	 */
+	function scrollActiveIntoView() {
+		const el = listEl?.querySelector<HTMLElement>(`#${CSS.escape(listId)}-opt-${active}`);
+		el?.scrollIntoView({ block: 'nearest' });
+	}
 
 	type Item = {
 		id: string;
@@ -130,11 +143,25 @@
 		if (e.key === 'ArrowDown') {
 			e.preventDefault();
 			active = Math.min(results.length - 1, active + 1);
+			void tick().then(scrollActiveIntoView);
 			return;
 		}
 		if (e.key === 'ArrowUp') {
 			e.preventDefault();
 			active = Math.max(0, active - 1);
+			void tick().then(scrollActiveIntoView);
+			return;
+		}
+		if (e.key === 'Home') {
+			e.preventDefault();
+			active = 0;
+			void tick().then(scrollActiveIntoView);
+			return;
+		}
+		if (e.key === 'End') {
+			e.preventDefault();
+			active = Math.max(0, results.length - 1);
+			void tick().then(scrollActiveIntoView);
 			return;
 		}
 		if (e.key === 'Enter' && results[active]) {
@@ -147,7 +174,7 @@
 <svelte:window onkeydown={open ? onKey : undefined} />
 
 {#if open}
-	<div class="fixed inset-0 z-[200] flex items-start justify-center px-4 pt-[12vh]">
+	<div use:scrollLock class="fixed inset-0 z-[200] flex items-start justify-center px-4 pt-[12vh]">
 		<button
 			type="button"
 			aria-label="Tutup"
@@ -165,23 +192,34 @@
 		>
 			<div class="flex items-center gap-2 border-b border-border px-3 py-3">
 				<Search size={16} class="shrink-0 text-muted" />
+				<!-- combobox + listbox so the highlighted row is announced as the
+				     active option instead of being a purely visual state. -->
 				<input
 					bind:this={inputEl}
 					bind:value={query}
 					placeholder="Lompat ke halaman, koleksi, atau cari…"
+					role="combobox"
+					aria-expanded="true"
+					aria-controls={listId}
+					aria-activedescendant={results[active] ? `${listId}-opt-${active}` : undefined}
+					aria-label="Cari halaman, koleksi, atau riwayat"
+					autocomplete="off"
 					class="min-w-0 flex-1 bg-transparent text-sm text-text outline-none placeholder:text-muted"
 				/>
 				<kbd class="hidden rounded border border-border bg-surface px-1.5 py-0.5 font-mono text-[10px] text-muted sm:inline"
 					>esc</kbd
 				>
 			</div>
-			<div class="max-h-[50vh] overflow-y-auto py-1">
+			<div bind:this={listEl} id={listId} role="listbox" class="max-h-[50vh] overflow-y-auto py-1">
 				{#if results.length === 0}
 					<p class="px-4 py-6 text-center text-sm text-muted">Tidak ada hasil.</p>
 				{:else}
 					{#each results as item, i (item.id)}
 						<button
 							type="button"
+							id="{listId}-opt-{i}"
+							role="option"
+							aria-selected={i === active}
 							onclick={() => go(item)}
 							onmouseenter={() => (active = i)}
 							class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm transition {i === active

@@ -367,8 +367,17 @@
 									void saveRename();
 								}}
 							>
-								<Input bind:value={editingCatName} class="min-w-0 flex-1" />
-								<Button type="submit" size="sm" disabled={!editingCatName.trim()}>
+								<Input
+									bind:value={editingCatName}
+									class="min-w-0 flex-1"
+									aria-label="Nama kategori"
+								/>
+								<Button
+									type="submit"
+									size="sm"
+									aria-label="Simpan nama kategori"
+									disabled={!editingCatName.trim()}
+								>
 									<Check size={14} />
 								</Button>
 							</form>
@@ -382,6 +391,7 @@
 							<Button
 								variant="ghost"
 								size="sm"
+								aria-label="Ubah nama kategori {category.name}"
 								onclick={() => startRename(category.id, category.name)}
 							>
 								<Pencil size={14} />
@@ -389,6 +399,7 @@
 							<Button
 								variant="ghost"
 								size="sm"
+								aria-label="Hapus kategori {category.name}"
 								onclick={() => askRemoveCategory(category.id, category.name)}
 							>
 								<Trash2 size={14} />

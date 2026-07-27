@@ -16,11 +16,23 @@
 	let root: HTMLElement;
 	let menuEl: HTMLElement | null = $state(null);
 
+	function triggerEl(): HTMLElement | null {
+		return root?.querySelector<HTMLElement>('button, a, [tabindex]') ?? null;
+	}
+
 	function toggle() {
 		open = !open;
 	}
-	function close() {
+
+	/**
+	 * Opening moves focus into the menu, so closing has to hand it back — otherwise
+	 * focus lands on <body> and keyboard users lose their place. Escape already did
+	 * this; outside-click and item-activation did not.
+	 */
+	function close(opts: { restoreFocus?: boolean } = {}) {
+		if (!open) return;
 		open = false;
+		if (opts.restoreFocus !== false) triggerEl()?.focus();
 	}
 
 	function menuItems(): HTMLElement[] {
@@ -38,7 +50,9 @@
 	}
 
 	function onwindowclick(e: MouseEvent) {
-		if (open && root && !root.contains(e.target as Node)) close();
+		// Clicking away is a deliberate move elsewhere — closing is right, but
+		// yanking focus back to the trigger would fight where the user just clicked.
+		if (open && root && !root.contains(e.target as Node)) close({ restoreFocus: false });
 	}
 
 	function onwindowkeydown(e: KeyboardEvent) {
@@ -46,7 +60,6 @@
 		if (e.key === 'Escape') {
 			e.preventDefault();
 			close();
-			root?.querySelector<HTMLElement>('button, a, [tabindex]')?.focus();
 			return;
 		}
 		if (e.key === 'ArrowDown') {

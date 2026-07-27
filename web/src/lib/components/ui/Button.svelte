@@ -53,7 +53,16 @@
 </script>
 
 {#if href}
-	<a {href} class={cls} aria-disabled={disabled} {...rest}>
+	<!-- A disabled/loading anchor stayed clickable and focusable: aria-disabled
+	     only announces the state, it does not enforce it. Drop the href and take
+	     it out of the tab order so the control actually behaves as disabled. -->
+	<a
+		href={disabled || loading ? undefined : href}
+		class="{cls} {disabled || loading ? 'pointer-events-none opacity-50' : ''}"
+		aria-disabled={disabled || loading ? 'true' : undefined}
+		tabindex={disabled || loading ? -1 : undefined}
+		{...rest}
+	>
 		{#if loading}<Spinner size={size === 'lg' ? 18 : 14} />{/if}
 		{@render children?.()}
 	</a>
