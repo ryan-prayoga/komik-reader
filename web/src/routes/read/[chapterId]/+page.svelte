@@ -368,23 +368,6 @@
 		void readingTimer.flush();
 	}
 
-	/**
-	 * Paged mode marks progress on page FLIPS, so a chapter that shows all of its
-	 * pages at the opening position never reported anything: a 1-page chapter has
-	 * no flip at all (its slider is hidden, max = 0), and tapping forward hands
-	 * straight off to the next chapter. It could never be marked read. Two pages
-	 * in double mode are the same case — both are on screen immediately.
-	 */
-	function reportFullyVisibleChapter() {
-		if (!isPaged || pages.length === 0) return;
-		const lastVisible = lastVisibleIndexOf(
-			currentPage,
-			{ double: useDouble, doubleOffset: readerSettings.doubleOffset },
-			pages.length - 1
-		);
-		if (lastVisible >= pages.length - 1) reportPage(currentPage, lastVisible);
-	}
-
 	let lastReportedPageKey = '';
 	let lastPersistedAt = 0;
 	let lastPersistedPageProgress = 0;
@@ -1003,7 +986,6 @@
 				// re-asserted unread on the server the moment it's reopened.
 				if (pages.length > 0) {
 					void queueChapterProgress(id, currentPage, isChapterReadAnywhere(id));
-					reportFullyVisibleChapter();
 				}
 			} catch (e) {
 				if (cancelled) return;
@@ -1306,7 +1288,20 @@
 			ondownload={mangaId && !chapterOffline ? saveCurrentOffline : undefined}
 			onfullscreen={toggleFullscreen}
 			onsettings={() => (settingsOpen = true)}
-			onseek={reportPage}
+			onseek={(i) =>
+				reportPage(
+					i,
+					// The slider reports a single index, which in double mode is the
+					// LEFT page of a spread — dragging to the final spread would
+					// otherwise never satisfy the read check.
+					isPaged
+						? lastVisibleIndexOf(
+								i,
+								{ double: useDouble, doubleOffset: readerSettings.doubleOffset },
+								Math.max(0, pages.length - 1)
+							)
+						: i
+				)}
 			onnavigate={navigateToChapter}
 			autoScroll={!isPaged ? autoScroll : undefined}
 			{autoScrollSpeed}

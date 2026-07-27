@@ -124,6 +124,12 @@
 			// no-op handler (no next chapter — the newest one) left the flag stuck
 			// forever, since only a `pages` change clears it: every later boundary
 			// gesture died here, including going BACK to the previous chapter.
+			//
+			// Report the final page first. Trying to advance past the end IS the
+			// signal that the chapter is finished, and it is the only such signal a
+			// chapter gets when its last page never becomes a left-hand index — or
+			// when it has just one page and there is no flip at all.
+			if (pages.length > 0) onpage(current, lastIndex);
 			navigatingAway = onnext?.() ?? false;
 			return;
 		}
