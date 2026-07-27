@@ -159,6 +159,12 @@
 		} catch (e) {
 			if (gen !== searchGen) return;
 			error = e instanceof Error ? e.message : 'Gagal mencari';
+			// Drop the previous source's rows. Leaving them on screen while pageNum
+			// was reset to 1 meant the infinite-scroll sentinel re-fetched page 1 of
+			// the OLD source and appended it to itself — duplicate ids in a keyed
+			// each, which Svelte throws on.
+			mangas = [];
+			hasNext = false;
 		} finally {
 			if (gen === searchGen) loading = false;
 		}
@@ -183,7 +189,12 @@
 			// identical to "no more results". Surface it with a way back.
 			loadMoreError = e instanceof Error ? e.message : 'Gagal memuat lebih banyak';
 		} finally {
-			if (gen === searchGen) loadingMore = false;
+			// Unconditional: nothing else in this file ever clears the flag, so
+			// gating it on the generation left a superseded load-more latching it to
+			// true and killing infinite scroll for the rest of the session. Only one
+			// load-more runs at a time (guarded at the top), so a late reset from a
+			// superseded run cannot cut short a newer one.
+			loadingMore = false;
 		}
 	}
 

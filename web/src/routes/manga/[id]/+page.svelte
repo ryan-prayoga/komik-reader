@@ -318,7 +318,11 @@
 	});
 	function goBack() {
 		if (cameFromApp) history.back();
-		else goto(`/browse/${manga?.sourceId ?? ''}`);
+		// Without a loaded manga there is no source to go back to, and
+		// `/browse/` is not a route — that lands on the 404 page. This path is
+		// reachable from the error card, where `manga` is always null.
+		else if (manga?.sourceId) goto(`/browse/${manga.sourceId}`);
+		else goto('/');
 	}
 
 	function formatDate(ts: string) {
