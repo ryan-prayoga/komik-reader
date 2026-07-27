@@ -160,28 +160,67 @@ const ADMIN_ONLY_SET: ReadonlySet<string> = new Set(ADMIN_ONLY_MUTATIONS);
 	}
 
 	/**
-	 * Normalize the tokens GraphQL itself ignores, so allowlist matching cannot be
-	 * bypassed by hiding the operation keyword behind one of them:
-	 *   - `#` / `/* *​/` comments (bypass via comment text)
-	 *   - commas, which the spec (§2.1.6) treats as insignificant and therefore
-	 *     legal before a definition — `,mutation {…}` is a real mutation that the
-	 *     operation regexes would otherwise not recognize at all.
-	 * Commas inside string literals get normalized too; that can only make the
-	 * match stricter (deny), never looser, and mutationRootFields blanks strings
-	 * before it parses.
+	 * Rewrite a GraphQL document into a form the scanners below can read safely:
+	 * string literals blanked to `""`, `#` comments and commas turned into
+	 * whitespace. Commas are insignificant per spec §2.1.6, so `,mutation {…}` is
+	 * a real mutation the operation regexes would otherwise miss entirely.
+	 *
+	 * This MUST be a single pass. Doing it as separate regexes — comments first,
+	 * then strings — let a `#` inside a legal string literal blank the rest of
+	 * that line, and a `"` inside a comment open a phantom string. Either one
+	 * de-synced the brace/paren scanner from what the server's parser actually
+	 * sees, which is exactly how an allowlist bypass gets built.
+	 *
+	 * Note there is deliberately no handling of block comments: GraphQL has none.
+	 * A stray `/*` therefore stays in the output, the scanner rejects it, and the
+	 * request is denied — the same answer the upstream parser would give.
 	 */
-	function normalizeGraphqlSource(query: string): string {
-		return query
-			.replace(/\/\*[\s\S]*?\*\//g, ' ')
-			.replace(/#[^\n\r]*/g, ' ')
-			.replace(/,/g, ' ');
-	}
+	function sanitizeGraphqlSource(query: string): string {
+		let out = '';
+		let i = 0;
+		while (i < query.length) {
+			const c = query[i]!;
 
-	/** Neutralize string contents so braces inside literals do not skew brace-depth scanning. */
-	function stripGraphqlStrings(query: string): string {
-		return query
-			.replace(/"""[\s\S]*?"""/g, '""')
-			.replace(/"(?:\\.|[^"\\])*"/g, '""');
+			// Block string: runs to the next unescaped `"""`.
+			if (c === '"' && query.startsWith('"""', i)) {
+				i += 3;
+				while (i < query.length && !query.startsWith('"""', i)) {
+					if (query[i] === '\\') i++;
+					i++;
+				}
+				i = Math.min(i + 3, query.length);
+				out += '""';
+				continue;
+			}
+
+			// Ordinary string: escapes consume the next character.
+			if (c === '"') {
+				i++;
+				while (i < query.length && query[i] !== '"') {
+					if (query[i] === '\\') i++;
+					i++;
+				}
+				i++; // closing quote (or past the end on an unterminated literal)
+				out += '""';
+				continue;
+			}
+
+			if (c === '#') {
+				while (i < query.length && query[i] !== '\n' && query[i] !== '\r') i++;
+				out += ' ';
+				continue;
+			}
+
+			if (c === ',') {
+				out += ' ';
+				i++;
+				continue;
+			}
+
+			out += c;
+			i++;
+		}
+		return out;
 	}
 
 	function skipWs(s: string, i: number): number {
@@ -209,7 +248,9 @@ const ADMIN_ONLY_SET: ReadonlySet<string> = new Set(ADMIN_ONLY_MUTATIONS);
 	 * past the allowlist and then pick it by name at execution time.
 	 */
 	function mutationRootFields(query: string): string[] | null {
-		const s = stripGraphqlStrings(normalizeGraphqlSource(query));
+		// Already sanitized by forEachGraphqlOp; re-running is a no-op and keeps
+		// this function safe to call directly.
+		const s = sanitizeGraphqlSource(query);
 		const fields: string[] = [];
 		const opRe = /(^|[\s,})])mutation(?=[\s({])/g;
 		let m: RegExpExecArray | null;
@@ -331,7 +372,13 @@ const ADMIN_ONLY_SET: ReadonlySet<string> = new Set(ADMIN_ONLY_MUTATIONS);
 			if (op == null || typeof op !== 'object') return false;
 			const q = String((op as { query?: unknown }).query ?? '');
 			if (!q.trim()) return false;
-			return fn(normalizeGraphqlSource(q));
+			const cleaned = sanitizeGraphqlSource(q);
+			// GraphQL has no block comments, so `/*` outside a string literal cannot
+			// appear in a document the server would accept. Deny rather than reason
+			// about it: left in place it sits directly before the operation keyword
+			// and stops isMutation from recognising a mutation at all.
+			if (cleaned.includes('/*') || cleaned.includes('*/')) return false;
+			return fn(cleaned);
 		});
 	} catch {
 		return false;

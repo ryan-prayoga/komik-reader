@@ -236,6 +236,74 @@ describe('isGuestAllowedGraphql', () => {
 			}
 		});
 
+		it('denies a mutation hidden behind a # inside a string literal', () => {
+			// Comments were stripped BEFORE string literals were blanked, so a `#`
+			// inside a legal string blanked the rest of that line and de-synced the
+			// brace scanner from what the server's parser actually sees.
+			expect(
+				isGuestAllowedGraphql(
+					gqlBody(`mutation {
+						fetchManga(input: { id: 1, note: "x # }" }) { manga { id } }
+						updateExtension(input: { id: "y", patch: { install: true } }) {
+							extension { pkgName }
+						}
+					}`)
+				)
+			).toBe(false);
+		});
+
+		it('denies a mutation whose braces are hidden inside string literals', () => {
+			expect(
+				isGuestAllowedGraphql(
+					gqlBody(`mutation {
+						fetchManga(input: { id: 1, note: "}}}{{{" }) { manga { id } }
+						updateExtension(input: { id: "z", patch: { install: true } }) {
+							extension { pkgName }
+						}
+					}`)
+				)
+			).toBe(false);
+		});
+
+		it('denies a quote smuggled inside a comment', () => {
+			// A `"` in a comment used to open a phantom string that swallowed the
+			// rest of the document.
+			expect(
+				isGuestAllowedGraphql(
+					gqlBody(`mutation {
+						# a stray quote " here
+						updateExtension(input: { id: "q", patch: { install: true } }) {
+							extension { pkgName }
+						}
+					}`)
+				)
+			).toBe(false);
+		});
+
+		it('denies block-comment syntax outright (GraphQL has no block comments)', () => {
+			expect(
+				isGuestAllowedGraphql(
+					gqlBody(`/* */mutation {
+						updateExtension(input: { id: "b", patch: { install: true } }) {
+							extension { pkgName }
+						}
+					}`)
+				)
+			).toBe(false);
+		});
+
+		it('still allows a guest fetch mutation carrying quotes and hashes in arguments', () => {
+			expect(
+				isGuestAllowedGraphql(
+					gqlBody(`mutation {
+						fetchSourceManga(input: { source: "1", query: "one # two", page: 1 }) {
+							mangas { id }
+						}
+					}`)
+				)
+			).toBe(true);
+		});
+
 		it('still allows guest fetch mutations written with leading commas', () => {
 			expect(
 				isGuestAllowedGraphql(
