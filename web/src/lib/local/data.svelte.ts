@@ -1,6 +1,7 @@
 import { browser } from '$app/environment';
 import { getAll, getMeta, putItem, putMany, setMeta, updateItem } from './db';
 import { planChapterIdMigration, type LiveChapter } from './migrate';
+import { mergeReadPosition } from './history-merge';
 import type { LocalHistory, LocalLibrary, LocalCategory, LocalReadtime } from './types';
 
 export type LocalDataExport = {
@@ -151,34 +152,32 @@ class LocalData {
 		lastPageProgress?: number;
 	}) {
 			const existing = this.getHistory(entry.chapterId);
-			const isRead = Boolean(entry.isRead || existing?.isRead);
-			const lastPage = Math.max(entry.lastPage, existing?.lastPage ?? 0);
-			const lastPageProgress =
-				entry.lastPageProgress !== undefined
-					? entry.lastPageProgress
-					: existing?.lastPageProgress;
 			let row: LocalHistory = {
 				...entry,
-				isRead,
-				lastPage,
+				isRead: Boolean(entry.isRead || existing?.isRead),
+				lastPage: entry.lastPage,
 				mangaTitle: entry.mangaTitle || existing?.mangaTitle || '',
 				thumbnailUrl: entry.thumbnailUrl ?? existing?.thumbnailUrl ?? null,
 				sourceId: entry.sourceId ?? existing?.sourceId ?? null,
 				chapterNumber: entry.chapterNumber ?? existing?.chapterNumber,
 				totalPages: entry.totalPages ?? existing?.totalPages,
-				lastPageProgress,
 				updatedAt: nowMs(),
 				deleted: false
 			};
 			await updateItem<LocalHistory>('history', entry.chapterId, (current) => {
+				const base = current ?? existing ?? null;
+				// lastPage and lastPageProgress only mean anything as a pair — see
+				// mergeReadPosition. Advancing the fraction independently of the page
+				// produced rows describing a position the reader was never in.
+				const position = mergeReadPosition(
+					{ page: entry.lastPage, progress: entry.lastPageProgress },
+					base ? { page: base.lastPage, progress: base.lastPageProgress } : null
+				);
 				row = {
 					...row,
 					isRead: Boolean(row.isRead || current?.isRead),
-					lastPage: Math.max(row.lastPage, current?.lastPage ?? 0),
-					lastPageProgress:
-						entry.lastPageProgress !== undefined
-							? entry.lastPageProgress
-							: (current?.lastPageProgress ?? row.lastPageProgress),
+					lastPage: position.page,
+					lastPageProgress: position.progress,
 					timeSpentMs: current?.timeSpentMs ?? existing?.timeSpentMs
 				};
 				return row;
@@ -519,8 +518,21 @@ class LocalData {
 			const existingCategories = new Map(allCategories.map((c) => [String(c.id), c]));
 			const existingReadtime = new Map(allReadtime.map((r) => [r.key, r]));
 
+			// `timeSpentMs` on a history row is THIS device's own contribution; the
+			// sync engine mirrors it into a `${chapterId}:${deviceId}` readtime row.
+			// Importing another device's value made this device republish that time
+			// under its OWN id, so the account counted the same minutes twice (and
+			// again for every further device the dump was imported into). The dump's
+			// readtime rows already carry each device's share, so drop the field and
+			// keep whatever this device had recorded itself.
+			const importedHistory = newer(
+				dump.history ?? [],
+				existingHistory,
+				(r) => String(r.chapterId)
+			).map((r) => ({ ...r, timeSpentMs: existingHistory.get(String(r.chapterId))?.timeSpentMs }));
+
 			await Promise.all([
-				putMany('history', newer(dump.history ?? [], existingHistory, (r) => String(r.chapterId))),
+				putMany('history', importedHistory),
 				putMany('library', newer(dump.library ?? [], existingLibrary, (r) => String(r.mangaId))),
 				putMany(
 					'categories',
