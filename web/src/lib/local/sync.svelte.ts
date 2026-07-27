@@ -1,6 +1,7 @@
 import { browser } from '$app/environment';
 import { getAll, getItem, putItem, updateItem, getMeta, setMeta } from './db';
 import { localData } from './data.svelte';
+import { mergeReadPosition } from './history-merge';
 import type { LocalHistory, LocalLibrary, LocalCategory, SyncChange, SyncEntity } from './types';
 
 const PUSH_KEY = 'syncPushCursor'; // max local updatedAt already pushed (client clock)
@@ -246,10 +247,16 @@ class SyncEngine {
 				) as Record<string, unknown>;
 
 				if (store === 'history' && existing) {
-					const ex = existing as { isRead?: boolean; lastPage?: number; updatedAt?: number };
+					const ex = existing as {
+						isRead?: boolean;
+						lastPage?: number;
+						lastPageProgress?: number;
+						updatedAt?: number;
+					};
 					const inc = finalRow as {
 						isRead?: boolean;
 						lastPage?: number;
+						lastPageProgress?: number;
 						readClearedAt?: number;
 					};
 					// A deliberate "tandai belum dibaca" carries readClearedAt. If that
@@ -260,12 +267,18 @@ class SyncEngine {
 						inc.isRead === false &&
 						typeof inc.readClearedAt === 'number' &&
 						inc.readClearedAt >= Number(ex.updatedAt ?? 0);
+					// Keeping lastPage monotonic while letting lastPageProgress through
+					// untouched paired the furthest page with an earlier page's fraction —
+					// the same split position mergeReadPosition exists to prevent locally.
+					const position = mergeReadPosition(
+						{ page: Number(inc.lastPage ?? 0), progress: inc.lastPageProgress },
+						{ page: Number(ex.lastPage ?? 0), progress: ex.lastPageProgress }
+					);
 					finalRow = {
 						...finalRow,
 						isRead: explicitUnread ? false : Boolean(inc.isRead || ex.isRead),
-						lastPage: explicitUnread
-							? Number(inc.lastPage ?? 0)
-							: Math.max(Number(inc.lastPage ?? 0), Number(ex.lastPage ?? 0))
+						lastPage: explicitUnread ? Number(inc.lastPage ?? 0) : position.page,
+						lastPageProgress: explicitUnread ? inc.lastPageProgress : position.progress
 					};
 				}
 				didApply = true;

@@ -61,7 +61,14 @@
 				: recent.totalPages
 					? Math.min(100, Math.round(((recent.lastPage + 1) / recent.totalPages) * 100))
 					: null;
-			const totalMs = rows.reduce((acc, r) => acc + (r.timeSpentMs ?? 0), 0);
+			// Fold in other devices' contribution the way Stats and the manga detail
+			// page do. Reading only timeSpentMs showed 0 here on any device that got
+			// its history through sync or an import, since the push strips that
+			// field and it is never repopulated locally.
+			const totalMs = rows.reduce(
+				(acc, r) => acc + (r.timeSpentMs ?? 0) + (localData.otherMsByChapter.get(r.chapterId) ?? 0),
+				0
+			);
 			// Newest row that actually carries a sourceId — not just the first
 			// match, so an older chapter read from a different source can't
 			// override the label a more recent read implies.

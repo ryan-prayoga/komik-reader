@@ -2,11 +2,19 @@ import { browser } from '$app/environment';
 import { getAll, getMeta, putItem, putMany, setMeta, updateItem } from './db';
 import { planChapterIdMigration, type LiveChapter } from './migrate';
 import { mergeReadPosition } from './history-merge';
+import { planHistoryImport } from './import-merge';
 import type { LocalHistory, LocalLibrary, LocalCategory, LocalReadtime } from './types';
 
 export type LocalDataExport = {
 	version: 1;
 	exportedAt: number;
+	/**
+	 * Device that produced the dump. Lets an import attribute the history rows'
+	 * `timeSpentMs` to the device that actually earned it, instead of either
+	 * claiming it (double-counting at account level) or dropping it (destroying
+	 * a guest's only copy). Absent in dumps written before this was recorded.
+	 */
+	deviceId?: string;
 	history: LocalHistory[];
 	library: LocalLibrary[];
 	categories: LocalCategory[];
@@ -484,7 +492,15 @@ class LocalData {
 			getAll<LocalCategory>('categories'),
 			getAll<LocalReadtime>('readtime')
 		]);
-		return { version: 1, exportedAt: nowMs(), history, library, categories, readtime };
+		return {
+			version: 1,
+			exportedAt: nowMs(),
+			deviceId: this.deviceId || undefined,
+			history,
+			library,
+			categories,
+			readtime
+		};
 	}
 
 	/**
@@ -518,27 +534,36 @@ class LocalData {
 			const existingCategories = new Map(allCategories.map((c) => [String(c.id), c]));
 			const existingReadtime = new Map(allReadtime.map((r) => [r.key, r]));
 
-			// `timeSpentMs` on a history row is THIS device's own contribution; the
-			// sync engine mirrors it into a `${chapterId}:${deviceId}` readtime row.
-			// Importing another device's value made this device republish that time
-			// under its OWN id, so the account counted the same minutes twice (and
-			// again for every further device the dump was imported into). The dump's
-			// readtime rows already carry each device's share, so drop the field and
-			// keep whatever this device had recorded itself.
-			const importedHistory = newer(
-				dump.history ?? [],
-				existingHistory,
-				(r) => String(r.chapterId)
-			).map((r) => ({ ...r, timeSpentMs: existingHistory.get(String(r.chapterId))?.timeSpentMs }));
+			// History needs more than last-write-wins: reading time has to stay
+			// attributed to the device that earned it, and a dump from a device that
+			// is behind on a chapter must not un-finish it. See planHistoryImport.
+			const { historyWrites, readtimeWrites } = planHistoryImport({
+				incoming: dump.history ?? [],
+				local: existingHistory,
+				localReadtime: existingReadtime,
+				dumpReadtime: dump.readtime ?? [],
+				dumpDeviceId: dump.deviceId ?? null,
+				selfDeviceId: this.deviceId
+			});
+
+			// Rows synthesised for the source device win over the dump's own echo of
+			// the same key, which can be older.
+			const readtimeById = new Map(
+				newer(dump.readtime ?? [], existingReadtime, (r) => r.key).map((r) => [r.key, r])
+			);
+			for (const r of readtimeWrites) {
+				const existing = readtimeById.get(r.key);
+				if (!existing || r.ms > existing.ms) readtimeById.set(r.key, r);
+			}
 
 			await Promise.all([
-				putMany('history', importedHistory),
+				putMany('history', historyWrites),
 				putMany('library', newer(dump.library ?? [], existingLibrary, (r) => String(r.mangaId))),
 				putMany(
 					'categories',
 					newer(dump.categories ?? [], existingCategories, (r) => String(r.id))
 				),
-				putMany('readtime', newer(dump.readtime ?? [], existingReadtime, (r) => r.key))
+				putMany('readtime', [...readtimeById.values()])
 			]);
 			await this.reload();
 			this.#changed();

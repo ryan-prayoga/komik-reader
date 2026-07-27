@@ -36,7 +36,10 @@
 	);
 
 	function chapterDuration(chapterId: number): string | null {
-		const ms = localData.history.find((h) => h.chapterId === chapterId)?.timeSpentMs ?? 0;
+		// Own time plus every other device's — a synced or imported row carries no
+		// timeSpentMs of its own, so this read 0 and the label vanished entirely.
+		const own = localData.history.find((h) => h.chapterId === chapterId)?.timeSpentMs ?? 0;
+		const ms = own + (localData.otherMsByChapter.get(chapterId) ?? 0);
 		return ms > 0 ? formatDuration(ms) : null;
 	}
 
