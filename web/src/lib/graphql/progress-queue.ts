@@ -40,7 +40,13 @@ function isPermanentError(e: unknown): boolean {
 // entries lose; the newest positions are the ones worth replaying.
 const MAX_QUEUE_ENTRIES = 500;
 
-type PendingEntry = { chapterId: number; lastPageRead: number; isRead: boolean };
+type PendingEntry = {
+	chapterId: number;
+	lastPageRead: number;
+	isRead: boolean;
+	/** When this entry was first queued — used to evict the oldest under pressure. */
+	ts?: number;
+};
 
 function readQueue(): Record<string, PendingEntry> {
 	if (!browser) return {};
@@ -55,7 +61,12 @@ function readQueue(): Record<string, PendingEntry> {
 		if (!browser) return;
 		const keys = Object.keys(queue);
 		if (keys.length > MAX_QUEUE_ENTRIES) {
-			for (const k of keys.slice(0, keys.length - MAX_QUEUE_ENTRIES)) delete queue[k];
+			// Evict by queued-at, not key order: these keys are numeric chapter ids,
+			// so Object.keys returns them in ascending NUMERIC order and slicing the
+			// front dropped the lowest chapter ids — the earliest chapters of a
+			// series — rather than the oldest queue entries.
+			const byAge = [...keys].sort((a, b) => (queue[a]?.ts ?? 0) - (queue[b]?.ts ?? 0));
+			for (const k of byAge.slice(0, keys.length - MAX_QUEUE_ENTRIES)) delete queue[k];
 		}
 		try {
 			// Drop the key entirely when nothing is pending, so an empty queue leaves
@@ -82,11 +93,14 @@ function readQueue(): Record<string, PendingEntry> {
 		prev: PendingEntry | undefined,
 		next: PendingEntry
 	): PendingEntry {
-		if (!prev) return next;
+		if (!prev) return { ...next, ts: next.ts ?? Date.now() };
 		return {
 			chapterId: next.chapterId,
 			lastPageRead: Math.max(prev.lastPageRead, next.lastPageRead),
-			isRead: Boolean(prev.isRead || next.isRead)
+			isRead: Boolean(prev.isRead || next.isRead),
+			// Keep the original queued-at so a chapter that keeps being re-merged
+			// cannot stay young forever and outlive genuinely older entries.
+			ts: prev.ts ?? next.ts ?? Date.now()
 		};
 	}
 
@@ -97,24 +111,26 @@ function readQueue(): Record<string, PendingEntry> {
 		isRead: boolean,
 		opts?: { keepalive?: boolean }
 	): Promise<void> {
+		// Write-ahead, and deliberately OUTSIDE serialize(): the pagehide flush is
+		// the case this exists for, and if the chain happens to be busy the queued
+		// callback never runs before the document dies. Recording the intent
+		// synchronously, here, is the only part guaranteed to happen.
+		if (browser) {
+			const queue = readQueue();
+			queue[chapterId] = mergeEntry(queue[chapterId], { chapterId, lastPageRead, isRead });
+			writeQueue(queue);
+		}
 		return serialize(async () => {
-			// Write-ahead: record the intent BEFORE the request goes out. Enqueuing
-			// only in the catch lost the write completely when the page died
-			// mid-flight — the pagehide flush starts the fetch, the document goes
-			// away, the promise never settles, and the catch never runs. That is
-			// exactly the moment whose position matters most.
-			if (browser) {
-				const queue = readQueue();
-				queue[chapterId] = mergeEntry(queue[chapterId], { chapterId, lastPageRead, isRead });
-				writeQueue(queue);
-			}
 			try {
 				await updateChapterProgress(chapterId, lastPageRead, isRead, opts);
 				if (browser) {
-					// serialize() guarantees no other writer touched this entry while the
-					// request was in flight, so clearing it here cannot drop a newer one.
 					const queue = readQueue();
-					if (queue[chapterId]) {
+					const pending = queue[chapterId];
+					// Only clear what this call actually sent. A later write can merge a
+					// further position in while this request is in flight (the
+					// write-ahead above now runs outside the serialize chain), and
+					// deleting blindly would drop it.
+					if (pending && pending.lastPageRead <= lastPageRead && (!pending.isRead || isRead)) {
 						delete queue[chapterId];
 						writeQueue(queue);
 					}
@@ -132,8 +148,19 @@ function readQueue(): Record<string, PendingEntry> {
 
 	let replaying = false;
 
-	/** Resend every pending write. Safe to call repeatedly (e.g. on every 'online' event). */
-	export async function replayQueuedProgress(): Promise<void> {
+	/**
+	 * Resend every pending write. Safe to call repeatedly (e.g. on every 'online'
+	 * event).
+	 *
+	 * `isSuperseded` lets the caller drop entries that local state has already
+	 * moved past. That matters because the write-ahead entry is only cleared once
+	 * the request settles: a keepalive flush on pagehide can genuinely reach the
+	 * server and still leave its entry behind, and replaying it later would push
+	 * an OLD position over a newer one recorded since.
+	 */
+	export async function replayQueuedProgress(
+		isSuperseded?: (entry: { chapterId: number; lastPageRead: number; isRead: boolean }) => boolean
+	): Promise<void> {
 		if (!browser || replaying) return;
 		return serialize(async () => {
 			if (replaying) return;
@@ -143,6 +170,12 @@ function readQueue(): Record<string, PendingEntry> {
 			replaying = true;
 			try {
 				for (const entry of entries) {
+					if (isSuperseded?.(entry)) {
+						const current = readQueue();
+						delete current[entry.chapterId];
+						writeQueue(current);
+						continue;
+					}
 					try {
 						await updateChapterProgress(entry.chapterId, entry.lastPageRead, entry.isRead);
 						const current = readQueue();

@@ -98,7 +98,7 @@ describe('progress-queue', () => {
 			await queueChapterProgress(7, 12, true);
 
 			expect(queuedDuringFlight).not.toBeNull();
-			expect(JSON.parse(queuedDuringFlight!)['7']).toEqual({
+			expect(JSON.parse(queuedDuringFlight!)['7']).toMatchObject({
 				chapterId: 7,
 				lastPageRead: 12,
 				isRead: true
@@ -138,7 +138,7 @@ describe('progress-queue', () => {
 
 			await queueChapterProgress(31, 8, false);
 
-			expect(readStoredQueue()['31']).toEqual({ chapterId: 31, lastPageRead: 8, isRead: false });
+			expect(readStoredQueue()['31']).toMatchObject({ chapterId: 31, lastPageRead: 8, isRead: false });
 		});
 
 		it('clears the chapter entry from localStorage after a successful write', async () => {
@@ -153,7 +153,7 @@ describe('progress-queue', () => {
 
 			const queue = readStoredQueue();
 			expect(queue['10']).toBeUndefined();
-			expect(queue['20']).toEqual({ chapterId: 20, lastPageRead: 5, isRead: true });
+			expect(queue['20']).toMatchObject({ chapterId: 20, lastPageRead: 5, isRead: true });
 		});
 
 		it('enqueues the latest attempt when the network/update fails (non-auth)', async () => {
@@ -164,7 +164,7 @@ describe('progress-queue', () => {
 			await queueChapterProgress(42, 9, true);
 
 			const queue = readStoredQueue();
-			expect(queue['42']).toEqual({ chapterId: 42, lastPageRead: 9, isRead: true });
+			expect(queue['42']).toMatchObject({ chapterId: 42, lastPageRead: 9, isRead: true });
 			expect(updateChapterProgress).toHaveBeenCalledTimes(2);
 		});
 
@@ -194,7 +194,7 @@ describe('progress-queue', () => {
 
 			await queueChapterProgress(3, 1, false);
 
-			expect(readStoredQueue()['3']).toEqual({
+			expect(readStoredQueue()['3']).toMatchObject({
 				chapterId: 3,
 				lastPageRead: 1,
 				isRead: false
@@ -261,7 +261,7 @@ describe('progress-queue', () => {
 
 			await replayQueuedProgress();
 
-			expect(readStoredQueue()['10']).toEqual({
+			expect(readStoredQueue()['10']).toMatchObject({
 				chapterId: 10,
 				lastPageRead: 8,
 				isRead: false
@@ -285,7 +285,7 @@ describe('progress-queue', () => {
 			const queue = readStoredQueue();
 			expect(queue['10']).toBeUndefined();
 			expect(queue['20']).toBeUndefined();
-			expect(queue['30']).toEqual({ chapterId: 30, lastPageRead: 3, isRead: false });
+			expect(queue['30']).toMatchObject({ chapterId: 30, lastPageRead: 3, isRead: false });
 		});
 	});
 });

@@ -76,8 +76,21 @@
 
 		// Failed chapter-progress writes (offline/timeout) are queued in
 		// localStorage — replay them once here and again on every reconnect.
-		void replayQueuedProgress();
-		window.addEventListener('online', () => void replayQueuedProgress());
+		// Entries local history has already moved past are dropped instead of
+		// resent: a keepalive flush on pagehide can reach the server and still
+		// leave its entry behind, and replaying that would push an old position
+		// over a newer one.
+		const supersededByLocal = (entry: {
+			chapterId: number;
+			lastPageRead: number;
+			isRead: boolean;
+		}) => {
+			const row = localData.history.find((h) => h.chapterId === entry.chapterId);
+			if (!row) return false;
+			return row.lastPage > entry.lastPageRead || (row.isRead && !entry.isRead);
+		};
+		void replayQueuedProgress(supersededByLocal);
+		window.addEventListener('online', () => void replayQueuedProgress(supersededByLocal));
 
 		// iOS/Android standalone PWAs reopen at whatever path the OS last saw
 		// (not the manifest start_url) — redirect that back to Home. But ONLY on a
