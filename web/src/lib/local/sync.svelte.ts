@@ -192,17 +192,20 @@ class SyncEngine {
 		// its own clock. That used to be invisible: a device running fast had every
 		// write refused while Settings kept showing "Terakhir sync: <jam>" — the
 		// account silently received nothing, for as long as the clock stayed wrong.
+		//
+		// Only the PUSH half is affected, so the pull below must still run. Bailing
+		// out here instead threw away every remote change in this response while the
+		// pull cursor had already moved past it — those changes were then never
+		// redelivered, which is worse than the problem being reported.
 		const rejectedFuture = Number(result.rejectedFutureCount ?? 0);
-		this.clockSkewMs =
-			rejectedFuture > 0 && typeof result.serverTime === 'number'
-				? Date.now() - result.serverTime
-				: 0;
-		if (rejectedFuture > 0 && Number(result.acceptedCount ?? 0) === 0) {
-			// Nothing landed and nothing will until the clock is fixed. Advancing
-			// cursors or rescheduling here would just spin against the rate limiter.
-			await setMeta(PULL_KEY, result.cursor);
-			throw new ClockSkewError(rejectedFuture);
-		}
+		const pushBlocked = rejectedFuture > 0 && Number(result.acceptedCount ?? 0) === 0;
+		this.clockSkewMs = pushBlocked
+			? // Clamp to a positive value: the refusal is judged per row stamp, so a
+				// clock that has since been corrected still yields rejections while old
+				// future-stamped rows remain. A zero here would hide the banner and put
+				// the failure right back to being silent.
+				Math.max(1, typeof result.serverTime === 'number' ? Date.now() - result.serverTime : 1)
+			: 0;
 
 		let applied = false;
 		for (const ch of result.changes) {
@@ -272,15 +275,23 @@ class SyncEngine {
 			}
 
 			// Advance push cursor only to what the server accepted (not remote
-			// clocks, not unsent remainder past MAX_PUSH).
+			// clocks, not unsent remainder past MAX_PUSH). Never past our own wall
+			// clock either: bulk writes stamp rows slightly into the future
+			// (stampBulk), and letting the cursor lead real time makes every ordinary
+			// write made in that window fall below it and never get collected.
 			const accepted = Number(result.acceptedMaxUpdatedAt ?? 0);
-			if (accepted > pushCursor) {
-				await setMeta(PUSH_KEY, accepted);
+			const cappedAccepted = Math.min(accepted, Date.now());
+			if (cappedAccepted > pushCursor) {
+				await setMeta(PUSH_KEY, cappedAccepted);
 			} else if (batch.length === 0) {
 				// Nothing to push; leave cursor as-is.
 			}
 			await setMeta(PULL_KEY, result.cursor);
 			if (applied) await localData.reload();
+
+			// Report the blocked push only after the pull has been fully applied and
+			// both cursors are persisted, so nothing is lost on the way out.
+			if (pushBlocked) throw new ClockSkewError(rejectedFuture);
 
 			// More dirty rows remain — schedule another push soon.
 			if (local.length > batch.length) {
