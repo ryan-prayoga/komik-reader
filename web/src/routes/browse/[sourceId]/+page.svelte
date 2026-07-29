@@ -11,6 +11,7 @@
 	import { getBrowseSnapshot, saveBrowseSnapshot } from '$lib/stores/browseCache';
 	import { apiUrl } from '$lib/graphql/client';
 	import { localData } from '$lib/local/data.svelte';
+	import { updates } from '$lib/updates/updates.svelte';
 	import type {
 		BrowseManga,
 		FetchMangaType,
@@ -283,12 +284,39 @@
 		uiFilters[fi] = { ...f, filters: updatedFilters };
 	}
 
+	// Suwayomi's browse/enrich reads only ever return the DB's cached chapter
+	// info, which is never refreshed by browsing a source list (only by
+	// opening a manga's own detail page or "Cek update" on Library). The local
+	// `updates` store holds the last real fetchChapters() result for manga the
+	// user has checked, so prefer it here — otherwise cards for updated titles
+	// keep showing a stale chapter number indefinitely.
+	function withLocalUpdate(m: BrowseManga): BrowseManga {
+		const meta = updates.get(m.id);
+		if (!meta || meta.latestChapterId == null) return m;
+		if (
+			m.latestUploadedChapter &&
+			m.latestUploadedChapter.chapterNumber >= meta.latestChapterNumber
+		) {
+			return m;
+		}
+		return {
+			...m,
+			latestUploadedChapter: {
+				name: meta.latestChapterName,
+				chapterNumber: meta.latestChapterNumber,
+				uploadDate: ''
+			}
+		};
+	}
+
 	const displayMangas = $derived<BrowseManga[]>(
-		mangas.filter((m) => {
-			if (filterLib === 'in_library') return localData.isInLibrary(m.id);
-			if (filterLib === 'not_in_library') return !localData.isInLibrary(m.id);
-			return true;
-		})
+		mangas
+			.filter((m) => {
+				if (filterLib === 'in_library') return localData.isInLibrary(m.id);
+				if (filterLib === 'not_in_library') return !localData.isInLibrary(m.id);
+				return true;
+			})
+			.map(withLocalUpdate)
 	);
 
 	$effect(() => {
@@ -322,6 +350,7 @@
 	});
 
 	onMount(() => {
+		void updates.init();
 		getSourceById(sourceId).then((s) => (source = s));
 
 		const snap = getBrowseSnapshot(sourceId);
@@ -474,7 +503,7 @@
 	{:else}
 		<MangaGrid>
 			{#each displayMangas as manga (manga.id)}
-				<MangaCard {manga} href="/manga/{manga.id}" showLibraryToggle />
+				<MangaCard {manga} href="/manga/{manga.id}" showLibraryToggle hasUpdate={updates.hasUpdate(manga.id)} />
 			{/each}
 		</MangaGrid>
 
