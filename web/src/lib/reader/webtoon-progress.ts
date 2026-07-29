@@ -104,6 +104,28 @@ export function shouldEmitWebtoonProgress(
 }
 
 /**
+ * Should the image at `distance` pages from the active one keep its src?
+ *
+ * Two radii, deliberately. Loading and unloading at the same distance makes the
+ * page sitting exactly on the boundary flip live → unloaded → live every time
+ * the active index moves by one, and each flip re-requests the image and
+ * replays its fade-in — that thrash is the visible flicker while scrolling.
+ * Between `keepRadius` and `dropRadius` the page holds whatever state it is
+ * already in, so a one-index wobble can never toggle anything.
+ */
+export function imageWindowDesired(
+	distance: number,
+	currentlyLive: boolean,
+	keepRadius: number,
+	dropRadius: number
+): boolean {
+	if (!Number.isFinite(distance)) return currentlyLive;
+	if (distance <= keepRadius) return true;
+	if (distance > dropRadius) return false;
+	return currentlyLive;
+}
+
+/**
  * Approx height of the inter-chapter divider (flex + py-8 + pill label).
  * Only used in the height-map model when two consecutive reading-order
  * entries belong to different chapters — keeps active-page search honest

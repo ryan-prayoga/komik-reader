@@ -5,6 +5,7 @@ import {
 	buildAnchoredPrefixWithGap,
 	buildAnchoredPrefixWithGaps,
 	chapterProgressFromRects,
+	imageWindowDesired,
 	isWebtoonChapterRead,
 	nextPruneSpacerPx,
 	pageProgressFromRects,
@@ -228,5 +229,48 @@ describe('nextPruneSpacerPx', () => {
 		expect(nextPruneSpacerPx(NaN, 100, 0)).toBeNull();
 		expect(nextPruneSpacerPx(0, Infinity, 0)).toBeNull();
 		expect(nextPruneSpacerPx(0, 100, NaN)).toBeNull();
+	});
+});
+
+describe('imageWindowDesired', () => {
+	const KEEP = 8;
+	const DROP = 14;
+
+	it('loads everything inside the keep radius', () => {
+		expect(imageWindowDesired(0, false, KEEP, DROP)).toBe(true);
+		expect(imageWindowDesired(KEEP, false, KEEP, DROP)).toBe(true);
+	});
+
+	it('unloads everything past the drop radius', () => {
+		expect(imageWindowDesired(DROP + 1, true, KEEP, DROP)).toBe(false);
+		expect(imageWindowDesired(200, true, KEEP, DROP)).toBe(false);
+	});
+
+	it('holds state inside the hysteresis band', () => {
+		for (let d = KEEP + 1; d <= DROP; d++) {
+			expect(imageWindowDesired(d, true, KEEP, DROP)).toBe(true);
+			expect(imageWindowDesired(d, false, KEEP, DROP)).toBe(false);
+		}
+	});
+
+	it('never toggles on a one-index wobble of the active page', () => {
+		// The regression this guards: a page parked on the old single-radius
+		// boundary flipped live/unloaded on every frame the active index jittered,
+		// re-requesting and re-fading the image each time.
+		let live = true;
+		for (const dist of [KEEP, KEEP + 1, KEEP, KEEP + 1, KEEP]) {
+			live = imageWindowDesired(dist, live, KEEP, DROP);
+			expect(live).toBe(true);
+		}
+		live = false;
+		for (const dist of [DROP + 1, DROP, DROP + 1, DROP]) {
+			live = imageWindowDesired(dist, live, KEEP, DROP);
+			expect(live).toBe(false);
+		}
+	});
+
+	it('keeps the current state for a non-finite distance', () => {
+		expect(imageWindowDesired(NaN, true, KEEP, DROP)).toBe(true);
+		expect(imageWindowDesired(NaN, false, KEEP, DROP)).toBe(false);
 	});
 });

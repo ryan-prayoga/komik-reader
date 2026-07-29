@@ -8,6 +8,7 @@
 			WEBTOON_PAGE_GAP_PX,
 			buildAnchoredPrefixWithGaps,
 			chapterProgressFromRects,
+			imageWindowDesired,
 			pageProgressFromRects,
 			readingOrderGaps,
 			shouldEmitWebtoonProgress
@@ -101,13 +102,32 @@
 	// few screens before they scroll into view so the reader never shows a black
 	// placeholder void mid-scroll (native lazy loads too late on slow mobile links).
 	let eagerPages = $state<Record<string, boolean>>({});
-	// Height-locked unload window around activePi (±KEEP_IMAGE_RADIUS). Nodes stay
-	// mounted; only img src is cleared after locking container min-height so the
-	// scroller does not collapse and ResizeObserver anchor stays valid.
+	// Height-locked unload window around activePi. Nodes stay mounted; only img
+	// src is dropped after locking container min-height so the scroller does not
+	// collapse and the ResizeObserver anchor stays valid.
+	//
+	// Two radii, not one. Loading and unloading at the SAME distance means the
+	// page sitting exactly on the boundary flips live → unloaded → live every
+	// time the active index moves by one — and every flip re-requests the image
+	// and replays its fade-in. That thrash is the flicker. The gap between the
+	// radii is hysteresis: a page has to be well outside the keep window before
+	// it is dropped, and well inside before it is restored.
 	const KEEP_IMAGE_RADIUS = 8;
+	const DROP_IMAGE_RADIUS = 14;
 	let unloadEnabled = $state(false);
 	let liveImages = $state<Record<string, boolean>>({});
 	let heightLocks = $state<Record<string, number>>({});
+	// Last (active index + section shape) the window was computed for. syncImageWindow
+	// runs on every scroll frame; without this it redid O(pages) work and dirtied the
+	// $state records — invalidating every page's template block — 60 times a second.
+	let lastWindowKey = '';
+
+	/** Cheap identity of the loaded sections (ids + page counts), for the caches below. */
+	function sectionsSignature(): string {
+		let sig = '';
+		for (const s of sections) sig += `${s.chapter.id}x${s.pages.length},`;
+		return sig;
+	}
 
 	// Per-chapter real page ratio (height/width), learned from images as they
 	// load. Webtoon sources slice a chapter into uniform pieces, so the median
@@ -115,29 +135,40 @@
 	// 2:3 guess — a smaller placeholder error means smaller layout shifts (and
 	// smaller anchoring corrections) when late images stream in.
 	const chapterRatioSamples = new Map<number, number[]>();
+	// Pages already folded into the median. The unload window re-fires `load` for
+	// the same page every time it comes back, and counting those again both grew
+	// the sample list without bound and let the median drift on re-reads alone.
+	const ratioSampled = new Set<string>();
 	let chapterRatioGuess = $state<Record<number, number>>({});
-	function noteRatio(chapterId: number, img: HTMLImageElement) {
+	function noteRatio(chapterId: number, key: string, img: HTMLImageElement) {
 		if (!img.naturalWidth || !img.naturalHeight) return;
+		if (ratioSampled.has(key)) return;
+		ratioSampled.add(key);
 		const samples = chapterRatioSamples.get(chapterId) ?? [];
 		samples.push(img.naturalHeight / img.naturalWidth);
 		chapterRatioSamples.set(chapterId, samples);
 		const sorted = [...samples].sort((a, b) => a - b);
-		chapterRatioGuess[chapterId] = sorted[Math.floor(sorted.length / 2)];
+		const next = sorted[Math.floor(sorted.length / 2)];
+		if (next == null || !(next > 0)) return;
+		// Committing this re-lays-out every not-yet-loaded placeholder in the
+		// chapter, and each of those resizes costs a scroll-anchor correction.
+		// Sub-percent median wobble is not worth a visible layout pass.
+		const cur = chapterRatioGuess[chapterId];
+		if (cur != null && Math.abs(next - cur) / next < 0.01) return;
+		chapterRatioGuess[chapterId] = next;
 	}
 
 	function markLoaded(key: string, chapterId: number, img: HTMLImageElement) {
-		noteRatio(chapterId, img);
+		noteRatio(chapterId, key, img);
 		loadedPages[key] = true;
 		errorPages[key] = false;
 		// Drop height lock only after the re-loaded image has real layout again.
-		if (heightLocks[key] != null) {
-			const next = { ...heightLocks };
-			delete next[key];
-			heightLocks = next;
-		}
+		// Delete on the $state proxy directly — replacing the whole record here
+		// re-ran every page's template block once per image load.
+		if (heightLocks[key] != null) delete heightLocks[key];
 	}
 	function markError(key: string) {
-		// Intentional unload clears src — do not treat that as a load failure.
+		// Intentional unload drops src — do not treat that as a load failure.
 		if (unloadEnabled && !liveImages[key]) return;
 		errorPages[key] = true;
 	}
@@ -157,6 +188,15 @@
 		eagerPages = { ...eagerPages };
 		liveImages = { ...liveImages };
 		heightLocks = { ...heightLocks };
+		for (const k of ratioSampled) {
+			if (k.startsWith(`${chapterId}-`)) ratioSampled.delete(k);
+		}
+		chapterRatioSamples.delete(chapterId);
+		// The window we just invalidated has to be rebuilt from scratch. Until the
+		// next scroll tick does that, render everything live rather than leaving
+		// the chapter blank on an empty liveImages.
+		lastWindowKey = '';
+		unloadEnabled = false;
 	}
 	async function retryPage(key: string, chapterId: number) {
 		const attempts = (retryCounts[key] ?? 0) + 1;
@@ -205,7 +245,9 @@
 			unloadEnabled = false;
 			liveImages = {};
 			heightLocks = {};
+			lastWindowKey = '';
 			chapterRatioSamples.clear();
+			ratioSampled.clear();
 			chapterRatioGuess = {};
 			// A correction computed against the old chapter's layout must not land
 			// on the freshly-reset scroll position.
@@ -353,7 +395,17 @@
 
 	type PageRef = { chapterId: number; pi: number; key: string };
 
+	// Both of these are rebuilt only when the loaded sections change shape. They
+	// used to be recomputed on every scroll frame — one PageRef object per page,
+	// per frame, was the bulk of the GC churn behind the scroll stutter.
+	let entriesCacheSig = '';
+	let entriesCache: PageRef[] = [];
+	let gapsCacheKey = '';
+	let gapsCache: number[] = [];
+
 	function readingOrderEntries(): PageRef[] {
+		const sig = sectionsSignature();
+		if (sig === entriesCacheSig) return entriesCache;
 		const out: PageRef[] = [];
 		for (const section of sections) {
 			const cid = section.chapter.id;
@@ -361,7 +413,18 @@
 				out.push({ chapterId: cid, pi, key: `${cid}-${pi}` });
 			}
 		}
+		entriesCacheSig = sig;
+		entriesCache = out;
 		return out;
+	}
+
+	/** readingOrderGaps memoised on the same signature (plus the gap setting). */
+	function readingOrderGapsCached(entries: PageRef[]): number[] {
+		const key = `${entriesCacheSig}|${gap ? 1 : 0}`;
+		if (key === gapsCacheKey) return gapsCache;
+		gapsCache = readingOrderGaps(entries, gap ? WEBTOON_PAGE_GAP_PX : 0);
+		gapsCacheKey = key;
+		return gapsCache;
 	}
 
 	function scrollerMetrics(): {
@@ -503,7 +566,7 @@
 				return fb ? { chapterId: fb.chapterId, pi: fb.pi } : null;
 			}
 				const anchorTop = contentTopOf(anchorEl, scrollTop, scrollerTop);
-				const gapAfter = readingOrderGaps(entries, gap ? WEBTOON_PAGE_GAP_PX : 0);
+				const gapAfter = readingOrderGapsCached(entries);
 				const prefix = buildAnchoredPrefixWithGaps(heights, anchorI, anchorTop, gapAfter);
 				// Do not pass lastBottom into the pure search: multi-section prefixes would
 				// force global n-1. Chapter-scoped last-page rule is applied after.
@@ -558,13 +621,17 @@
 	 * Keep decoded bitmaps only within ±KEEP_IMAGE_RADIUS of the active page,
 	 * counted across ALL loaded sections rather than within the active chapter —
 	 * so the window reaches into the next chapter before the reader gets there.
-	 * Far pages: lock container height from pageHeights / offsetHeight, then clear
-	 * img src (node stays mounted). Near pages: put src back. Called after every
-	 * active-page update on the scroll path.
+	 * Far pages: lock container height from pageHeights / offsetHeight, then drop
+	 * the img src (node stays mounted). Near pages: put src back. Called after
+	 * every active-page update on the scroll path.
+	 *
+	 * `loadedPages` is deliberately NOT cleared on unload. The template already
+	 * hides an unloaded image via `imageLive`, so clearing it bought nothing and
+	 * cost a spinner plus a 300ms fade-in every time a page came back — visible
+	 * as a blink whenever the reader scrolled back over its own trail.
 	 */
 	function syncImageWindow() {
 		if (!activeChapterId) return;
-		unloadEnabled = true;
 		// Flatten every loaded section into one running index so the keep-window can
 		// SPAN a chapter boundary. Scoping it to the active chapter meant the next
 		// chapter's pages — already appended by the infinite scroll — all rendered
@@ -582,37 +649,49 @@
 			}
 		}
 		// Active page not in the loaded sections (mid-reset) — leave the window be
-		// rather than unloading everything on screen.
+		// rather than unloading everything on screen. This guard has to come BEFORE
+		// unloadEnabled flips: enabling it on the way out left `liveImages` empty
+		// while the template already treated an empty map as "everything is dead",
+		// blanking the whole chapter for a frame.
 		if (activeFlatIdx < 0) return;
 
-		const nextLive: Record<string, boolean> = {};
-		const nextLocks = { ...heightLocks };
-		let loadedDirty = false;
-		const nextLoaded = { ...loadedPages };
+		// Called on every scroll frame. Nothing here can change while the active
+		// index and the loaded sections both stand still, and the early exit
+		// matters: the $state writes below invalidate page template blocks.
+		const windowKey = `${activeFlatIdx}|${sectionsSignature()}`;
+		if (windowKey === lastWindowKey) return;
+		lastWindowKey = windowKey;
+
+		// Before the first sync every image is live regardless of `liveImages`
+		// (see `imageLive` in the template) — resolve against that same rule so
+		// the hysteresis band below keeps pages that are currently on screen.
+		const wasEnabled = unloadEnabled;
+		unloadEnabled = true;
+
 		for (let gi = 0; gi < flatKeys.length; gi++) {
 			const key = flatKeys[gi];
-			const keep = Math.abs(gi - activeFlatIdx) <= KEEP_IMAGE_RADIUS;
-			if (keep) {
-				nextLive[key] = true;
+			const dist = Math.abs(gi - activeFlatIdx);
+			const live = !wasEnabled || !!liveImages[key];
+			const desired = imageWindowDesired(dist, live, KEEP_IMAGE_RADIUS, DROP_IMAGE_RADIUS);
+			if (desired) {
 				// min-height stays until markLoaded after re-decode.
-			} else {
-				// Height lock BEFORE src clear (same render): prefer measured map,
-				// fall back to live offsetHeight so layout never collapses to 0.
-				if (nextLocks[key] == null) {
-					const measured = pageHeights.get(key) ?? pageEls.get(key)?.offsetHeight ?? 0;
-					if (measured > 0) nextLocks[key] = measured;
-				}
-				if (nextLoaded[key]) {
-					delete nextLoaded[key];
-					loadedDirty = true;
-				}
+				if (liveImages[key] !== true) liveImages[key] = true;
+				continue;
 			}
+			if (liveImages[key] === false) continue;
+			// Height lock BEFORE the src drop (same render): prefer the measured
+			// map, fall back to live offsetHeight so layout never collapses to 0.
+			// With no usable height there is no safe way to unload — keep it.
+			if (heightLocks[key] == null) {
+				const measured = pageHeights.get(key) ?? pageEls.get(key)?.offsetHeight ?? 0;
+				if (!(measured > 0)) {
+					if (liveImages[key] !== true) liveImages[key] = true;
+					continue;
+				}
+				heightLocks[key] = measured;
+			}
+			liveImages[key] = false;
 		}
-		if (loadedDirty) loadedPages = nextLoaded;
-		// Assign locks before live so the template can apply min-height in the
-		// same update that empties img src.
-		heightLocks = nextLocks;
-		liveImages = nextLive;
 	}
 
 		function reportCurrentProgress() {
@@ -855,8 +934,12 @@
 				     resuming at page 80 of 100 fired ~80 requests for pages sitting
 				     above the viewport, ignoring dataSaver, until the first scroll tick
 				     pruned them. -->
+				<!-- Unloaded pages drop the attribute entirely rather than setting
+				     src="": an empty src resolves against the document URL, so every
+				     unloaded page fired a real request for the reader's own HTML and
+				     an `error` event to swallow afterwards. -->
 				<img
-					src={imageLive ? pageSrc(pageUrl, key) : ''}
+					src={imageLive ? pageSrc(pageUrl, key) : undefined}
 					alt="Halaman {pi + 1}"
 					class="mx-auto block w-full transition-opacity duration-300 {loadedPages[key] &&
 					imageLive
