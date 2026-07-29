@@ -130,21 +130,39 @@ export const handle: Handle = async ({ event, resolve }) => {
 			}
 		}
 
+		// One JSON error shape for every upstream failure. Clients here parse JSON;
+		// letting an exception escape produced SvelteKit's 500 HTML page instead,
+		// which they cannot read — so a downed Suwayomi or a slow body surfaced as
+		// an unhelpful parse error rather than a clear message.
+		const upstreamError = (status: number, message: string) =>
+			new Response(JSON.stringify({ errors: [{ message }] }), {
+				status,
+				headers: { 'content-type': 'application/json' }
+			});
+		const isAbort = (e: unknown) => {
+			const name = e instanceof Error ? e.name : '';
+			return name === 'TimeoutError' || name === 'AbortError';
+		};
+
 		let upstream: Response;
 		try {
 			upstream = await fetch(target, init);
 		} catch (e) {
-			const name = e instanceof Error ? e.name : '';
-			if (name === 'TimeoutError' || name === 'AbortError') {
-				return new Response(JSON.stringify({ errors: [{ message: 'Upstream timeout' }] }), {
-					status: 504,
-					headers: { 'content-type': 'application/json' }
-				});
-			}
-			throw e;
+			if (isAbort(e)) return upstreamError(504, 'Upstream timeout');
+			return upstreamError(502, 'Server komik tidak dapat dihubungi');
 		}
 
-		const body = await upstream.arrayBuffer();
+		let body: ArrayBuffer;
+		try {
+			// The 30s timeout is still armed while the body streams, so a large or
+			// slow response can abort HERE — outside the try above, this threw
+			// uncaught and took the whole request to a 500 HTML page.
+			body = await upstream.arrayBuffer();
+		} catch (e) {
+			if (isAbort(e)) return upstreamError(504, 'Upstream timeout');
+			return upstreamError(502, 'Gagal membaca respons server komik');
+		}
+
 		const contentType = upstream.headers.get('content-type');
 
 		const outHeaders = new Headers();
