@@ -139,12 +139,19 @@
 	// the same page every time it comes back, and counting those again both grew
 	// the sample list without bound and let the median drift on re-reads alone.
 	const ratioSampled = new Set<string>();
+	// Sampling stops for good once a chapter has this many pages measured. Every
+	// commit re-lays-out each not-yet-measured placeholder in the chapter at once,
+	// and the ones above the reading position add up to a multi-thousand-pixel
+	// anchor correction. A handful of slices already predicts the rest; letting
+	// late outliers keep nudging the median only buys scroll churn.
+	const RATIO_SAMPLE_CAP = 8;
 	let chapterRatioGuess = $state<Record<number, number>>({});
 	function noteRatio(chapterId: number, key: string, img: HTMLImageElement) {
 		if (!img.naturalWidth || !img.naturalHeight) return;
 		if (ratioSampled.has(key)) return;
-		ratioSampled.add(key);
 		const samples = chapterRatioSamples.get(chapterId) ?? [];
+		if (samples.length >= RATIO_SAMPLE_CAP) return;
+		ratioSampled.add(key);
 		samples.push(img.naturalHeight / img.naturalWidth);
 		chapterRatioSamples.set(chapterId, samples);
 		const sorted = [...samples].sort((a, b) => a - b);
@@ -893,12 +900,13 @@
 			     image collapses to near-zero height in most browsers (aspect-ratio
 			     only reliably applies while the image has layout), and with
 			     overflow-hidden that clipped the retry overlay into an untappable
-			     sliver. Unloaded far pages also lock min-height so clearing img src
-			     cannot collapse the reading-order height map. -->
+			     sliver. Unloaded far pages lock a FIXED height (not min-height) so
+			     clearing img src cannot change the reading-order height map — see
+			     the img's own aspect-ratio below for why min-height wasn't enough. -->
 			<div
 				class="relative overflow-hidden"
 				style={lockH
-					? `min-height: ${lockH}px`
+					? `height: ${lockH}px`
 					: loadedPages[key]
 						? ''
 						: `aspect-ratio: 1 / ${ratio}`}
@@ -938,6 +946,16 @@
 				     src="": an empty src resolves against the document URL, so every
 				     unloaded page fired a real request for the reader's own HTML and
 				     an `error` event to swallow afterwards. -->
+				<!-- The `style` ratio below is dropped while unloaded. An img with no
+				     src has no natural ratio, so `auto 1 / ratio` fell back to the
+				     guessed ratio, and the (100%-wide) img then pushed the container
+				     past its min-height lock. Every unloaded page therefore tracked
+				     chapterRatioGuess instead of the height it was locked at, and each
+				     median commit resized all of them in one batch — thousands of px
+				     above the reading position, which the anchor turned into a scroll
+				     correction that moved the active page, re-ran the image window and
+				     started the next round. While unloaded the fixed container height
+				     is the only thing that may define layout. -->
 				<img
 					src={imageLive ? pageSrc(pageUrl, key) : undefined}
 					alt="Halaman {pi + 1}"
@@ -945,7 +963,7 @@
 					imageLive
 						? 'opacity-100'
 						: 'opacity-0'} {readerSettings.cropBorders ? 'scale-[1.03]' : ''}"
-					style="aspect-ratio: auto 1 / {ratio}"
+					style={imageLive ? `aspect-ratio: auto 1 / ${ratio}` : 'aspect-ratio: auto'}
 					loading={eagerPages[key] || (si === 0 && Math.abs(pi - initialPage) <= 1)
 						? 'eager'
 						: 'lazy'}
